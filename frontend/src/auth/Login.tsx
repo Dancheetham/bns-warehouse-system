@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
 
 const REMEMBERED_ACCOUNTS_KEY = "bns_remembered_accounts";
@@ -26,6 +27,7 @@ function forgetAccount(name: string) {
 
 export default function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [rememberAccountChecked, setRememberAccountChecked] = useState(true);
@@ -49,6 +51,11 @@ export default function Login() {
       } else {
         forgetAccount(name);
       }
+      // login() only updates auth state - nothing about that state change on
+      // its own moves the browser off /login, since this route isn't wrapped
+      // in RequireAuth (it can't be, or a logged-out visitor could never see
+      // it). Has to be done explicitly.
+      navigate("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

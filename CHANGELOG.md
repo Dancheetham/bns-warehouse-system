@@ -5,6 +5,20 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.8.3] - 2026-09-02 (later still yet again)
+
+### Fixed
+- The 0.8.2 backend fix was actually correct - confirmed live by watching a
+  fresh login: this time both the login call and the follow-up "am I logged
+  in?" check came back 200, meaning the session genuinely persisted. But the
+  page still didn't move off the login screen, which turned out to be a much
+  simpler, separate bug: Login.tsx never called navigate() after a
+  successful login. Updating the auth state doesn't, on its own, move the
+  browser off /login - that route can't be wrapped in the usual auth gate
+  (a logged-out visitor could never reach it if it were), so nothing was
+  ever telling it to leave. HandheldLogin.tsx already had this right; only
+  the desktop login was missing it
+
 ## [0.8.2] - 2026-09-02 (later still again)
 
 ### Fixed
