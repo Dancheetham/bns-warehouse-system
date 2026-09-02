@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.9.0] - 2026-09-02 (evening)
+
+### Added
+- A complete Android Studio project (`android-app/`) for a dedicated
+  warehouse-scanner kiosk build - a thin full-screen WebView wrapper around
+  the existing handheld app, not a rewrite of anything. Set as the device's
+  Home app and it auto-pins itself (Android's built-in screen pinning) so a
+  swipe-up-to-home genuinely doesn't leave the app, with no special device
+  provisioning required. This is source code, not a compiled `.apk` -
+  building one needs Gradle to download the Android SDK, which needs
+  internet access this environment doesn't have; see `android-app/README.md`
+  for the (genuinely few) steps to build it in Android Studio
+- The on-screen keyboard no longer pops up on the two barcode-scan fields
+  (picking's MAC/serial/batch scan, goods-in's carton scan) - both were
+  losing half the screen to a keyboard on every focus, for a field that's
+  filled by a scanner ~99% of the time. New shared `ScanInput` component
+  defaults to `inputMode="none"` with a small keyboard icon to bring up the
+  keyboard manually for the rare case that needs typing
+
 ## [0.8.3] - 2026-09-02 (later still yet again)
 
 ### Fixed

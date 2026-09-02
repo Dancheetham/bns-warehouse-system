@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Simple stylised box/warehouse-crate mark, kept as plain vector paths
+         so this whole project builds from text files with no binary image
+         assets needed at all. Swap for a real logo whenever convenient. -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M30,38 L54,26 L78,38 L78,72 L54,84 L30,72 Z" />
+    <path
+        android:fillColor="#0F172A"
+        android:pathData="M30,38 L54,50 L78,38 L54,26 Z" />
+    <path
+        android:fillColor="#059669"
+        android:pathData="M54,50 L54,84 L78,72 L78,38 Z" />
+</vector>

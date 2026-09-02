@@ -18,3 +18,13 @@ Thumbs.db
 # Real credentials - .env holds them (Shopify secret, SMTP, DB password);
 # .env.example is the committed template showing what's needed without values.
 .env
+
+# Android - local.properties is machine-specific (points at wherever Android
+# Studio installed the SDK on that particular PC), never something to share
+# between machines or commit.
+android-app/local.properties
+android-app/.gradle/
+android-app/**/build/
+android-app/.idea/
+android-app/*.iml
+android-app/**/*.iml

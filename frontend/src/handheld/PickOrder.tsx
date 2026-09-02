@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { PickOrderView, PickScanResult } from "../types";
+import ScanInput from "./components/ScanInput";
 
 const PICKER_NAME_KEY = "bns-picker-name";
 
@@ -178,7 +179,7 @@ export default function PickOrder() {
             )}
 
             {currentLine.requiresScan ? (
-              <input
+              <ScanInput
                 ref={inputRef}
                 value={scanValue}
                 onChange={(e) => setScanValue(e.target.value)}

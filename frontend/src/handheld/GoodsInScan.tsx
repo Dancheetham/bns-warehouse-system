@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { GoodsInSession, ScanCartonResult } from "../types";
+import ScanInput from "./components/ScanInput";
 
 interface ScanLogEntry extends ScanCartonResult {
   batchCode: string;
@@ -81,7 +82,7 @@ export default function GoodsInScan() {
             if (scanValue.trim()) scanMutation.mutate(scanValue.trim());
           }}
         >
-          <input
+          <ScanInput
             ref={inputRef}
             autoFocus
             value={scanValue}

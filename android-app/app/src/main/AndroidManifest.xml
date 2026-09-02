@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- To talk to the warehouse system over the LAN -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Kiosk"
+        android:usesCleartextTraffic="true">
+        <!--
+          usesCleartextTraffic: needed because the warehouse system runs over
+          plain http:// on the LAN, not https:// - Android blocks plaintext
+          network traffic by default from API 28 onwards without this.
+        -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Kiosk">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!--
+              HOME + DEFAULT together make this app a selectable Home app -
+              pressing the Home button/gesture brings the device back here
+              instead of the system launcher. Combined with the screen-pinning
+              (startLockTask) in MainActivity, this is what stops a swipe-up-
+              to-home from actually leaving the app.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
