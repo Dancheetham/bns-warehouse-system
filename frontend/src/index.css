@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Referenced as className="input" throughout the app (order/product forms, the
+   public RMA form) - was previously undefined, leaving those fields unstyled. */
+@layer components {
+  .input {
+    @apply w-full border border-slate-300 rounded px-3 py-2 text-sm outline-none;
+  }
+  .input:focus {
+    @apply border-emerald-500 ring-1 ring-emerald-500;
+  }
+}

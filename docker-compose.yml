@@ -1,0 +1,67 @@
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: bns-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - bns_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    container_name: bns-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      CORS_ALLOWED_ORIGINS: "*"
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS}
+      ALLOW_TEST_DATA_RESET: ${ALLOW_TEST_DATA_RESET}
+      # Read-only (read_products scope) - only ever pulls Shopify's catalogue in,
+      # never writes back. Client ID/Secret are the app's OAuth credentials (Dev
+      # Dashboard > your app > App settings > Credentials) - used only once,
+      # server-side, to complete the "Connect to Shopify" button on the Shopify
+      # Sync page. The actual access token that comes out of that handshake is
+      # stored dynamically (in Settings), not here - reconnecting from the UI
+      # doesn't need a restart. Real values live in .env (gitignored), not here -
+      # this file is safe to commit as-is.
+      SHOPIFY_SHOP_DOMAIN: ${SHOPIFY_SHOP_DOMAIN}
+      SHOPIFY_CLIENT_ID: ${SHOPIFY_CLIENT_ID}
+      SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: bns-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "8081:80"
+
+volumes:
+  bns_postgres_data:

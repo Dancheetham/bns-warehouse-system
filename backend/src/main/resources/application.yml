@@ -1,0 +1,68 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: warehouse-api
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:bnswarehouse}
+    username: ${DB_USER:bnsadmin}
+    password: ${DB_PASSWORD:bnsadmin}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+
+logging:
+  level:
+    uk.co.bns.warehouse_api: DEBUG
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+app:
+  test-data-reset:
+    # Off by default - deliberately requires an explicit env var so a "Reset Test Data"
+    # button can never appear (or be called) unless someone has turned it on for this
+    # specific environment. See docker-compose.yml.
+    enabled: ${ALLOW_TEST_DATA_RESET:false}
+
+# Optional - product sync only pulls from Shopify (read_products scope), never
+# writes back. Leave shop-domain blank to disable entirely - no scheduled polling
+# and the Sync Now button reports "not configured" rather than failing.
+#
+# client-id/client-secret are the app's OAuth credentials (Dev Dashboard > your
+# app > App settings > Credentials) - used only server-side to complete the
+# "Connect to Shopify" handshake once, in ShopifyOAuthService. The actual access
+# token that comes out of that handshake is stored dynamically (via Settings),
+# not as an env var - see ShopifyOAuthService/ShopifyOAuthController.
+shopify:
+  shop-domain: ${SHOPIFY_SHOP_DOMAIN:}
+  client-id: ${SHOPIFY_CLIENT_ID:}
+  client-secret: ${SHOPIFY_CLIENT_SECRET:}
+  api-version: 2025-01
+
+# Optional - leave SMTP_HOST blank to run without email actually sending.
+# When blank, the Acknowledgement action still composes and shows the email
+# content but is honest that it wasn't delivered, rather than pretending to send it.
+mail:
+  smtp-host: ${SMTP_HOST:}
+  smtp-port: ${SMTP_PORT:587}
+  smtp-username: ${SMTP_USERNAME:}
+  smtp-password: ${SMTP_PASSWORD:}
+  from-address: ${MAIL_FROM_ADDRESS:sales@bnsdistribution.example}

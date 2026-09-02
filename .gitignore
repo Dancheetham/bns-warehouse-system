@@ -1,0 +1,20 @@
+# Build artifacts
+backend/target/
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Real credentials - .env holds them (Shopify secret, SMTP, DB password);
+# .env.example is the committed template showing what's needed without values.
+.env

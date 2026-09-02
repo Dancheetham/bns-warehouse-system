@@ -1,0 +1,8 @@
+CREATE TABLE api_keys (
+    id BIGSERIAL PRIMARY KEY,
+    key_hash VARCHAR(255) NOT NULL UNIQUE,
+    label VARCHAR(255) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL,
+    last_used_at TIMESTAMP
+);

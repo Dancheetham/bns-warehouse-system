@@ -1,0 +1,10 @@
+{
+  "name": "BNS Warehouse Handheld",
+  "short_name": "BNS Handheld",
+  "start_url": "/handheld",
+  "scope": "/handheld",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait"
+}

@@ -1,0 +1,7 @@
+CREATE TABLE locations (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(100) NOT NULL UNIQUE,
+    description VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL
+);
