@@ -23,6 +23,7 @@ import ShopifySync from "./pages/ShopifySync";
 import Despatch from "./pages/Despatch";
 import Packing from "./pages/Packing";
 import HandheldHome from "./handheld/HandheldHome";
+import HandheldLogin from "./handheld/HandheldLogin";
 import PickOrderList from "./handheld/PickOrderList";
 import PickOrder from "./handheld/PickOrder";
 import GoodsInStart from "./handheld/GoodsInStart";
@@ -36,14 +37,17 @@ export default function App() {
     <AuthProvider>
       <Routes>
         {/* Public, unauthenticated - the RMA request form customers use
-            directly, and the login page itself. */}
+            directly, and both login pages. */}
         <Route path="/rma" element={<RmaRequestForm />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/handheld/login" element={<HandheldLogin />} />
 
-        <Route element={<RequireAuth />}>
+        <Route element={<RequireHandheldAuth />}>
           {/* Standalone handheld app - deliberately outside the main Layout (no
               sidebar, dark full-screen UI) since it runs on a Zebra scanner, not
-              alongside the desk-bound screens below. */}
+              alongside the desk-bound screens below. Its own login page too,
+              matching that same look - a device that's locked down to just this
+              URL should never land on the desktop-styled login. */}
           <Route path="/handheld" element={<HandheldHome />} />
           <Route path="/handheld/pick" element={<PickOrderList />} />
           <Route path="/handheld/pick/:orderId" element={<PickOrder />} />
@@ -55,7 +59,9 @@ export default function App() {
               URL bookmarked instead of silently showing a blank page. */}
           <Route path="/pick" element={<Navigate to="/handheld/pick" replace />} />
           <Route path="/pick/:orderId" element={<RedirectToPickOrder />} />
+        </Route>
 
+        <Route element={<RequireAuth />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/sales-activity" element={<SalesActivity />} />
@@ -101,6 +107,15 @@ function RequireAuth() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+function RequireHandheldAuth() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-500 text-sm">Loading...</div>;
+  }
+  if (!user) return <Navigate to="/handheld/login" replace />;
   return <Outlet />;
 }
 

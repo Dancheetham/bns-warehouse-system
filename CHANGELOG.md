@@ -13,6 +13,12 @@ are just a scanning aid, not a promise of semver-style compatibility.
   (names only ever stored locally, never passwords), and long-lived sessions
   by default since these are trusted devices used all shift, not public
   kiosks
+- A dedicated handheld login page too, matching the handheld app's own dark
+  full-screen look rather than reusing the desktop one - a locked-down
+  handheld device should never land on a desktop-styled screen. Same
+  accounts, same backend, same remembered-accounts list (shared localStorage
+  key with the desktop login) - plus a log out control on the handheld home
+  screen, which didn't have one
 - New logins can be created (and passwords changed) from Settings > Users -
   no admin/staff distinction yet, matching how the rest of the app already
   works (everyone sees everything)

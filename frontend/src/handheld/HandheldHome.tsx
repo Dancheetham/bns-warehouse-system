@@ -1,13 +1,25 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 
 export default function HandheldHome() {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/handheld/login");
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      <header className="px-4 py-5 border-b border-slate-800">
-        <h1 className="text-xl font-bold">BNS Warehouse</h1>
-        <p className="text-sm text-slate-400">Handheld</p>
+      <header className="px-4 py-5 border-b border-slate-800 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold">BNS Warehouse</h1>
+          <p className="text-sm text-slate-400">Handheld{user ? ` · ${user.name}` : ""}</p>
+        </div>
+        <button onClick={handleLogout} className="text-sm text-slate-400 active:text-slate-200">
+          Log out
+        </button>
       </header>
 
       <div className="flex-1 flex flex-col gap-4 p-4 justify-center">
