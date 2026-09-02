@@ -13,9 +13,10 @@ api.interceptors.response.use(
     const url: string = error?.config?.url ?? "";
     const method: string = (error?.config?.method ?? "").toUpperCase();
 
-    // Auto-log to Bug Reports, but never for the bug-reports endpoint itself -
-    // a failure there shouldn't try to log itself and loop.
-    if (!url.includes("/bug-reports")) {
+    // Auto-log to Bug Reports, but never for the bug-reports endpoint itself (a
+    // failure there shouldn't try to log itself and loop) or for 401s (routine
+    // "not logged in" responses - e.g. checking auth state on page load - not bugs).
+    if (!url.includes("/bug-reports") && status !== 401) {
       axios
         .post("/api/bug-reports", {
           description: message,

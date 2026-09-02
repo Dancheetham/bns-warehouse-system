@@ -1,5 +1,13 @@
 server:
   port: 8080
+  servlet:
+    session:
+      # Long-lived by default - this is trusted LAN/warehouse-floor
+      # infrastructure (login screens are shared devices used all shift),
+      # not a public-internet app where short sessions matter more.
+      timeout: 30d
+      cookie:
+        max-age: 30d
 
 spring:
   application:

@@ -36,12 +36,12 @@ export default function SalesActivity() {
     queryFn: async () => (await api.get<Order[]>("/orders")).data,
   });
 
-  const { data: settings } = useQuery({
-    queryKey: ["settings"],
-    queryFn: async () => (await api.get<Record<string, string>>("/settings")).data,
+  const { data: myUserSettings } = useQuery({
+    queryKey: ["my-user-settings"],
+    queryFn: async () => (await api.get<Record<string, string>>("/users/me/settings")).data,
   });
 
-  const statusColors = useMemo(() => resolveStatusColors(settings), [settings]);
+  const statusColors = useMemo(() => resolveStatusColors(myUserSettings), [myUserSettings]);
 
   const filtered = useMemo(() => {
     const list = orders ?? [];

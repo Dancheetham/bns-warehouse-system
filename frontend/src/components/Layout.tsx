@@ -1,5 +1,6 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 
 const navGroups: { heading: string; items: { to: string; label: string; end?: boolean }[] }[] = [
   {
@@ -51,8 +52,15 @@ const headingClasses = "px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const reportsActive = location.pathname.startsWith("/reports");
   const [reportsOpen, setReportsOpen] = useState(reportsActive);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
 
   return (
     <div className="h-screen flex overflow-hidden">
@@ -101,6 +109,19 @@ export default function Layout() {
             </div>
           )}
         </nav>
+        {user && (
+          <div className="border-t border-slate-700 px-4 py-3 flex items-center gap-2.5 shrink-0">
+            <span className="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center text-sm font-medium shrink-0">
+              {user.name.charAt(0).toUpperCase()}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-slate-200 truncate">{user.name}</p>
+              <button onClick={handleLogout} className="text-xs text-slate-500 hover:text-slate-300">
+                Log out
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
       <main className="flex-1 bg-slate-50 min-w-0 h-full overflow-y-auto">
         <div className="max-w-[1600px] mx-auto p-6">

@@ -1,4 +1,6 @@
-import { Routes, Route, Navigate, useParams } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+import Login from "./auth/Login";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -31,57 +33,75 @@ import RmaDetail from "./pages/RmaDetail";
 
 export default function App() {
   return (
-    <Routes>
-      {/* Standalone handheld app - deliberately outside the main Layout (no
-          sidebar, dark full-screen UI) since it runs on a Zebra scanner, not
-          alongside the desk-bound screens below. */}
-      <Route path="/handheld" element={<HandheldHome />} />
-      <Route path="/handheld/pick" element={<PickOrderList />} />
-      <Route path="/handheld/pick/:orderId" element={<PickOrder />} />
-      <Route path="/handheld/goods-in" element={<GoodsInStart />} />
-      <Route path="/handheld/goods-in/:sessionId" element={<GoodsInScan />} />
+    <AuthProvider>
+      <Routes>
+        {/* Public, unauthenticated - the RMA request form customers use
+            directly, and the login page itself. */}
+        <Route path="/rma" element={<RmaRequestForm />} />
+        <Route path="/login" element={<Login />} />
 
-      {/* The handheld app used to live at /pick before Goods In moved in and
-          everything got grouped under /handheld - redirect anyone with the old
-          URL bookmarked instead of silently showing a blank page. */}
-      <Route path="/pick" element={<Navigate to="/handheld/pick" replace />} />
-      <Route path="/pick/:orderId" element={<RedirectToPickOrder />} />
+        <Route element={<RequireAuth />}>
+          {/* Standalone handheld app - deliberately outside the main Layout (no
+              sidebar, dark full-screen UI) since it runs on a Zebra scanner, not
+              alongside the desk-bound screens below. */}
+          <Route path="/handheld" element={<HandheldHome />} />
+          <Route path="/handheld/pick" element={<PickOrderList />} />
+          <Route path="/handheld/pick/:orderId" element={<PickOrder />} />
+          <Route path="/handheld/goods-in" element={<GoodsInStart />} />
+          <Route path="/handheld/goods-in/:sessionId" element={<GoodsInScan />} />
 
-      {/* Public, unauthenticated - the RMA request form customers use directly,
-          also outside Layout since it's not a warehouse-staff screen. */}
-      <Route path="/rma" element={<RmaRequestForm />} />
+          {/* The handheld app used to live at /pick before Goods In moved in and
+              everything got grouped under /handheld - redirect anyone with the old
+              URL bookmarked instead of silently showing a blank page. */}
+          <Route path="/pick" element={<Navigate to="/handheld/pick" replace />} />
+          <Route path="/pick/:orderId" element={<RedirectToPickOrder />} />
 
-      <Route element={<Layout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/sales-activity" element={<SalesActivity />} />
-        <Route path="/sales-activity/:id" element={<OrderEdit />} />
-        <Route path="/products" element={<Products />} />
-        <Route path="/products/:id" element={<ProductDetail />} />
-        <Route path="/purchase-orders" element={<PurchaseOrders />} />
-        <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
-        <Route path="/goods-in" element={<GoodsIn />} />
-        <Route path="/despatch" element={<Despatch />} />
-        <Route path="/despatch/:orderId" element={<Packing />} />
-        <Route path="/rmas" element={<RmaInbox />} />
-        <Route path="/companies" element={<Companies />} />
-        <Route path="/rmas/:id" element={<RmaDetail />} />
-        <Route path="/stock-movement" element={<StockMovement />} />
-        <Route path="/stock-overview" element={<StockOverview />} />
-        <Route path="/trace" element={<StockTrace />} />
-        <Route path="/api-access" element={<ApiAccess />} />
-        <Route path="/reports/orders" element={<ReportsOrders />} />
-        <Route path="/reports/stock" element={<ReportsStock />} />
-        <Route path="/bug-reports" element={<BugReports />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/shopify-sync" element={<ShopifySync />} />
-      </Route>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/sales-activity" element={<SalesActivity />} />
+            <Route path="/sales-activity/:id" element={<OrderEdit />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/purchase-orders" element={<PurchaseOrders />} />
+            <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
+            <Route path="/goods-in" element={<GoodsIn />} />
+            <Route path="/despatch" element={<Despatch />} />
+            <Route path="/despatch/:orderId" element={<Packing />} />
+            <Route path="/rmas" element={<RmaInbox />} />
+            <Route path="/companies" element={<Companies />} />
+            <Route path="/rmas/:id" element={<RmaDetail />} />
+            <Route path="/stock-movement" element={<StockMovement />} />
+            <Route path="/stock-overview" element={<StockOverview />} />
+            <Route path="/trace" element={<StockTrace />} />
+            <Route path="/api-access" element={<ApiAccess />} />
+            <Route path="/reports/orders" element={<ReportsOrders />} />
+            <Route path="/reports/stock" element={<ReportsStock />} />
+            <Route path="/bug-reports" element={<BugReports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/shopify-sync" element={<ShopifySync />} />
+          </Route>
+        </Route>
 
-      {/* Catch-all - an unmatched path used to render nothing at all (React
-          Router renders null with no route match), which looks exactly like a
-          broken page rather than a wrong URL. This makes that visible instead. */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        {/* Catch-all - an unmatched path used to render nothing at all (React
+            Router renders null with no route match), which looks exactly like a
+            broken page rather than a wrong URL. This makes that visible instead. */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AuthProvider>
   );
+}
+
+function RequireAuth() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400 text-sm">
+        Loading...
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return <Outlet />;
 }
 
 function RedirectToPickOrder() {

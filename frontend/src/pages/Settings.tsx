@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { DEFAULT_STATUS_COLORS, ORDER_STATUSES, resolveStatusColors, statusColorSettingKey, statusLabel } from "../utils/statusColors";
 import { OrderStatus } from "../types";
+import { useAuth } from "../auth/AuthContext";
+
+interface UserView {
+  id: number;
+  name: string;
+}
 
 function SettingsSection({ title, description, children }: { title: string; description?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -23,16 +29,30 @@ export default function Settings() {
   const [faultyWarrantyDays, setFaultyWarrantyDays] = useState("365");
   const [statusColors, setStatusColors] = useState<Record<OrderStatus, string>>(DEFAULT_STATUS_COLORS);
   const [saved, setSaved] = useState(false);
+  const [colorsSaved, setColorsSaved] = useState(false);
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => (await api.get<Record<string, string>>("/settings")).data,
   });
 
+  // Per-user, not global - this is the one thing in Settings that follows a
+  // specific person rather than describing how the whole warehouse operates.
+  const { data: myUserSettings } = useQuery({
+    queryKey: ["my-user-settings"],
+    queryFn: async () => (await api.get<Record<string, string>>("/users/me/settings")).data,
+  });
+
   const { data: testDataResetStatus } = useQuery({
     queryKey: ["test-data-reset-status"],
     queryFn: async () => (await api.get<{ enabled: boolean }>("/admin/test-data-reset")).data,
+  });
+
+  const { data: users } = useQuery({
+    queryKey: ["users"],
+    queryFn: async () => (await api.get<UserView[]>("/users")).data,
   });
 
   useEffect(() => {
@@ -43,8 +63,11 @@ export default function Settings() {
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
     setNonFaultyReturnDays(settings["rma_non_faulty_return_days"] ?? "28");
     setFaultyWarrantyDays(settings["rma_faulty_warranty_days"] ?? "365");
-    setStatusColors(resolveStatusColors(settings));
   }, [settings]);
+
+  useEffect(() => {
+    setStatusColors(resolveStatusColors(myUserSettings));
+  }, [myUserSettings]);
 
   const saveMutation = useMutation({
     mutationFn: async () =>
@@ -55,11 +78,20 @@ export default function Settings() {
         packing_mode: packingMode,
         rma_non_faulty_return_days: nonFaultyReturnDays,
         rma_faulty_warranty_days: faultyWarrantyDays,
-        ...Object.fromEntries(ORDER_STATUSES.map((s) => [statusColorSettingKey(s), statusColors[s]])),
       }),
     onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+    },
+  });
+
+  const saveColorsMutation = useMutation({
+    mutationFn: async () =>
+      api.put("/users/me/settings", Object.fromEntries(ORDER_STATUSES.map((s) => [statusColorSettingKey(s), statusColors[s]]))),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
+      setColorsSaved(true);
+      setTimeout(() => setColorsSaved(false), 2500);
     },
   });
 
@@ -84,6 +116,33 @@ export default function Settings() {
       setClearProductsSummary(summary);
       queryClient.invalidateQueries();
     },
+  });
+
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserError, setNewUserError] = useState<string | null>(null);
+  const createUserMutation = useMutation({
+    mutationFn: async () => api.post("/users", { name: newUserName, password: newUserPassword }),
+    onSuccess: () => {
+      setNewUserName("");
+      setNewUserPassword("");
+      setNewUserError(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: Error) => setNewUserError(err.message),
+  });
+
+  const [passwordChangeUserId, setPasswordChangeUserId] = useState<number | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordChangeError, setPasswordChangeError] = useState<string | null>(null);
+  const changePasswordMutation = useMutation({
+    mutationFn: async () => api.put(`/users/${passwordChangeUserId}/password`, { newPassword }),
+    onSuccess: () => {
+      setPasswordChangeUserId(null);
+      setNewPassword("");
+      setPasswordChangeError(null);
+    },
+    onError: (err: Error) => setPasswordChangeError(err.message),
   });
 
   return (
@@ -199,8 +258,87 @@ export default function Settings() {
       </SettingsSection>
 
       <SettingsSection
+        title="Users"
+        description="Anyone with a login can manage other logins for now - there's no admin/staff distinction yet, matching how the rest of this app works."
+      >
+        <div className="space-y-2">
+          {users?.map((u) => (
+            <div key={u.id} className="flex items-center justify-between border border-slate-100 rounded px-3 py-2">
+              <span className="text-sm text-slate-700">
+                {u.name} {u.name === user?.name && <span className="text-xs text-emerald-600 ml-1">(you)</span>}
+              </span>
+              {passwordChangeUserId === u.id ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    autoFocus
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="New password"
+                    className="input w-40 text-sm"
+                  />
+                  <button
+                    onClick={() => changePasswordMutation.mutate()}
+                    disabled={changePasswordMutation.isPending || newPassword.length < 6}
+                    className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPasswordChangeUserId(null);
+                      setNewPassword("");
+                      setPasswordChangeError(null);
+                    }}
+                    className="text-xs text-slate-400 hover:text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setPasswordChangeUserId(u.id)}
+                  className="text-xs text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"
+                >
+                  Change password
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {passwordChangeError && <p className="text-xs text-red-600">{passwordChangeError}</p>}
+
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">New Login</h4>
+          <div className="flex gap-2 items-end flex-wrap">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Name</label>
+              <input value={newUserName} onChange={(e) => setNewUserName(e.target.value)} className="input w-44" />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Password (min. 6 characters)</label>
+              <input
+                type="password"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+                className="input w-44"
+              />
+            </div>
+            <button
+              onClick={() => createUserMutation.mutate()}
+              disabled={createUserMutation.isPending || !newUserName || newUserPassword.length < 6}
+              className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
+            >
+              {createUserMutation.isPending ? "Adding..." : "Add Login"}
+            </button>
+          </div>
+          {newUserError && <p className="text-xs text-red-600 mt-2">{newUserError}</p>}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
         title="Customisation"
-        description="Global for now, shared by everyone using the system - there's no login yet for these to follow a specific person between devices. Worth revisiting as true per-user preferences once real accounts exist."
+        description="Just for you - these follow your login, not shared with anyone else using the system."
       >
         <div>
           <h4 className="text-sm font-medium text-slate-700 mb-2">Order status colours</h4>
@@ -220,13 +358,24 @@ export default function Settings() {
               </div>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setStatusColors(DEFAULT_STATUS_COLORS)}
-            className="text-xs text-slate-500 hover:text-slate-700 mt-3"
-          >
-            Reset to defaults
-          </button>
+          <div className="flex items-center gap-3 mt-3">
+            <button
+              type="button"
+              onClick={() => setStatusColors(DEFAULT_STATUS_COLORS)}
+              className="text-xs text-slate-500 hover:text-slate-700"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={() => saveColorsMutation.mutate()}
+              disabled={saveColorsMutation.isPending}
+              className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
+            >
+              {saveColorsMutation.isPending ? "Saving..." : "Save Colours"}
+            </button>
+            {colorsSaved && <span className="text-xs text-emerald-600">Saved.</span>}
+          </div>
         </div>
       </SettingsSection>
 
