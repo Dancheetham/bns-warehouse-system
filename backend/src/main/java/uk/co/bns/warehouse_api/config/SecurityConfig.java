@@ -16,6 +16,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 
 import java.util.Map;
 
@@ -55,8 +57,19 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, AuthenticationManager authenticationManager) throws Exception {
+        // AbstractAuthenticationProcessingFilter (which our JsonLoginFilter
+        // extends) holds its OWN securityContextRepository, independent of
+        // whatever the rest of the chain is configured with - it defaults to
+        // request-attribute-only storage (valid for a single request only),
+        // never actually persisting anything to the session. Without this
+        // explicit wiring, login looked successful for the one request it
+        // happened in, then evaporated immediately - nothing was ever saved
+        // for the next request to find.
+        SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+
         JsonLoginFilter loginFilter = new JsonLoginFilter(objectMapper);
         loginFilter.setAuthenticationManager(authenticationManager);
+        loginFilter.setSecurityContextRepository(securityContextRepository);
         loginFilter.setAuthenticationSuccessHandler((request, response, authentication) -> {
             response.setStatus(HttpStatus.OK.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -74,6 +87,7 @@ public class SecurityConfig {
                 // (WebConfig.addCorsMappings) automatically via this call.
                 .cors(org.springframework.security.config.Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
+                .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/logout").permitAll()

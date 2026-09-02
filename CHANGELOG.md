@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.8.2] - 2026-09-02 (later still again)
+
+### Fixed
+- The actual root cause of login not sticking, found by watching it happen
+  live in the browser: our custom login filter (JsonLoginFilter, extending
+  Spring's UsernamePasswordAuthenticationFilter) holds its own
+  securityContextRepository, entirely independent of whatever the rest of
+  the security chain is configured with. It was silently defaulting to
+  request-attribute-only storage - valid for the one request login happened
+  in, never actually saved to the session. So authentication genuinely
+  succeeded (visible in the backend log), then evaporated the instant that
+  request ended, with nothing persisted for the very next request to find.
+  The previous 0.8.1 fix (missing withCredentials on axios) was real and
+  necessary but not sufficient on its own - this was the second half of the
+  same underlying problem
+
 ## [0.8.1] - 2026-09-02 (later still)
 
 ### Fixed
