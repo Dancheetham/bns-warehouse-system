@@ -5,6 +5,19 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.9.1] - 2026-09-02 (evening, later)
+
+### Fixed
+- Android build failed immediately on sync: "Minimum supported Gradle
+  version is 8.7. Current version is 8.5" - AGP 8.5.2 (what was originally
+  set) genuinely needs Gradle 8.7+, but the project never shipped its own
+  Gradle wrapper (deliberately - the wrapper needs a binary jar file that's
+  awkward to hand-author correctly without being able to test it), so
+  Android Studio fell back to whatever Gradle it already had bundled (8.5).
+  Fixed by pinning AGP to 8.2.2 instead, confirmed against Google's own
+  compatibility table to need only Gradle 8.2 minimum - builds against
+  whatever Gradle Studio already has, no wrapper or download needed at all
+
 ## [0.9.0] - 2026-09-02 (evening)
 
 ### Added

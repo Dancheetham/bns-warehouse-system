@@ -40,6 +40,17 @@ Signed Bundle / APK** instead, which walks you through creating a signing key.
 A debug APK works fine for trying it out, but Android will warn about it being
 an unsigned/debug build.
 
+If sync fails with something like "Minimum supported Gradle version is X" -
+this project deliberately doesn't ship its own Gradle wrapper (avoids needing
+a binary file that's awkward to hand-author correctly), so it builds using
+whatever Gradle version your installed Android Studio already has bundled.
+The Android Gradle Plugin version in `build.gradle.kts` (project-level, not
+the one under `app/`) needs to be one whose minimum Gradle requirement your
+Studio's bundled Gradle actually meets - check the compatibility table at
+https://developer.android.com/build/releases/about-agp and lower that version
+number if needed. 8.2.2 (what's set here) needs only Gradle 8.2, which should
+cover any reasonably current Android Studio install.
+
 ## Installing on the device
 
 1. On the Android device, enable Developer Options (Settings > About Phone >
