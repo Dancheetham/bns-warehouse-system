@@ -5,6 +5,21 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.8.1] - 2026-09-02 (later still)
+
+### Fixed
+- A real bug in the login system just shipped: the shared axios client never
+  set `withCredentials: true`, so it silently never sent the session cookie
+  on any request - unlike the browser's native `fetch()`, which does this by
+  default. The practical effect: login would genuinely succeed on the
+  backend (visible in the logs), but the very next thing the frontend did -
+  checking "am I logged in?" - went through axios, got no cookie, came back
+  looking unauthenticated, and silently undid the login a fraction of a
+  second after it worked. Affected every screen in the app, not just login,
+  since they all share that client. Found and fixed two more of the same gap
+  while sweeping for it: the Bug Reports page's separate axios instance, and
+  the auto-bug-report logger's own raw axios call
+
 ## [0.8.0] - 2026-09-02 (later)
 
 ### Added

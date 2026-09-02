@@ -2,6 +2,12 @@ import axios from "axios";
 
 export const api = axios.create({
   baseURL: "/api",
+  // Without this, axios doesn't send the session cookie on any request -
+  // unlike fetch(), which sends same-origin cookies by default. Missing this
+  // meant login would succeed on the backend but every subsequent call
+  // (starting with the very next "am I logged in?" check) would look
+  // unauthenticated, silently undoing a login that had actually worked.
+  withCredentials: true,
 });
 
 api.interceptors.response.use(
@@ -23,7 +29,7 @@ api.interceptors.response.use(
           errorCode: status ? String(status) : "NETWORK",
           context: `${method} ${url}`,
           source: "AUTO",
-        })
+        }, { withCredentials: true })
         .catch(() => {
           // if logging itself fails (e.g. backend fully unreachable), there's
           // nothing more useful to do here - don't compound the error

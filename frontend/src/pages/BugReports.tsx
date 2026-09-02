@@ -5,8 +5,10 @@ import { BugReport } from "../types";
 import { formatDateTime } from "../utils/format";
 
 // Uses plain axios rather than the shared `api` client - this page must not
-// trigger the auto-bug-report interceptor if its own requests fail.
-const rawApi = axios.create({ baseURL: "/api" });
+// trigger the auto-bug-report interceptor if its own requests fail. Still
+// needs withCredentials explicitly though - axios doesn't send the session
+// cookie by default the way fetch() does, and this page is behind login now.
+const rawApi = axios.create({ baseURL: "/api", withCredentials: true });
 
 export default function BugReports() {
   const queryClient = useQueryClient();
