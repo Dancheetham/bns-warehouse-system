@@ -39,6 +39,7 @@ public class RmaService {
     private final RmaRequestRepository rmaRequestRepository;
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
+    private final OrderService orderService;
     private final StockItemRepository stockItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final RmaLookupService lookupService;
@@ -128,7 +129,7 @@ public class RmaService {
 
         if (anyFaulty) {
             Order replacement = new Order();
-            replacement.setOrderNumber(generateOrderNumber());
+            replacement.setOrderNumber(orderService.generateOrderNumber());
             replacement.setOrderDate(LocalDateTime.now());
             replacement.setCustomerName(rma.getCustomerName());
             replacement.setCustomerEmail(rma.getContactEmail());
@@ -185,7 +186,7 @@ public class RmaService {
                 .collect(Collectors.toMap(ReceiveRmaItemInput::rmaItemId, i -> i));
 
         Order creditOrder = new Order();
-        creditOrder.setOrderNumber(generateOrderNumber());
+        creditOrder.setOrderNumber(orderService.generateOrderNumber());
         creditOrder.setOrderDate(LocalDateTime.now());
         creditOrder.setCustomerName(rma.getCustomerName());
         creditOrder.setCustomerEmail(rma.getContactEmail());
@@ -272,11 +273,6 @@ public class RmaService {
             return stockItemRepository.findBySerialNumberIgnoreCase(item.getIdentifier());
         }
         return Optional.empty();
-    }
-
-    private String generateOrderNumber() {
-        long count = orderRepository.count() + 1;
-        return "SO-" + (10000 + count);
     }
 
     public RmaSummaryView toSummary(RmaRequest rma) {

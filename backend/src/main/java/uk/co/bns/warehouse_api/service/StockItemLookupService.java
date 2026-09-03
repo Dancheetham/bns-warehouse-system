@@ -32,15 +32,28 @@ public class StockItemLookupService {
     private final LocationRepository locationRepository;
     private final StockMovementRepository stockMovementRepository;
 
+    // Only these statuses mean "genuinely sitting on a shelf right now" -
+    // ALLOCATED is committed to an order (moving it would desync picking),
+    // DESPATCHED has physically left the building. Previously nothing
+    // filtered on status at all, so a despatched item could still be found
+    // and "moved" to a new bin - nonsensical (it's not physically anywhere
+    // in the warehouse) and corrupts the data by giving a despatched item a
+    // location again.
+    private static final java.util.Set<uk.co.bns.warehouse_api.enums.StockItemStatus> ON_HAND_STATUSES =
+            java.util.Set.of(uk.co.bns.warehouse_api.enums.StockItemStatus.AVAILABLE,
+                    uk.co.bns.warehouse_api.enums.StockItemStatus.QUARANTINED);
+
     public StockItemSummary findByMac(String mac) {
         StockItem item = stockItemRepository.findByMacAddressIgnoreCase(mac)
                 .orElseThrow(() -> new NotFoundException("No stock item found for MAC " + mac));
+        requireOnHand(item);
         return toSummary(item);
     }
 
     public StockItemSummary findBySerial(String serial) {
         StockItem item = stockItemRepository.findBySerialNumberIgnoreCase(serial)
                 .orElseThrow(() -> new NotFoundException("No stock item found for serial " + serial));
+        requireOnHand(item);
         return toSummary(item);
     }
 
@@ -49,12 +62,17 @@ public class StockItemLookupService {
         if (items.isEmpty()) {
             throw new NotFoundException("No stock items found for batch/carton " + batchCode);
         }
-        return items.stream().map(this::toSummary).toList();
+        List<StockItem> onHand = items.stream().filter(i -> ON_HAND_STATUSES.contains(i.getStatus())).toList();
+        if (onHand.isEmpty()) {
+            throw new NotFoundException("Batch/carton " + batchCode + " was found, but every unit in it has already been despatched or allocated");
+        }
+        return onHand.stream().map(this::toSummary).toList();
     }
 
     public List<StockItemSummary> listByProduct(Long productId) {
         List<StockItem> items = stockItemRepository.findByProduct_Id(productId);
         return items.stream()
+                .filter(i -> ON_HAND_STATUSES.contains(i.getStatus()))
                 .sorted(Comparator
                         .comparing((StockItem i) -> i.getLocation() != null ? i.getLocation().getCode() : "")
                         .thenComparing(i -> Optional.ofNullable(i.getMacAddress()).orElse(Optional.ofNullable(i.getSerialNumber()).orElse(""))))
@@ -66,7 +84,9 @@ public class StockItemLookupService {
         if (!locationRepository.existsById(locationId)) {
             throw new NotFoundException("Location " + locationId + " not found");
         }
-        List<StockItem> items = stockItemRepository.findByLocation_Id(locationId);
+        List<StockItem> items = stockItemRepository.findByLocation_Id(locationId).stream()
+                .filter(i -> ON_HAND_STATUSES.contains(i.getStatus()))
+                .toList();
 
         Map<Long, List<StockItem>> byProduct = new LinkedHashMap<>();
         for (StockItem item : items) {
@@ -108,6 +128,14 @@ public class StockItemLookupService {
                 skipped.add("Item " + id + " not found");
                 continue;
             }
+            if (!ON_HAND_STATUSES.contains(item.getStatus())) {
+                // Belt-and-braces on top of find/scan already filtering these
+                // out - defends against anything reaching this method some
+                // other way (e.g. a stale stockItemId from before a status
+                // changed underneath it) rather than trusting the caller.
+                skipped.add(displayName(item) + " can't be moved - it's currently " + item.getStatus().name().toLowerCase());
+                continue;
+            }
             if (item.getLocation() != null && item.getLocation().getId().equals(destination.getId())) {
                 skipped.add(displayName(item) + " is already at " + destination.getCode());
                 continue;
@@ -132,6 +160,13 @@ public class StockItemLookupService {
         }
 
         return new MoveItemsResult(moved, skipped.size(), skipped);
+    }
+
+    private void requireOnHand(StockItem item) {
+        if (!ON_HAND_STATUSES.contains(item.getStatus())) {
+            throw new NotFoundException(displayName(item) + " has already been "
+                    + item.getStatus().name().toLowerCase() + " - it's no longer physically in the warehouse");
+        }
     }
 
     private String displayName(StockItem item) {

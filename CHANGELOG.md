@@ -5,6 +5,31 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.13.0] - 2026-09-03 (later still)
+
+### Fixed
+- Despatched (and allocated) stock items could still be found, "moved" to a
+  new bin, and shown throughout Stock Movement and Stock Overview - nothing
+  filtered on status at all. A despatched item has physically left the
+  building; scanning it in Stock Movement now correctly says so instead of
+  letting it be relocated, and Stock Overview (both by-bin and by-product)
+  no longer lists anything that isn't genuinely on a shelf right now
+  (AVAILABLE or QUARANTINED). RMA lookup is unaffected - it's a completely
+  separate service that deliberately needs to find despatched items (that's
+  the whole point of an RMA), confirmed while making this change
+- Found and fixed a second, related latent bug while investigating the
+  above: RmaService had its own local copy of the naive
+  count-based order number generator - the exact same collision bug fixed
+  in OrderService a while back, just never applied here since it's a
+  separate copy in a different file. Now delegates to the one fixed version
+  instead of maintaining two
+- Shopify stock push was reporting "No Shopify locations found" - the real
+  cause was a missing read_locations scope (separate from read_inventory,
+  same pattern as the fulfillment orders read/write scope split earlier).
+  Also fixed the error handling itself: a GraphQL-level permission error was
+  being silently treated the same as "zero locations exist", which hid the
+  real problem behind a misleading message
+
 ## [0.12.0] - 2026-09-03 (later)
 
 ### Added

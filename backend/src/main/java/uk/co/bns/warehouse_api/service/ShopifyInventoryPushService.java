@@ -195,6 +195,17 @@ public class ShopifyInventoryPushService {
 
         try {
             JsonNode result = graphql(accessToken, LOCATIONS_QUERY, Map.of());
+            if (result.has("errors")) {
+                // Was previously silently treated the same as "no locations
+                // found", which is exactly wrong - a permission error and an
+                // empty result are very different problems with very
+                // different fixes, and burying this made a real scope gap
+                // (read_locations, separate from read_inventory - Shopify's
+                // Location object has needed its own scope since API
+                // version 2024-07) look like empty data instead.
+                errors.add("Shopify GraphQL error looking up locations: " + result.path("errors"));
+                return null;
+            }
             JsonNode locations = result.path("data").path("locations").path("nodes");
             if (locations.size() == 1) {
                 String id = locations.get(0).path("id").asText();
