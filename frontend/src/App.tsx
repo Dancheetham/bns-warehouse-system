@@ -23,6 +23,7 @@ import ShopifySync from "./pages/ShopifySync";
 import Despatch from "./pages/Despatch";
 import Packing from "./pages/Packing";
 import HandheldHome from "./handheld/HandheldHome";
+import HandheldStockMovement from "./handheld/HandheldStockMovement";
 import HandheldLogin from "./handheld/HandheldLogin";
 import PickOrderList from "./handheld/PickOrderList";
 import PickOrder from "./handheld/PickOrder";
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/handheld/pick/:orderId" element={<PickOrder />} />
           <Route path="/handheld/goods-in" element={<GoodsInStart />} />
           <Route path="/handheld/goods-in/:sessionId" element={<GoodsInScan />} />
+          <Route path="/handheld/stock-movement" element={<HandheldStockMovement />} />
 
           {/* The handheld app used to live at /pick before Goods In moved in and
               everything got grouped under /handheld - redirect anyone with the old

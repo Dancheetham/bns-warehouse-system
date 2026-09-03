@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.12.0] - 2026-09-03 (later)
+
+### Added
+- Stock Movement on the handheld app - same scan/lookup/move mechanics as
+  the desktop version (scan MAC/serial/batch, pick a destination bin,
+  confirm), just the handheld dark full-screen treatment. New third tile on
+  the handheld home screen alongside Picking and Goods In
+- README rewritten from scratch - it was written very early in the project
+  and had drifted a long way from reality (still listed RMAs, user accounts,
+  and the entire Shopify integration as "not yet built" despite all being
+  fully implemented). Now an accurate, complete "what's implemented" /
+  "what's not yet built" list, including the production-hardening items
+  that were deliberately left loose while this was LAN-only
+
+### Fixed
+- Desktop Stock Movement's `movedBy` was a hardcoded "warehouse" placeholder
+  - now uses the actual logged-in user's name, same as the new handheld
+  version, now that real accounts exist to attribute it to
+
 ## [0.11.0] - 2026-09-03
 
 ### Added

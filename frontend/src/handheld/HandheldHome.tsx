@@ -38,6 +38,14 @@ export default function HandheldHome() {
           <p className="text-2xl font-bold mb-1">Goods In</p>
           <p className="text-slate-400 text-sm">Scan cartons to book stock into a bin</p>
         </button>
+
+        <button
+          onClick={() => navigate("/handheld/stock-movement")}
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-left active:bg-slate-800"
+        >
+          <p className="text-2xl font-bold mb-1">Stock Movement</p>
+          <p className="text-slate-400 text-sm">Scan items to move them between bins</p>
+        </button>
       </div>
     </div>
   );

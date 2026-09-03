@@ -2,8 +2,10 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Location, MoveItemsResult, StockItemSummary } from "../types";
+import { useAuth } from "../auth/AuthContext";
 
 export default function StockMovement() {
+  const { user } = useAuth();
   const [scanValue, setScanValue] = useState("");
   const [pending, setPending] = useState<StockItemSummary[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -57,7 +59,7 @@ export default function StockMovement() {
         await api.post<MoveItemsResult>("/stock-items/move", {
           stockItemIds: pending.map((i) => i.id),
           toLocationId: Number(toLocationId),
-          movedBy: "warehouse",
+          movedBy: user?.name ?? "warehouse",
         })
       ).data,
     onSuccess: (data) => {
