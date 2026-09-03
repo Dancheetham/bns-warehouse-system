@@ -5,6 +5,19 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.13.1] - 2026-09-03 (even later)
+
+### Fixed
+- Stock push to Shopify was failing outright on every batch:
+  "ignoreCompareQuantity Field is not defined on InventorySetQuantitiesInput".
+  That field was inaccurate information from an earlier search result, not
+  something the real schema actually has - Shopify's own validation error
+  is a far more reliable source than that was, so trusting it directly this
+  time rather than searching again. Removed the field entirely; without a
+  compareQuantity supplied at all, there's nothing to compare against, so
+  the mutation just sets the value directly - exactly the intended
+  "warehouse is authoritative" behaviour, no flag needed
+
 ## [0.13.0] - 2026-09-03 (later still)
 
 ### Fixed

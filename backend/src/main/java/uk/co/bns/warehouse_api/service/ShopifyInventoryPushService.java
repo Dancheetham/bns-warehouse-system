@@ -165,7 +165,12 @@ public class ShopifyInventoryPushService {
                 Map<String, Object> input = new LinkedHashMap<>();
                 input.put("name", "available");
                 input.put("reason", "correction");
-                input.put("ignoreCompareQuantity", true);
+                // ignoreCompareQuantity isn't a real field on this input type -
+                // confirmed by Shopify's own schema validation error, not just
+                // a search result this time. Leaving compareQuantity out
+                // entirely (never set below) means there's nothing to compare
+                // against, so this just sets the value directly - exactly the
+                // "warehouse is authoritative" behaviour wanted, no flag needed.
                 input.put("referenceDocumentUri", "warehouse://bns-warehouse-system/stock-sync");
                 input.put("quantities", quantities);
 
