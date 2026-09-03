@@ -5,6 +5,14 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.9.2] - 2026-09-02 (evening, later still)
+
+### Fixed
+- Android build failed with "android.useAndroidX property is not enabled" -
+  a completely standard `gradle.properties` file (turning AndroidX support
+  on, required as soon as any androidx.* dependency is used, which core-ktx
+  and appcompat both are) was simply missing from the project entirely. Added
+
 ## [0.9.1] - 2026-09-02 (evening, later)
 
 ### Fixed
