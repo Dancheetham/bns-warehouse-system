@@ -26,4 +26,5 @@ public interface StockItemRepository extends JpaRepository<StockItem, Long> {
     List<StockItem> findByOrderLine_Order_Id(Long orderId);
     List<StockItem> findByOrderLine_Order_IdAndStatus(Long orderId, StockItemStatus status);
     List<StockItem> findByCarton_Id(Long cartonId);
+    List<StockItem> findByStatusIn(List<StockItemStatus> statuses);
 }

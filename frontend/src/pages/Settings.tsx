@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { DEFAULT_STATUS_COLORS, ORDER_STATUSES, resolveStatusColors, statusColorSettingKey, statusLabel } from "../utils/statusColors";
 import { OrderStatus } from "../types";
@@ -387,6 +388,20 @@ export default function Settings() {
         {saveMutation.isPending ? "Saving..." : "Save Settings"}
       </button>
       {saved && <span className="ml-3 text-sm text-emerald-600">Saved.</span>}
+
+      <div className="bg-white border border-amber-200 rounded-lg p-5 mt-8">
+        <h3 className="font-medium text-amber-700 mb-1">Bulk Stock Import</h3>
+        <p className="text-sm text-slate-500 mb-3">
+          One-off replacement of current on-hand stock from an OrderWise export - not a test-data tool, this stays
+          available once real data is live too.
+        </p>
+        <Link
+          to="/settings/stock-import"
+          className="inline-block bg-slate-800 text-white text-sm px-4 py-2 rounded-md hover:bg-slate-700"
+        >
+          Open Stock Import
+        </Link>
+      </div>
 
       {testDataResetStatus?.enabled && (
         <div className="bg-white border border-red-200 rounded-lg p-5 mt-8">

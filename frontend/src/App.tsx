@@ -19,6 +19,7 @@ import BugReports from "./pages/BugReports";
 import SalesActivity from "./pages/SalesActivity";
 import OrderEdit from "./pages/OrderEdit";
 import Settings from "./pages/Settings";
+import StockImport from "./pages/StockImport";
 import ShopifySync from "./pages/ShopifySync";
 import Despatch from "./pages/Despatch";
 import Packing from "./pages/Packing";
@@ -86,6 +87,7 @@ export default function App() {
             <Route path="/reports/stock" element={<ReportsStock />} />
             <Route path="/bug-reports" element={<BugReports />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/stock-import" element={<StockImport />} />
             <Route path="/shopify-sync" element={<ShopifySync />} />
           </Route>
         </Route>

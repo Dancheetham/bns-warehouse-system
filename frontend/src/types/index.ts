@@ -540,3 +540,36 @@ export interface DespatchConfirmationResult {
   despatchEmail: AcknowledgementResult;
   shopifyFulfillmentStatus: string;
 }
+
+export interface UnmatchedSkuSummary {
+  sku: string;
+  rowCount: number;
+  totalQty: number;
+}
+
+export interface TrackingTypeChange {
+  sku: string;
+  from: string;
+  to: string;
+}
+
+export interface StockImportPreview {
+  totalRows: number;
+  binsToCreate: string[];
+  matchedProductCount: number;
+  unmatchedSkus: UnmatchedSkuSummary[];
+  trackingTypeChanges: TrackingTypeChange[];
+  itemsToCreate: number;
+  currentOnHandItemsToRemove: number;
+  edgeCaseNotes: string[];
+  errors: string[];
+}
+
+export interface StockImportResult {
+  success: boolean;
+  binsCreated: number;
+  itemsRemoved: number;
+  itemsCreated: number;
+  productsSkipped: number;
+  errors: string[];
+}

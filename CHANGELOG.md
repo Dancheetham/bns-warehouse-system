@@ -5,6 +5,31 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.14.0] - 2026-09-03 (night)
+
+### Added
+- Bulk Stock Import (Settings > Bulk Stock Import) - one-off replacement of
+  current on-hand stock from an OrderWise export, with a real preview step
+  first: bins to be created, products matched vs skipped, tracking type
+  changes, edge cases worth a look, and exactly how many items will be
+  removed and created - nothing touches the database until that's reviewed
+  and "REPLACE" is typed to confirm. Deliberately narrow in scope, per
+  explicit decisions made before building it: only ever replaces
+  AVAILABLE/QUARANTINED stock (despatch history and anything allocated to
+  an open order are untouched, system-wide, regardless of whether their
+  product appears in the file), a SKU that doesn't match an existing
+  product is skipped and reported rather than auto-creating a bare product,
+  and the file's tracking type is authoritative and overrides whatever's
+  currently set
+
+### Fixed
+- Found while building the above: the stock_movements foreign key had no
+  ON DELETE clause, so Postgres would refuse to delete any stock item that
+  still had movement history against it - which is almost every real stock
+  item. Fixed to ON DELETE SET NULL, matching that the column was already
+  nullable by design - the movement record survives, just detached from the
+  now-gone item
+
 ## [0.13.2] - 2026-09-03 (even later still)
 
 ### Fixed
