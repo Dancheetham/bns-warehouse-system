@@ -26,6 +26,15 @@ export interface ShopifyStatus {
   totalSyncedProducts: number;
   lastCompanySyncedAt?: string;
   lastOrderSyncedAt?: string;
+  lastStockPushedAt?: string;
+}
+
+export interface ShopifyStockPushResult {
+  configured: boolean;
+  pushedAt?: string;
+  pushed: number;
+  skipped: string[];
+  errors: string[];
 }
 
 export interface ShopifyCompanySyncResult {

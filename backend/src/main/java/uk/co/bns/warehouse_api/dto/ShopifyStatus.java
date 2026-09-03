@@ -15,6 +15,7 @@ public record ShopifyStatus(
         long needsReviewCount,
         long totalSyncedProducts,
         LocalDateTime lastCompanySyncedAt,
-        LocalDateTime lastOrderSyncedAt
+        LocalDateTime lastOrderSyncedAt,
+        LocalDateTime lastStockPushedAt
 ) {}
 

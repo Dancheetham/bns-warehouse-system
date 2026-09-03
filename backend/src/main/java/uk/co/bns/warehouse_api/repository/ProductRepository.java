@@ -13,4 +13,5 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findByShopifyVariantId(String shopifyVariantId);
     long countByNeedsReviewTrue();
     long countByShopifyProductIdIsNotNull();
+    java.util.List<Product> findByShopifyInventoryItemIdIsNotNull();
 }

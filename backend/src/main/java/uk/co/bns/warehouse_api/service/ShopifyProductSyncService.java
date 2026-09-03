@@ -77,6 +77,7 @@ public class ShopifyProductSyncService {
                           sku
                           title
                           inventoryItem {
+                            id
                             measurement {
                               weight { value unit }
                             }
@@ -101,12 +102,13 @@ public class ShopifyProductSyncService {
         return token.isBlank() ? null : token;
     }
 
-    public ShopifyStatus getStatus(LocalDateTime lastCompanySyncedAt, LocalDateTime lastOrderSyncedAt) {
+    public ShopifyStatus getStatus(LocalDateTime lastCompanySyncedAt, LocalDateTime lastOrderSyncedAt,
+                                    LocalDateTime lastStockPushedAt) {
         boolean appConfigured = shopDomain != null && !shopDomain.isBlank();
         boolean connected = currentAccessToken() != null;
         return new ShopifyStatus(appConfigured, connected, appConfigured ? shopDomain : null, lastSyncedAt,
                 productRepository.countByNeedsReviewTrue(), productRepository.countByShopifyProductIdIsNotNull(),
-                lastCompanySyncedAt, lastOrderSyncedAt);
+                lastCompanySyncedAt, lastOrderSyncedAt, lastStockPushedAt);
     }
 
     // Polls rather than using Shopify webhooks - webhooks need a public HTTPS URL
@@ -182,10 +184,11 @@ public class ShopifyProductSyncService {
                             continue;
                         }
                         String variantId = variant.path("id").asText(null);
+                        String inventoryItemId = variant.path("inventoryItem").path("id").asText(null);
                         String name = multiVariant ? title + " - " + variant.path("title").asText("") : title;
                         BigDecimal weightKg = extractWeightKg(variant.path("inventoryItem").path("measurement").path("weight"));
 
-                        boolean isNew = applySync(sku, variantId, shopifyProductId, name, weightKg, shopifyActive);
+                        boolean isNew = applySync(sku, variantId, inventoryItemId, shopifyProductId, name, weightKg, shopifyActive);
                         if (isNew) created++; else updated++;
                     }
 
@@ -204,8 +207,8 @@ public class ShopifyProductSyncService {
         return new ShopifySyncResult(true, lastSyncedAt, created, updated, skippedNoSku, errors);
     }
 
-    private boolean applySync(String sku, String variantId, String shopifyProductId, String name,
-                               BigDecimal weightKg, boolean shopifyActive) {
+    private boolean applySync(String sku, String variantId, String inventoryItemId, String shopifyProductId,
+                               String name, BigDecimal weightKg, boolean shopifyActive) {
         Optional<Product> existing = variantId != null
                 ? productRepository.findByShopifyVariantId(variantId)
                 : Optional.empty();
@@ -223,9 +226,19 @@ public class ShopifyProductSyncService {
             product.setActive(shopifyActive);
         }
         product.setName(name);
-        product.setWeightKg(weightKg);
+        // Weight only ever flows warehouse -> Shopify from here on (see
+        // ShopifyInventoryPushService) - the warehouse system is authoritative,
+        // so a pulled Shopify weight is only used as a starting value for a
+        // product we've genuinely never seen before, never to overwrite a
+        // value we already have. Otherwise a Shopify-side edit would silently
+        // win on the next sync, exactly the inconsistent behaviour this was
+        // built to avoid.
+        if (isNew || product.getWeightKg() == null) {
+            product.setWeightKg(weightKg);
+        }
         product.setShopifyProductId(shopifyProductId);
         product.setShopifyVariantId(variantId);
+        product.setShopifyInventoryItemId(inventoryItemId);
         product.setLastSyncedAt(LocalDateTime.now());
         productRepository.save(product);
         return isNew;

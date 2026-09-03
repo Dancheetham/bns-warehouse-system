@@ -55,6 +55,11 @@ public class Product {
     @Column(name = "shopify_variant_id")
     private String shopifyVariantId;
 
+    // The InventoryItem, not the Product/Variant - weight and stock quantity
+    // pushes both target this specific object family in Shopify's API.
+    @Column(name = "shopify_inventory_item_id")
+    private String shopifyInventoryItemId;
+
     // True for anything a Shopify sync created - staff need to confirm the
     // tracking type (and default bin/password if relevant) before it's really
     // usable, since Shopify has no concept of those. Cleared automatically the

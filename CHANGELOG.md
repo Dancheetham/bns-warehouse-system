@@ -5,6 +5,39 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.11.0] - 2026-09-03
+
+### Added
+- Stock levels now push from the warehouse system to Shopify - one-way,
+  same principle as fulfillment status. Runs on a timer, pushing each linked
+  product's "available" count (the exact same figure the public stock
+  lookup API already uses, so there's only ever one definition of
+  "available" across the whole system, not two that could quietly drift)
+- Weight now also pushes one-way, warehouse -> Shopify, but event-driven
+  rather than timed - fires the moment a weight is actually changed and
+  saved, since it's a rare, deliberate edit rather than something that
+  needs periodic batching. Regular product sync stops pulling weight in
+  from Shopify for anything we already have a value for - only ever used
+  as a starting point for a genuinely new product now, never allowed to
+  silently overwrite an existing value (the warehouse system is
+  authoritative, by explicit decision - a Shopify-side weight edit gets
+  overwritten on the next push rather than the two systems fighting over
+  which one's "more recent")
+- New scope: write_inventory (covers both weight and stock - both target
+  Shopify's InventoryItem object family, not Product/ProductVariant, so
+  no write_products scope needed despite weight conceptually feeling like
+  "a product field")
+
+### Fixed
+- Found while researching this: the Shopify API version pinned throughout
+  this whole integration (2025-01) had already been sunset for months.
+  Shopify doesn't error on a sunset version - it silently "falls forward"
+  to whatever's oldest-currently-supported, so every Shopify call in this
+  system has likely been running against a schema slightly different to
+  the one actually being coded against, with zero warning. Bumped to
+  2026-04 and flagging this as something worth revisiting every couple of
+  quarters going forward, not just fixing once
+
 ## [0.10.0] - 2026-09-02 (night)
 
 ### Added

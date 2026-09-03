@@ -11,7 +11,9 @@ import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.LocationRepository;
 import uk.co.bns.warehouse_api.repository.ProductRepository;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +21,7 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final LocationRepository locationRepository;
+    private final ShopifyInventoryPushService shopifyInventoryPushService;
 
     public List<Product> findAll() {
         return productRepository.findAll();
@@ -43,11 +46,21 @@ public class ProductService {
     @Transactional
     public Product update(Long id, ProductRequest request) {
         Product product = findById(id);
+        BigDecimal weightBefore = product.getWeightKg();
         apply(product, request);
         // A human editing and saving the product through the normal form is the
         // signal that it's been reviewed - clears the flag a Shopify sync set.
         product.setNeedsReview(false);
-        return productRepository.save(product);
+        product = productRepository.save(product);
+
+        // Best-effort, after the save already succeeded - a Shopify hiccup
+        // should never block saving a product locally. Only pushes when the
+        // weight actually changed, not on every unrelated save.
+        if (!Objects.equals(weightBefore, product.getWeightKg())) {
+            shopifyInventoryPushService.pushWeight(product);
+        }
+
+        return product;
     }
 
     private void apply(Product product, ProductRequest request) {

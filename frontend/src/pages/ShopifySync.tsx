@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { Product, ShopifyCompanySyncResult, ShopifyOrderSyncResult, ShopifyStatus, ShopifySyncResult } from "../types";
+import { Product, ShopifyCompanySyncResult, ShopifyOrderSyncResult, ShopifyStatus, ShopifyStockPushResult, ShopifySyncResult } from "../types";
 
 export default function ShopifySync() {
   const queryClient = useQueryClient();
@@ -57,6 +57,11 @@ export default function ShopifySync() {
       queryClient.invalidateQueries({ queryKey: ["shopify-status"] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
     },
+  });
+
+  const stockPushMutation = useMutation({
+    mutationFn: async () => (await api.post<ShopifyStockPushResult>("/shopify/push-stock")).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shopify-status"] }),
   });
 
   const disconnectMutation = useMutation({
@@ -180,7 +185,7 @@ export default function ShopifySync() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white border border-slate-200 rounded-lg p-5">
           <h3 className="font-medium text-slate-700 mb-1">Companies</h3>
           <p className="text-xs text-slate-500 mb-3">
@@ -237,6 +242,32 @@ export default function ShopifySync() {
               )}
               {orderSyncMutation.data.errors.length > 0 && (
                 <p className="text-red-600 mt-1">{orderSyncMutation.data.errors.join("; ")}</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-lg p-5">
+          <h3 className="font-medium text-slate-700 mb-1">Stock Levels</h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Pushes available stock out to Shopify - one-way, the warehouse system stays authoritative. Weight
+            pushes automatically whenever it's edited here; this covers the stock quantity, on a timer.
+          </p>
+          <p className="text-xs text-slate-400 mb-3">
+            Last pushed: {status.lastStockPushedAt ? new Date(status.lastStockPushedAt).toLocaleString("en-GB") : "Never"}
+          </p>
+          <button
+            onClick={() => stockPushMutation.mutate()}
+            disabled={stockPushMutation.isPending || !status.connected}
+            className="bg-slate-800 text-white text-sm px-4 py-2 rounded-md hover:bg-slate-700 disabled:opacity-50"
+          >
+            {stockPushMutation.isPending ? "Pushing..." : "Push Stock Now"}
+          </button>
+          {stockPushMutation.data && (
+            <div className="text-xs text-slate-500 mt-2">
+              <p>{stockPushMutation.data.pushed} product(s) pushed</p>
+              {stockPushMutation.data.errors.length > 0 && (
+                <p className="text-red-600 mt-1">{stockPushMutation.data.errors.join("; ")}</p>
               )}
             </div>
           )}

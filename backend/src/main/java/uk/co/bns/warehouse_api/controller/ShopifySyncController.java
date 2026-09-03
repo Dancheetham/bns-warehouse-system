@@ -5,8 +5,10 @@ import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.ShopifyCompanySyncResult;
 import uk.co.bns.warehouse_api.dto.ShopifyOrderSyncResult;
 import uk.co.bns.warehouse_api.dto.ShopifyStatus;
+import uk.co.bns.warehouse_api.dto.ShopifyStockPushResult;
 import uk.co.bns.warehouse_api.dto.ShopifySyncResult;
 import uk.co.bns.warehouse_api.service.ShopifyCompanySyncService;
+import uk.co.bns.warehouse_api.service.ShopifyInventoryPushService;
 import uk.co.bns.warehouse_api.service.ShopifyOrderSyncService;
 import uk.co.bns.warehouse_api.service.ShopifyProductSyncService;
 
@@ -18,11 +20,14 @@ public class ShopifySyncController {
     private final ShopifyProductSyncService shopifyProductSyncService;
     private final ShopifyCompanySyncService shopifyCompanySyncService;
     private final ShopifyOrderSyncService shopifyOrderSyncService;
+    private final ShopifyInventoryPushService shopifyInventoryPushService;
 
     @GetMapping("/status")
     public ShopifyStatus status() {
         return shopifyProductSyncService.getStatus(
-                shopifyCompanySyncService.getLastSyncedAt(), shopifyOrderSyncService.getLastSyncedAt());
+                shopifyCompanySyncService.getLastSyncedAt(),
+                shopifyOrderSyncService.getLastSyncedAt(),
+                shopifyInventoryPushService.getLastStockPushedAt());
     }
 
     @PostMapping("/sync")
@@ -38,5 +43,10 @@ public class ShopifySyncController {
     @PostMapping("/sync-orders")
     public ShopifyOrderSyncResult syncOrders() {
         return shopifyOrderSyncService.sync();
+    }
+
+    @PostMapping("/push-stock")
+    public ShopifyStockPushResult pushStock() {
+        return shopifyInventoryPushService.pushStockLevels();
     }
 }

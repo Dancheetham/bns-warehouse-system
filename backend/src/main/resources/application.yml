@@ -63,7 +63,13 @@ shopify:
   shop-domain: ${SHOPIFY_SHOP_DOMAIN:}
   client-id: ${SHOPIFY_CLIENT_ID:}
   client-secret: ${SHOPIFY_CLIENT_SECRET:}
-  api-version: 2025-01
+  # Shopify only supports each quarterly API version for ~12 months, then
+  # silently "falls forward" to whatever's oldest-currently-supported on any
+  # call still pinned to a sunset version - no error, no warning, just a
+  # different schema than the one actually being coded against. Worth
+  # bumping this deliberately every couple of quarters rather than
+  # discovering it's stale by accident.
+  api-version: 2026-04
 
 # Optional - leave SMTP_HOST blank to run without email actually sending.
 # When blank, the Acknowledgement action still composes and shows the email
