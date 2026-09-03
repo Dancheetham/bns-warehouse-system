@@ -62,6 +62,12 @@ services:
       - api
     ports:
       - "8081:80"
+    volumes:
+      # Drop a built app-debug.apk (or a signed release build) in here on the
+      # host and it's immediately downloadable from the handheld login page -
+      # no rebuild of any container needed, just build the APK in Android
+      # Studio and copy the file in. See android-app/releases/README.md.
+      - ./android-app/releases:/usr/share/nginx/html/downloads
 
 volumes:
   bns_postgres_data:

@@ -144,6 +144,15 @@ export default function HandheldLogin() {
           </form>
         )}
       </div>
+
+      <footer className="px-4 py-4 text-center">
+        <a
+          href="/downloads/app-debug.apk"
+          className="text-sm text-slate-500 active:text-slate-300 underline underline-offset-2"
+        >
+          Download the app for this device
+        </a>
+      </footer>
     </div>
   );
 }

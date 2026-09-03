@@ -5,6 +5,16 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.10.0] - 2026-09-02 (night)
+
+### Added
+- "Download the app for this device" link on the handheld login page - once
+  you've built the Android APK in Android Studio, drop it in
+  `android-app/releases/app-debug.apk` and it's immediately downloadable
+  from the handheld login screen, no rebuild or restart needed. Useful for
+  setting up a new or replacement scanner: open the browser once, download,
+  install, never need the browser again after that
+
 ## [0.9.2] - 2026-09-02 (evening, later still)
 
 ### Fixed

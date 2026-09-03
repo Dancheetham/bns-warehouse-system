@@ -28,3 +28,8 @@ android-app/**/build/
 android-app/.idea/
 android-app/*.iml
 android-app/**/*.iml
+
+# The APK itself is a build output, not source - same reasoning as
+# node_modules or target/. The folder's README (setup instructions) stays
+# tracked.
+android-app/releases/*.apk
