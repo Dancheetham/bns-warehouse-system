@@ -153,11 +153,20 @@ public class ShopifyInventoryPushService {
             List<Map<String, Object>> quantities = new ArrayList<>();
             for (Product product : chunk) {
                 long available = stockItemRepository.countByProduct_IdAndStatus(product.getId(), StockItemStatus.AVAILABLE);
-                quantities.add(Map.of(
-                        "inventoryItemId", product.getShopifyInventoryItemId(),
-                        "locationId", locationId,
-                        "quantity", (int) available
-                ));
+                // changeFromQuantity has to be present as a key on every item
+                // (confirmed by a live schema error, twice now, not a guess) -
+                // but explicitly passing null for it opts out of Shopify's
+                // compare-and-swap check entirely, which is exactly "just set
+                // the absolute value" - the behaviour actually wanted. Map.of()
+                // can't hold a null value at all (throws), hence the mutable
+                // map here instead of the Map.of() used everywhere else in
+                // this file.
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("inventoryItemId", product.getShopifyInventoryItemId());
+                item.put("locationId", locationId);
+                item.put("quantity", (int) available);
+                item.put("changeFromQuantity", null);
+                quantities.add(item);
             }
             if (quantities.isEmpty()) continue;
 

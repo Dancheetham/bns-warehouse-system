@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.13.2] - 2026-09-03 (even later still)
+
+### Fixed
+- Stock push failed again on the next attempt: "InventoryQuantityInput must
+  include the following argument: changeFromQuantity." This time fetched
+  Shopify's actual live schema reference directly rather than trusting
+  another search snippet, after getting this mutation's shape wrong twice
+  in a row. Turns out this is a genuinely confusing, actively-changing part
+  of Shopify's own API right now (other developers have hit and reported
+  this exact same transition) - compareQuantity/ignoreCompareQuantity are
+  being replaced by a per-item changeFromQuantity field, and the field key
+  has to be present even when opting out, which is done by passing an
+  explicit null rather than omitting it. Also had to switch from Map.of()
+  (which can't hold a null value at all) to a plain mutable map for that
+  one item structure
+
 ## [0.13.1] - 2026-09-03 (even later)
 
 ### Fixed
