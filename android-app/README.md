@@ -58,6 +58,30 @@ compatibility table at https://developer.android.com/build/releases/about-agp.
 2. Either `adb install app-debug.apk` from a PC with the phone plugged in, or
    copy the APK onto the device and open it there to install directly.
 
+## Target device
+
+Built with the **Grandstream WP856** in mind (5.5" 720x1440 touchscreen,
+Android 13, built-in 1D/2D hardware barcode scanner). The web app's existing
+responsive layout already suits this screen size without needing a separate
+build; the handheld pages' `ScanInput` fields (suppressing the on-screen
+keyboard) match how this device's hardware scanner actually behaves - it
+acts as a keyboard, "typing" the scanned value into whatever's focused.
+
+## Custom status bar
+
+A pinned/kiosk app hides Android's own status bar entirely - that's the whole
+point of pinning, but it also means losing the clock, battery %, and Wi-Fi
+signal staff would otherwise see all shift. This app reproduces just those
+three permanently at the top of the screen, as part of the app itself.
+
+One thing worth knowing: reading the real Wi-Fi signal strength needs
+location permission granted on Android 8.1+ (a genuine OS restriction - Wi-Fi
+scan results can otherwise be used to infer location, so it's gated behind
+that permission regardless of whether the app does anything with location
+itself, which this one doesn't). The app requests this once on first launch;
+if it's ever denied, the Wi-Fi reading just shows a placeholder rather than
+the app failing - nothing else stops working.
+
 ## Locking it down
 
 Once installed, two things need doing on the device itself - not something

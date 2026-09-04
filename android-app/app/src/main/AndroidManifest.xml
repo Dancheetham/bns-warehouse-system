@@ -5,6 +5,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+      For the Wi-Fi signal reading in the custom status bar. ACCESS_WIFI_STATE
+      alone isn't enough on Android 8.1+ (API 27+) - the OS won't return a real
+      RSSI/signal value without location permission too (Wi-Fi scan results
+      can be used to infer location, so Android gates them behind it). This is
+      a coarse-enough permission for that purpose - the app never actually
+      uses GPS/location data for anything, only reads it as the unlock key for
+      genuine Wi-Fi signal readings. Requested at runtime in MainActivity, not
+      just declared here - it's a dangerous-level permission on API 23+.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"

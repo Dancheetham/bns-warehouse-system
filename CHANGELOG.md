@@ -32,6 +32,22 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.16.0] - 2026-09-04
+
+### Added
+- Split bin picker on the handheld side (HandheldBinPicker) - half the
+  existing searchable list, half a scan-a-bin-code field. Works today by
+  typing/scanning the bin's plain code even without printed labels yet;
+  once bins have real barcodes, scanning one does exactly the same thing
+  with no further changes needed, since it's just matching against the
+  bin's existing code either way
+- Android kiosk app now has a custom status bar (clock, battery %, Wi-Fi
+  signal) - a pinned app hides Android's own status bar entirely, which
+  otherwise means losing that information for the whole shift. Built with
+  the actual target device in mind (Grandstream WP856 - confirmed 720x1440
+  screen, Android 13, built-in hardware barcode scanner that behaves as a
+  keyboard, matching how ScanInput was already designed)
+
 ## [0.15.0] - 2026-09-03 (later)
 
 ### Added

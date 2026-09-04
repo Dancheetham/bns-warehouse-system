@@ -1,14 +1,28 @@
 package uk.co.bns.warehouse.kiosk
 
+import android.Manifest
 import android.app.ActivityManager
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.net.wifi.WifiManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 /**
  * A thin full-screen wrapper around the handheld web app - not a rewrite of
@@ -22,14 +36,46 @@ import androidx.appcompat.app.AppCompatActivity
  */
 private const val WAREHOUSE_URL = "http://192.168.1.245:8081/handheld"
 
+private const val LOCATION_PERMISSION_REQUEST_CODE = 1001
+private const val STATUS_BAR_UPDATE_INTERVAL_MS = 30_000L
+
 class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
+    private lateinit var statusTime: TextView
+    private lateinit var statusWifi: TextView
+    private lateinit var statusBattery: TextView
+
+    private val statusBarHandler = Handler(Looper.getMainLooper())
+    private val statusBarUpdater = object : Runnable {
+        override fun run() {
+            updateClock()
+            updateWifiSignal()
+            statusBarHandler.postDelayed(this, STATUS_BAR_UPDATE_INTERVAL_MS)
+        }
+    }
+
+    // Battery level changes are a sticky broadcast, not something worth
+    // polling on the same timer as the clock/Wi-Fi - registering for the
+    // broadcast means it updates the moment the level actually changes.
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+            if (level >= 0 && scale > 0) {
+                statusBattery.text = "${(level * 100 / scale)}%"
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         hideSystemBars()
+
+        statusTime = findViewById(R.id.statusTime)
+        statusWifi = findViewById(R.id.statusWifi)
+        statusBattery = findViewById(R.id.statusBattery)
 
         webView = findViewById(R.id.webView)
         webView.settings.javaScriptEnabled = true
@@ -50,17 +96,86 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) {
             webView.loadUrl(WAREHOUSE_URL)
         }
+
+        requestLocationPermissionForWifiSignal()
     }
 
     override fun onResume() {
         super.onResume()
         hideSystemBars()
         startKioskPinning()
+
+        registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        statusBarUpdater.run()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            unregisterReceiver(batteryReceiver)
+        } catch (e: IllegalArgumentException) {
+            // Wasn't registered (e.g. onPause without a matching onResume
+            // having run yet) - harmless, nothing to clean up.
+        }
+        statusBarHandler.removeCallbacks(statusBarUpdater)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
+    }
+
+    private fun updateClock() {
+        val format = SimpleDateFormat("HH:mm", Locale.getDefault())
+        statusTime.text = format.format(System.currentTimeMillis())
+    }
+
+    /**
+     * Wi-Fi RSSI needs location permission granted on API 27+ (Android 8.1) -
+     * without it, the OS returns a placeholder value rather than the real
+     * signal strength, since Wi-Fi scan results can otherwise be used to
+     * infer location. Requested once at startup - a single one-time prompt is
+     * reasonable for a dedicated kiosk device provisioned once, not something
+     * that needs to happen on every launch.
+     */
+    private fun requestLocationPermissionForWifiSignal() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+                LOCATION_PERMISSION_REQUEST_CODE
+            )
+        }
+    }
+
+    private fun updateWifiSignal() {
+        try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+            if (!wifiManager.isWifiEnabled) {
+                statusWifi.text = "Wi-Fi off"
+                return
+            }
+            @Suppress("DEPRECATION")
+            val connectionInfo = wifiManager.connectionInfo
+            val rssi = connectionInfo?.rssi
+            if (rssi == null || rssi == Int.MIN_VALUE) {
+                statusWifi.text = "Wi-Fi --"
+                return
+            }
+            @Suppress("DEPRECATION")
+            val level = WifiManager.calculateSignalLevel(rssi, 5) // 0..4
+            val bar = "▂▄▆█".let { chars ->
+                (0 until 4).joinToString("") { i -> if (i < level) chars[i].toString() else "·" }
+            }
+            statusWifi.text = "Wi-Fi $bar"
+        } catch (e: Exception) {
+            // Missing permission, Wi-Fi service unavailable, etc. - shows a
+            // clear placeholder rather than crashing the whole app over a
+            // status readout that isn't essential to actually using it.
+            statusWifi.text = "Wi-Fi --"
+        }
     }
 
     /**
