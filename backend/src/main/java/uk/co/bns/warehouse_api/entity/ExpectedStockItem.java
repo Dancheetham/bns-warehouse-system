@@ -33,6 +33,12 @@ public class ExpectedStockItem {
     @Column(name = "wifi_mac_address")
     private String wifiMacAddress;
 
+    // Per unit, not per product - captured here if the supplier's shipment
+    // spreadsheet provides one, then carried onto the real StockItem when
+    // goods-in confirms receipt.
+    @Column(name = "default_password")
+    private String defaultPassword;
+
     @Column(nullable = false)
     private Boolean received = false;
 

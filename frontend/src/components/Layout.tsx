@@ -57,6 +57,21 @@ export default function Layout() {
   const reportsActive = location.pathname.startsWith("/reports");
   const [reportsOpen, setReportsOpen] = useState(reportsActive);
 
+  const isGroupActive = (group: (typeof navGroups)[number]) =>
+    group.items.some((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)));
+
+  // Collapsed by default - the sidebar was getting genuinely busy as
+  // features piled up - but a group auto-opens if you're currently on one
+  // of its pages, same as Reports already did, so you're never landed on a
+  // page with no visible indication of where you are in the nav.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(navGroups.map((g) => [g.heading, isGroupActive(g)]))
+  );
+
+  const toggleGroup = (heading: string) => {
+    setOpenGroups((prev) => ({ ...prev, [heading]: !prev[heading] }));
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate("/login");
@@ -72,12 +87,19 @@ export default function Layout() {
         <nav className="flex-1 py-2">
           {navGroups.map((group) => (
             <div key={group.heading}>
-              <p className={headingClasses}>{group.heading}</p>
-              {group.items.map((item) => (
-                <NavLink key={item.to} to={item.to} end={item.end} className={linkClasses}>
-                  {item.label}
-                </NavLink>
-              ))}
+              <button
+                onClick={() => toggleGroup(group.heading)}
+                className={`w-full flex justify-between items-center ${headingClasses} hover:text-slate-300`}
+              >
+                <span>{group.heading}</span>
+                <span className="text-[10px]">{openGroups[group.heading] ? "▲" : "▼"}</span>
+              </button>
+              {openGroups[group.heading] &&
+                group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.end} className={linkClasses}>
+                    {item.label}
+                  </NavLink>
+                ))}
             </div>
           ))}
 

@@ -32,7 +32,6 @@ export default function ProductDetail() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [trackingType, setTrackingType] = useState<TrackingType>("NONE");
-  const [defaultPassword, setDefaultPassword] = useState("");
   const [defaultLocationId, setDefaultLocationId] = useState("");
   const [weightKg, setWeightKg] = useState("");
   const [active, setActive] = useState(true);
@@ -44,7 +43,6 @@ export default function ProductDetail() {
     setName(product.name);
     setDescription(product.description ?? "");
     setTrackingType(product.trackingType);
-    setDefaultPassword(product.defaultPassword ?? "");
     setDefaultLocationId(product.defaultLocation ? String(product.defaultLocation.id) : "");
     setWeightKg(product.weightKg != null ? String(product.weightKg) : "");
     setActive(product.active);
@@ -57,7 +55,6 @@ export default function ProductDetail() {
         name,
         description: description || undefined,
         trackingType,
-        defaultPassword: defaultPassword || undefined,
         defaultLocationId: defaultLocationId ? Number(defaultLocationId) : undefined,
         weightKg: weightKg ? Number(weightKg) : undefined,
         active,
@@ -135,10 +132,6 @@ export default function ProductDetail() {
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Default Bin</label>
             <BinSelect bins={locations ?? []} value={defaultLocationId} onChange={setDefaultLocationId} placeholder="None" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Default Password</label>
-            <input value={defaultPassword} onChange={(e) => setDefaultPassword(e.target.value)} className="input" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Weight (kg)</label>

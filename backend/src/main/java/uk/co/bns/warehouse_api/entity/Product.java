@@ -31,9 +31,6 @@ public class Product {
     @Column(name = "tracking_type", nullable = false)
     private TrackingType trackingType = TrackingType.NONE;
 
-    @Column(name = "default_password")
-    private String defaultPassword;
-
     // The bin this product normally lives in - shown on picking notes so a
     // warehouse operator knows where to look first before checking alternatives.
     @ManyToOne

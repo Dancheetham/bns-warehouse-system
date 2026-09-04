@@ -7,7 +7,6 @@ export interface Product {
   name: string;
   description?: string;
   trackingType: TrackingType;
-  defaultPassword?: string;
   defaultLocation?: Location;
   weightKg?: number;
   active: boolean;
@@ -380,6 +379,7 @@ export interface StockItemSummary {
   serialNumber?: string;
   wifiMacAddress?: string;
   batchCode?: string;
+  defaultPassword?: string;
   productSku: string;
   productName: string;
   locationId?: number;
@@ -399,6 +399,7 @@ export interface StockItemDetail {
   serialNumber?: string;
   wifiMacAddress?: string;
   batchCode?: string;
+  defaultPassword?: string;
   status: string;
   locationCode?: string;
 }
@@ -407,7 +408,6 @@ export interface BinProductGroup {
   productId: number;
   productSku: string;
   productName: string;
-  defaultPassword?: string;
   items: StockItemDetail[];
 }
 

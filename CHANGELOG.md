@@ -32,6 +32,36 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.17.0] - 2026-09-04
+
+### Fixed
+- Found a more serious version of a risk that was flagged as a question:
+  Shopify decrements its own "available" inventory the moment an order is
+  *placed*, not when it's fulfilled - by the time an order gets despatched
+  here, Shopify had already reduced its own count independently. The real
+  risk was the periodic stock push potentially pushing our raw on-shelf
+  count back to Shopify while an order sat received-but-unpicked in our
+  system - accidentally handing back stock Shopify had correctly committed
+  to that order, risking the same unit being sold to a second customer.
+  Fixed by subtracting stock still owed against open, unpicked orders
+  (Shopify-sourced or otherwise) before every push
+- Default passwords were stored per product, not per unit - meaning the
+  despatch confirmation email, and Stock Overview, were showing the exact
+  same password for every unit of a product regardless of which one
+  actually shipped. Moved to StockItem (and the intermediate
+  ExpectedStockItem it's received against) where a genuine per-unit value
+  belongs; the goods-in shipment spreadsheet now accepts an optional
+  PASSWORD column to capture it going forward. Removed the now-meaningless
+  field from the product edit form entirely, per an explicit decision -
+  passwords are unit-specific, not a product attribute
+
+### Added
+- Sidebar navigation groups are now collapsible, collapsed by default - the
+  list of features was only going to keep growing. A group auto-opens if
+  you're currently on one of its pages, matching how the Reports section
+  already behaved, so you're never landed on a page with no visible
+  indication of where you are in the nav
+
 ## [0.16.2] - 2026-09-04 (even later)
 
 ### Fixed

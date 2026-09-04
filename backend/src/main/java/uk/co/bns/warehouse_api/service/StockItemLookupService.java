@@ -102,7 +102,7 @@ public class StockItemLookupService {
                     .map(this::toDetail)
                     .toList();
             groups.add(new uk.co.bns.warehouse_api.dto.BinProductGroup(
-                    product.getId(), product.getSku(), product.getName(), product.getDefaultPassword(), details));
+                    product.getId(), product.getSku(), product.getName(), details));
         }
         groups.sort(Comparator.comparing(uk.co.bns.warehouse_api.dto.BinProductGroup::productSku));
         return groups;
@@ -184,6 +184,7 @@ public class StockItemLookupService {
                 item.getSerialNumber(),
                 item.getWifiMacAddress(),
                 item.getBatchCode(),
+                item.getDefaultPassword(),
                 product.getSku(),
                 product.getName(),
                 location != null ? location.getId() : null,
@@ -200,6 +201,7 @@ public class StockItemLookupService {
                 item.getSerialNumber(),
                 item.getWifiMacAddress(),
                 item.getBatchCode(),
+                item.getDefaultPassword(),
                 item.getStatus().name(),
                 location != null ? location.getCode() : null
         );

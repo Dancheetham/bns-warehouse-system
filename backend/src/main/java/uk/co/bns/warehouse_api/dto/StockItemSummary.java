@@ -6,6 +6,7 @@ public record StockItemSummary(
         String serialNumber,
         String wifiMacAddress,
         String batchCode,
+        String defaultPassword,
         String productSku,
         String productName,
         Long locationId,

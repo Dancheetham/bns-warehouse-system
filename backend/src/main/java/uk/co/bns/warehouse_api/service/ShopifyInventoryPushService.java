@@ -10,7 +10,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import uk.co.bns.warehouse_api.dto.ShopifyStockPushResult;
 import uk.co.bns.warehouse_api.entity.Product;
+import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.StockItemStatus;
+import uk.co.bns.warehouse_api.repository.OrderLineRepository;
 import uk.co.bns.warehouse_api.repository.ProductRepository;
 import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
@@ -20,6 +22,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +49,7 @@ public class ShopifyInventoryPushService {
 
     private final ProductRepository productRepository;
     private final StockItemRepository stockItemRepository;
+    private final OrderLineRepository orderLineRepository;
     private final SettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -90,6 +94,8 @@ public class ShopifyInventoryPushService {
             """;
 
     private static final String LOCATION_SETTING_KEY = "shopify_location_id";
+    private static final List<OrderStatus> OPEN_ORDER_STATUSES =
+            List.of(OrderStatus.ON_HOLD, OrderStatus.AWAITING_DESPATCH, OrderStatus.PARTIALLY_DESPATCHED);
 
     public void pushWeight(Product product) {
         if (product.getShopifyInventoryItemId() == null || product.getWeightKg() == null) return;
@@ -148,11 +154,24 @@ public class ShopifyInventoryPushService {
         int pushed = 0;
         int chunkSize = 100;
 
+        // Stock still owed against open-but-unpicked orders (Shopify or
+        // otherwise) - see OrderLineRepository.sumUnpickedQuantityByProduct
+        // for why this has to be subtracted before pushing, not just the raw
+        // AVAILABLE count.
+        Map<Long, Integer> reservedByProduct = new HashMap<>();
+        for (Object[] row : orderLineRepository.sumUnpickedQuantityByProduct(OPEN_ORDER_STATUSES)) {
+            Long productId = (Long) row[0];
+            Number sum = (Number) row[1];
+            reservedByProduct.put(productId, sum == null ? 0 : sum.intValue());
+        }
+
         for (int i = 0; i < linkedProducts.size(); i += chunkSize) {
             List<Product> chunk = linkedProducts.subList(i, Math.min(i + chunkSize, linkedProducts.size()));
             List<Map<String, Object>> quantities = new ArrayList<>();
             for (Product product : chunk) {
-                long available = stockItemRepository.countByProduct_IdAndStatus(product.getId(), StockItemStatus.AVAILABLE);
+                long onShelf = stockItemRepository.countByProduct_IdAndStatus(product.getId(), StockItemStatus.AVAILABLE);
+                int reserved = reservedByProduct.getOrDefault(product.getId(), 0);
+                long available = Math.max(0, onShelf - reserved);
                 // changeFromQuantity has to be present as a key on every item
                 // (confirmed by a live schema error, twice now, not a guess) -
                 // but explicitly passing null for it opts out of Shopify's

@@ -35,6 +35,12 @@ public class StockItem {
     @Column(name = "batch_code")
     private String batchCode;
 
+    // Per unit, not per product - e.g. every GRP2601 has its own distinct
+    // default password. Captured at goods-in if the supplier's shipment
+    // spreadsheet provides one (optional PASSWORD column).
+    @Column(name = "default_password")
+    private String defaultPassword;
+
     @ManyToOne
     @JoinColumn(name = "location_id")
     private Location location;

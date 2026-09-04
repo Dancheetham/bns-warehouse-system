@@ -21,11 +21,18 @@ function StatusBadge({ status }: { status: string }) {
 
 function UnitTable({
   items,
-  defaultPassword,
   showLocation,
 }: {
-  items: { id: number; macAddress?: string; serialNumber?: string; wifiMacAddress?: string; batchCode?: string; status: string; locationCode?: string }[];
-  defaultPassword?: string;
+  items: {
+    id: number;
+    macAddress?: string;
+    serialNumber?: string;
+    wifiMacAddress?: string;
+    batchCode?: string;
+    defaultPassword?: string;
+    status: string;
+    locationCode?: string;
+  }[];
   showLocation?: boolean;
 }) {
   const [filter, setFilter] = useState("");
@@ -34,11 +41,11 @@ function UnitTable({
     const term = filter.trim().toLowerCase();
     if (!term) return items;
     return items.filter((item) =>
-      [item.macAddress, item.serialNumber, item.wifiMacAddress, item.batchCode, item.status, item.locationCode, defaultPassword]
+      [item.macAddress, item.serialNumber, item.wifiMacAddress, item.batchCode, item.status, item.locationCode, item.defaultPassword]
         .filter(Boolean)
         .some((field) => field!.toLowerCase().includes(term))
     );
-  }, [items, filter, defaultPassword]);
+  }, [items, filter]);
 
   return (
     <div>
@@ -70,7 +77,7 @@ function UnitTable({
               <td className="py-1.5 pr-4 font-mono">{item.wifiMacAddress ?? "-"}</td>
               <td className="py-1.5 pr-4">{item.batchCode ?? "-"}</td>
               {showLocation && <td className="py-1.5 pr-4">{item.locationCode ?? "-"}</td>}
-              <td className="py-1.5 pr-4 font-mono">{defaultPassword ?? "-"}</td>
+              <td className="py-1.5 pr-4 font-mono">{item.defaultPassword ?? "-"}</td>
               <td className="py-1.5">
                 <StatusBadge status={item.status} />
               </td>
@@ -106,7 +113,7 @@ function BinProductRow({ group }: { group: BinProductGroup }) {
       </button>
       {open && (
         <div className="px-4 pb-3 pl-11">
-          <UnitTable items={group.items} defaultPassword={group.defaultPassword} />
+          <UnitTable items={group.items} />
         </div>
       )}
     </div>
@@ -212,9 +219,6 @@ function ProductRow({ product }: { product: Product }) {
             <p className="text-sm text-slate-500">{product.name}</p>
           </div>
         </div>
-        {product.defaultPassword && (
-          <span className="text-xs text-slate-400 font-mono">Password: {product.defaultPassword}</span>
-        )}
       </button>
       {open && (
         <div className="bg-slate-50 border-t border-slate-100">

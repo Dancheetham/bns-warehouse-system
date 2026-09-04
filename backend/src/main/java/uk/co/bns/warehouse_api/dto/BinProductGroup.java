@@ -6,6 +6,5 @@ public record BinProductGroup(
         Long productId,
         String productSku,
         String productName,
-        String defaultPassword,
         List<StockItemDetail> items
 ) {}

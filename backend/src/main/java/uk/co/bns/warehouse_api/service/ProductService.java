@@ -68,9 +68,6 @@ public class ProductService {
         product.setName(request.name());
         product.setDescription(request.description());
         product.setTrackingType(request.trackingType());
-        // defaultPassword is intentionally left exactly as entered - passwords are
-        // case-sensitive and must never be normalised.
-        product.setDefaultPassword(request.defaultPassword());
         product.setWeightKg(request.weightKg());
         if (request.active() != null) {
             product.setActive(request.active());

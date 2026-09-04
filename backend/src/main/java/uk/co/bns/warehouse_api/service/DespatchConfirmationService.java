@@ -85,8 +85,8 @@ public class DespatchConfirmationService {
                     sb.append("  - ");
                     if (item.getMacAddress() != null) sb.append("MAC: ").append(item.getMacAddress()).append("  ");
                     if (item.getSerialNumber() != null) sb.append("Serial: ").append(item.getSerialNumber()).append("  ");
-                    if (product.getDefaultPassword() != null && !product.getDefaultPassword().isBlank()) {
-                        sb.append("Default password: ").append(product.getDefaultPassword());
+                    if (item.getDefaultPassword() != null && !item.getDefaultPassword().isBlank()) {
+                        sb.append("Default password: ").append(item.getDefaultPassword());
                     }
                     sb.append("\n");
                 }

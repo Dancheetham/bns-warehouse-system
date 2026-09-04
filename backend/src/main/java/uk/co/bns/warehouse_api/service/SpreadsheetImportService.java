@@ -23,7 +23,7 @@ import java.util.*;
  * Imports the supplier shipment spreadsheet for a Purchase Order.
  *
  * Expected columns (header row required, case-insensitive, order flexible):
- *   SKU | MAC | SERIAL | BATCH | WIFI_MAC (optional)
+ *   SKU | MAC | SERIAL | BATCH | WIFI_MAC (optional) | PASSWORD (optional)
  *
  * Rules (matching the existing BNS process):
  *  - The quantity of each SKU in the spreadsheet must exactly match the PO line
@@ -38,7 +38,7 @@ public class SpreadsheetImportService {
     private final ExpectedCartonRepository expectedCartonRepository;
     private final ExpectedStockItemRepository expectedStockItemRepository;
 
-    private static final List<String> KNOWN_HEADERS = List.of("sku", "mac", "serial", "batch", "wifi_mac");
+    private static final List<String> KNOWN_HEADERS = List.of("sku", "mac", "serial", "batch", "wifi_mac", "password");
 
     @Transactional
     public ImportResult importShipment(Long purchaseOrderId, MultipartFile file) {
@@ -140,6 +140,7 @@ public class SpreadsheetImportService {
                     item.setMacAddress(blankToNull(row.get("mac")));
                     item.setSerialNumber(blankToNull(row.get("serial")));
                     item.setWifiMacAddress(blankToNull(row.get("wifi_mac")));
+                    item.setDefaultPassword(blankToNull(row.get("password")));
                     expectedStockItemRepository.save(item);
                     itemsCreated++;
                 }

@@ -172,6 +172,7 @@ public class GoodsInService {
                 stockItem.setMacAddress(expectedItem.getMacAddress());
                 stockItem.setSerialNumber(expectedItem.getSerialNumber());
                 stockItem.setWifiMacAddress(expectedItem.getWifiMacAddress());
+                stockItem.setDefaultPassword(expectedItem.getDefaultPassword());
                 stockItem.setBatchCode(carton.getBatchCode());
                 stockItem.setLocation(session.getLocation());
                 stockItem.setStatus(StockItemStatus.AVAILABLE);

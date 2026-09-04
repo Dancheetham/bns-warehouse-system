@@ -9,7 +9,6 @@ public record ProductRequest(
         @NotBlank String name,
         String description,
         @NotNull TrackingType trackingType,
-        String defaultPassword,
         Long defaultLocationId,
         java.math.BigDecimal weightKg,
         // Nullable so existing callers that don't send it (e.g. the create form)
