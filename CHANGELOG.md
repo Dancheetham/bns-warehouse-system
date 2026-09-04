@@ -32,6 +32,27 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.16.2] - 2026-09-04 (even later)
+
+### Fixed
+- The bin picker's search/scan field overflowed slightly off the right edge
+  of the screen - a classic Flexbox gotcha: a flex child's default min-width
+  is auto, not 0, so it won't shrink below its content's natural width
+  unless told to. ScanInput's inner `<input>` had that fix already, but its
+  own outer wrapper never did. Fixed inside ScanInput itself, so every place
+  it's used benefits, not just the bin picker
+- Typing the first character of a bin code (e.g. "3" while aiming for "3B")
+  was selecting immediately if that single character happened to exactly
+  match a different, separate bin's code - selecting the wrong bin before
+  you'd finished typing. Matching now only happens on Enter, not on every
+  keystroke - the list still filters live as you type either way. This is
+  also the technically correct behaviour for an actual barcode scan, not
+  just typed search: a scanner sends Enter right after the scanned value,
+  so nothing extra was needed to support that case once this was fixed.
+  Bin code filtering also switched from substring to starts-with (typing
+  "3" no longer pulls in "13", "23" etc. - descriptions still match by
+  substring, matching how search works elsewhere in the system)
+
 ## [0.16.1] - 2026-09-04 (later)
 
 ### Fixed

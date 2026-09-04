@@ -24,7 +24,7 @@ const ScanInput = forwardRef<HTMLInputElement, ScanInputProps>(({ className, ...
   };
 
   return (
-    <div className={`flex items-center gap-2 ${className ?? ""}`}>
+    <div className={`flex items-center gap-2 min-w-0 ${className ?? ""}`}>
       <input
         {...props}
         ref={setRefs}
