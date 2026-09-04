@@ -32,6 +32,21 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.16.1] - 2026-09-04 (later)
+
+### Fixed
+- The handheld bin picker's floating dropdown panel genuinely didn't have
+  room to render properly on a 720px-wide handheld screen - especially once
+  split in half alongside the scan box, it was getting visibly cut off.
+  Replaced with a full-screen picker instead: tapping "Select a bin" opens
+  a dedicated screen with one combined search/scan field at the top and a
+  naturally-sorted, tappable list below - no dropdown, no cramped space to
+  run out of. The search field doubles as the scan target: a barcode scan
+  "types" the full code almost instantly, so an exact match auto-selects
+  immediately rather than also needing a tap on the one matching result.
+  Removes the half-search/half-scan split box from the previous version -
+  this single unified field does both jobs better
+
 ## [0.16.0] - 2026-09-04
 
 ### Added

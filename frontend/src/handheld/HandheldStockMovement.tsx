@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { Location, MoveItemsResult, StockItemSummary } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import ScanInput from "./components/ScanInput";
-import HandheldBinPicker from "./components/HandheldBinPicker";
+import HandheldBinField from "./components/HandheldBinField";
 
 // Same scan/lookup/move mechanics as the desktop Stock Movement screen -
 // just the handheld dark full-screen treatment and a real logged-in name
@@ -165,7 +165,7 @@ export default function HandheldStockMovement() {
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <label className="block text-sm text-slate-400 mb-2">Move to</label>
-          <HandheldBinPicker bins={locations ?? []} value={toLocationId} onChange={setToLocationId} className="mb-3" />
+          <HandheldBinField bins={locations ?? []} value={toLocationId} onChange={setToLocationId} className="mb-3" />
           <button
             onClick={() => moveMutation.mutate()}
             disabled={pending.length === 0 || !toLocationId || moveMutation.isPending}
