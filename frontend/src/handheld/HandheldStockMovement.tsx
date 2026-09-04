@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { Location, MoveItemsResult, StockItemSummary } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import ScanInput from "./components/ScanInput";
+import HandheldBinSelect from "./components/HandheldBinSelect";
 
 // Same scan/lookup/move mechanics as the desktop Stock Movement screen -
 // just the handheld dark full-screen treatment and a real logged-in name
@@ -164,18 +165,7 @@ export default function HandheldStockMovement() {
 
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
           <label className="block text-sm text-slate-400 mb-2">Move to</label>
-          <select
-            value={toLocationId}
-            onChange={(e) => setToLocationId(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-lg mb-3"
-          >
-            <option value="">Select a bin...</option>
-            {locations?.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} {l.description ? `- ${l.description}` : ""}
-              </option>
-            ))}
-          </select>
+          <HandheldBinSelect bins={locations ?? []} value={toLocationId} onChange={setToLocationId} className="mb-3" />
           <button
             onClick={() => moveMutation.mutate()}
             disabled={pending.length === 0 || !toLocationId || moveMutation.isPending}

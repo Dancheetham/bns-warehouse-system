@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PurchaseOrder, Location, ScanCartonResult, GoodsInSession } from "../types";
+import BinSelect from "../components/BinSelect";
 
 interface ScanLogEntry extends ScanCartonResult {
   batchCode: string;
@@ -130,18 +131,7 @@ export default function GoodsIn() {
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500 mb-1">Destination Bin</label>
-              <select
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-                className="w-full border border-slate-300 rounded px-3 py-2 text-sm"
-              >
-                <option value="">Select a bin...</option>
-                {locations?.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.code} {l.description ? `- ${l.description}` : ""}
-                  </option>
-                ))}
-              </select>
+              <BinSelect bins={locations ?? []} value={locationId} onChange={setLocationId} />
             </div>
             <button
               disabled={!purchaseOrderId || !locationId || startSessionMutation.isPending}

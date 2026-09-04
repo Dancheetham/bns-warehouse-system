@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Location, MoveItemsResult, StockItemSummary } from "../types";
 import { useAuth } from "../auth/AuthContext";
+import BinSelect from "../components/BinSelect";
 
 export default function StockMovement() {
   const { user } = useAuth();
@@ -168,18 +169,7 @@ export default function StockMovement() {
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Move to</label>
-          <select
-            value={toLocationId}
-            onChange={(e) => setToLocationId(e.target.value)}
-            className="border border-slate-300 rounded px-3 py-2 text-sm min-w-[160px]"
-          >
-            <option value="">Select a bin...</option>
-            {locations?.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} {l.description ? `- ${l.description}` : ""}
-              </option>
-            ))}
-          </select>
+          <BinSelect bins={locations ?? []} value={toLocationId} onChange={setToLocationId} className="min-w-[220px]" />
         </div>
         <button
           onClick={() => moveMutation.mutate()}

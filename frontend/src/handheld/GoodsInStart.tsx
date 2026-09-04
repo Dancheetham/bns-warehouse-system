@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { GoodsInSession, Location, PurchaseOrder } from "../types";
+import HandheldBinSelect from "./components/HandheldBinSelect";
 
 export default function GoodsInStart() {
   const navigate = useNavigate();
@@ -85,18 +86,7 @@ export default function GoodsInStart() {
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Destination Bin</label>
-              <select
-                value={locationId}
-                onChange={(e) => setLocationId(e.target.value)}
-                className="w-full bg-slate-800 rounded-lg px-3 py-3 text-sm"
-              >
-                <option value="">Select a bin...</option>
-                {locations?.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.code} {l.description ? `- ${l.description}` : ""}
-                  </option>
-                ))}
-              </select>
+              <HandheldBinSelect bins={locations ?? []} value={locationId} onChange={setLocationId} />
             </div>
             <button
               disabled={!purchaseOrderId || !locationId || startMutation.isPending}

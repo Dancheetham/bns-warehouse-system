@@ -41,15 +41,14 @@ A debug APK works fine for trying it out, but Android will warn about it being
 an unsigned/debug build.
 
 If sync fails with something like "Minimum supported Gradle version is X" -
-this project deliberately doesn't ship its own Gradle wrapper (avoids needing
-a binary file that's awkward to hand-author correctly), so it builds using
-whatever Gradle version your installed Android Studio already has bundled.
-The Android Gradle Plugin version in `build.gradle.kts` (project-level, not
-the one under `app/`) needs to be one whose minimum Gradle requirement your
-Studio's bundled Gradle actually meets - check the compatibility table at
-https://developer.android.com/build/releases/about-agp and lower that version
-number if needed. 8.2.2 (what's set here) needs only Gradle 8.2, which should
-cover any reasonably current Android Studio install.
+this project now ships a real Gradle wrapper (pinned to Gradle 8.5, generated
+by Android Studio itself rather than hand-authored), so it should build
+against a known-working Gradle version regardless of what your installed
+Android Studio has bundled. If it still complains, the Android Gradle Plugin
+version in `build.gradle.kts` (project-level, not the one under `app/`) needs
+to be one whose minimum Gradle requirement 8.5 actually meets - check the
+compatibility table at https://developer.android.com/build/releases/about-agp.
+8.2.2 (what's set here) needs only Gradle 8.2, comfortably under 8.5.
 
 ## Installing on the device
 

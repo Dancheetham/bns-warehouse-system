@@ -1,5 +1,6 @@
 package uk.co.bns.warehouse_api.service;
 
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class StockImportService {
     private final StockItemRepository stockItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final InventoryRepository inventoryRepository;
+    private final EntityManager entityManager;
 
     private record ParsedRow(String bin, String sku, String batch, String mac, int qty) {}
 
@@ -107,8 +109,21 @@ public class StockImportService {
                 .findByStatusIn(List.of(StockItemStatus.AVAILABLE, StockItemStatus.QUARANTINED));
         int itemsRemoved = toRemove.size();
         stockItemRepository.deleteAll(toRemove);
+        entityManager.flush();
+        entityManager.clear();
 
+        // Batched, and one movement record per PRODUCT rather than per physical
+        // unit - the first version of this did one save() + one movement per
+        // unit individually (~80,000+ separate round trips for this file),
+        // which took long enough to blow past nginx's default 60s timeout even
+        // though the import itself completed fine server-side. A one-time bulk
+        // seed doesn't need per-unit movement granularity the way day-to-day
+        // operations do - the stock item's own batch code already carries that
+        // trace value. Periodic flush()+clear() keeps the persistence context
+        // from growing across the whole operation, which matters as much as
+        // the write count itself at this scale.
         int itemsCreated = 0;
+        int sinceFlush = 0;
         LocalDateTime importedAt = LocalDateTime.now();
         String reference = "STOCK-IMPORT-" + importedAt.toLocalDate();
 
@@ -120,6 +135,9 @@ public class StockImportService {
                 product.setTrackingType(newType);
                 productRepository.save(product);
             }
+
+            List<StockItem> batch = new ArrayList<>();
+            int productItemCount = 0;
 
             for (ParsedRow row : plan.matchedRowsBySku.get(sku)) {
                 Location location = locationsByCode.get(row.bin());
@@ -135,23 +153,33 @@ public class StockImportService {
                     if (singleTrackedUnit && i == 0) {
                         item.setMacAddress(row.mac());
                     }
-                    item = stockItemRepository.save(item);
-
-                    StockMovement movement = new StockMovement();
-                    movement.setStockItem(item);
-                    movement.setProduct(product);
-                    movement.setToLocation(location);
-                    movement.setMovementType(MovementType.RECEIPT);
-                    movement.setQuantity(1);
-                    movement.setReference(reference);
-                    movement.setNotes("Bulk stock import from OrderWise export");
-                    movement.setCreatedBy(performedBy);
-                    stockMovementRepository.save(movement);
-
+                    batch.add(item);
+                    productItemCount++;
                     itemsCreated++;
+                    sinceFlush++;
                 }
             }
+
+            stockItemRepository.saveAll(batch);
+
+            StockMovement movement = new StockMovement();
+            movement.setProduct(product);
+            movement.setMovementType(MovementType.RECEIPT);
+            movement.setQuantity(productItemCount);
+            movement.setReference(reference);
+            movement.setNotes("Bulk stock import from OrderWise export - " + productItemCount + " unit(s) across "
+                    + plan.matchedRowsBySku.get(sku).size() + " bin(s)");
+            movement.setCreatedBy(performedBy);
+            stockMovementRepository.save(movement);
+
+            if (sinceFlush >= 500) {
+                entityManager.flush();
+                entityManager.clear();
+                sinceFlush = 0;
+            }
         }
+        entityManager.flush();
+        entityManager.clear();
 
         recomputeInventory();
 

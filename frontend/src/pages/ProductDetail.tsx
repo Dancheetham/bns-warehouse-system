@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Product, TrackingType, LocationStockSummary, Location } from "../types";
+import BinSelect from "../components/BinSelect";
 
 const TRACKING_TYPES: TrackingType[] = ["NONE", "SERIAL", "MAC"];
 
@@ -133,14 +134,7 @@ export default function ProductDetail() {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Default Bin</label>
-            <select value={defaultLocationId} onChange={(e) => setDefaultLocationId(e.target.value)} className="input">
-              <option value="">None</option>
-              {locations?.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.code}
-                </option>
-              ))}
-            </select>
+            <BinSelect bins={locations ?? []} value={defaultLocationId} onChange={setDefaultLocationId} placeholder="None" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Default Password</label>

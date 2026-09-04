@@ -25,6 +25,16 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # Helps Hibernate group inserts/updates more efficiently for bulk
+        # operations like the stock import - note this doesn't fully collapse
+        # into true multi-row SQL batches for StockItem specifically, since it
+        # uses IDENTITY id generation (a well-known JPA limitation: the DB has
+        # to hand back each generated id before the next insert), but it still
+        # meaningfully reduces overhead versus no batching config at all.
+        jdbc:
+          batch_size: 100
+        order_inserts: true
+        order_updates: true
 
   flyway:
     enabled: true
