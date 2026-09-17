@@ -23,7 +23,16 @@ function SettingsSection({ title, description, children }: { title: string; desc
 
 export default function Settings() {
   const [printerName, setPrinterName] = useState("");
+  const [labelPrinterName, setLabelPrinterName] = useState("");
   const [printAgentUrl, setPrintAgentUrl] = useState("");
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUsername, setSmtpUsername] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [mailFromAddress, setMailFromAddress] = useState("");
+  const [dpdUsername, setDpdUsername] = useState("");
+  const [dpdPassword, setDpdPassword] = useState("");
+  const [dpdAccountNumber, setDpdAccountNumber] = useState("");
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [packingMode, setPackingMode] = useState<"SPLIT" | "SERIAL">("SPLIT");
   const [nonFaultyReturnDays, setNonFaultyReturnDays] = useState("28");
@@ -59,7 +68,21 @@ export default function Settings() {
   useEffect(() => {
     if (!settings) return;
     setPrinterName(settings["picking_note_printer"] ?? "");
+    setLabelPrinterName(settings["label_printer"] ?? "");
     setPrintAgentUrl(settings["print_agent_url"] ?? "http://localhost:9191/print");
+    setSmtpHost(settings["smtp_host"] ?? "");
+    setSmtpPort(settings["smtp_port"] ?? "587");
+    setSmtpUsername(settings["smtp_username"] ?? "");
+    // smtp_password is deliberately never populated back into the form, even
+    // though it comes back from GET /settings like everything else here -
+    // pre-filling a password field with the real stored value on every page
+    // load is the wrong default. Left blank and only sent on save if the
+    // user actually types a new one - see saveMutation below.
+    setMailFromAddress(settings["mail_from_address"] ?? "");
+    setDpdUsername(settings["dpd_username"] ?? "");
+    // dpd_password deliberately never populated back, same reasoning as
+    // smtp_password above.
+    setDpdAccountNumber(settings["dpd_account_number"] ?? "");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
     setNonFaultyReturnDays(settings["rma_non_faulty_return_days"] ?? "28");
@@ -74,7 +97,19 @@ export default function Settings() {
     mutationFn: async () =>
       api.put("/settings", {
         picking_note_printer: printerName,
+        label_printer: labelPrinterName,
         print_agent_url: printAgentUrl,
+        smtp_host: smtpHost,
+        smtp_port: smtpPort,
+        smtp_username: smtpUsername,
+        // Only included when actually typed - omitting it entirely (rather
+        // than sending an empty string) means the existing stored password
+        // is left untouched when saving any other setting on this page.
+        ...(smtpPassword ? { smtp_password: smtpPassword } : {}),
+        mail_from_address: mailFromAddress,
+        dpd_username: dpdUsername,
+        ...(dpdPassword ? { dpd_password: dpdPassword } : {}),
+        dpd_account_number: dpdAccountNumber,
         auto_acknowledge_on_release: String(autoAcknowledge),
         packing_mode: packingMode,
         rma_non_faulty_return_days: nonFaultyReturnDays,
@@ -152,29 +187,116 @@ export default function Settings() {
       <p className="text-slate-500 mb-6">Grouped by area - printing, despatch, returns, and admin.</p>
 
       <SettingsSection
-        title="Printing & Picking Notes"
+        title="Printing"
         description={
           <>
             Requires the local print agent running on the warehouse PC - see{" "}
             <code className="bg-slate-100 px-1 rounded">print-agent/README.md</code> in the project for setup.
-            Without it, "Print Picking Note" falls back to opening the PDF in a new tab.
+            Without it, printing falls back to opening the PDF in a new tab instead. Picking notes and shipping
+            labels can go to two different printers - most warehouses have a label printer right at the despatch
+            bench, separate from wherever picking notes come out.
           </>
         }
       >
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">
-            Printer name (leave blank to use the PC's default printer)
+            Picking note printer (leave blank to use the PC's default printer)
           </label>
           <input
             value={printerName}
             onChange={(e) => setPrinterName(e.target.value)}
-            placeholder="e.g. Warehouse Label Printer"
+            placeholder="e.g. Office Printer"
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            Shipping label printer (leave blank to use the PC's default printer)
+          </label>
+          <input
+            value={labelPrinterName}
+            onChange={(e) => setLabelPrinterName(e.target.value)}
+            placeholder="e.g. Despatch Label Printer"
             className="input"
           />
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Print agent URL</label>
           <input value={printAgentUrl} onChange={(e) => setPrintAgentUrl(e.target.value)} className="input" />
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Email"
+        description="Configures the acknowledgement and despatch confirmation emails sent to customers. Changing this takes effect on the very next email sent - no restart needed."
+      >
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">SMTP host</label>
+          <input
+            value={smtpHost}
+            onChange={(e) => setSmtpHost(e.target.value)}
+            placeholder="e.g. smtp.office365.com"
+            className="input"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">SMTP port</label>
+            <input value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">SMTP username</label>
+            <input value={smtpUsername} onChange={(e) => setSmtpUsername(e.target.value)} className="input" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            SMTP password (leave blank to keep the current one)
+          </label>
+          <input
+            type="password"
+            value={smtpPassword}
+            onChange={(e) => setSmtpPassword(e.target.value)}
+            placeholder="••••••••"
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">From address</label>
+          <input
+            value={mailFromAddress}
+            onChange={(e) => setMailFromAddress(e.target.value)}
+            placeholder="e.g. sales@bnsdistribution.co.uk"
+            className="input"
+          />
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="DPD"
+        description="Credentials for your existing DPD account. This just stores them for now - the actual label/tracking/commercial-invoice integration is a separate, larger piece of work still to come once there's real API documentation to build against."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">DPD username (User Login ID)</label>
+            <input value={dpdUsername} onChange={(e) => setDpdUsername(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              DPD password (leave blank to keep the current one)
+            </label>
+            <input
+              type="password"
+              value={dpdPassword}
+              onChange={(e) => setDpdPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">DPD customer account number</label>
+          <input value={dpdAccountNumber} onChange={(e) => setDpdAccountNumber(e.target.value)} className="input" />
         </div>
       </SettingsSection>
 

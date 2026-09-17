@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AcknowledgementResult, CompanyView, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product } from "../types";
+import { printPdf } from "../utils/printAgent";
 
 const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "AWAITING_CONVERSION"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
@@ -239,28 +240,10 @@ export default function OrderEdit() {
 
     try {
       const pdfResponse = await api.get(`/orders/${id}/picking-note`, { responseType: "blob" });
-
-      // Try the local print agent first - if it's running, this is a genuinely
-      // silent print with no dialog and no new tab. If it's not reachable
-      // (not installed/running on this PC), fall back to opening the PDF so
-      // printing is never a dead end.
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1500);
-      const agentResponse = await fetch(agentUrl, {
-        method: "POST",
-        headers: { "X-Printer-Name": printerName, "Content-Type": "application/pdf" },
-        body: pdfResponse.data,
-        signal: controller.signal,
-      }).catch(() => null);
-      clearTimeout(timeout);
-
-      if (agentResponse && agentResponse.ok) {
-        setPrintStatus("Sent to printer.");
-      } else {
-        setPrintStatus("Print agent not reachable - opened in a new tab instead. See Settings for setup.");
-        const blobUrl = window.URL.createObjectURL(pdfResponse.data);
-        window.open(blobUrl, "_blank");
-      }
+      const result = await printPdf(pdfResponse.data, agentUrl, printerName);
+      setPrintStatus(
+        result.printed ? "Sent to printer." : "Print agent not reachable - opened in a new tab instead. See Settings for setup."
+      );
     } catch (err) {
       setError((err as Error).message);
     }

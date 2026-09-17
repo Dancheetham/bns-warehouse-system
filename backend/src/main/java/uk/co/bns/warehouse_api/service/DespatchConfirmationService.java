@@ -1,10 +1,6 @@
 package uk.co.bns.warehouse_api.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
 import uk.co.bns.warehouse_api.entity.Order;
@@ -28,11 +24,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class DespatchConfirmationService {
 
-    @Autowired(required = false)
-    private JavaMailSender mailSender;
-
-    @Value("${mail.from-address}")
-    private String fromAddress;
+    private final EmailService emailService;
 
     public AcknowledgementResult sendDespatchConfirmation(Order order, List<StockItem> despatchedItems) {
         String subject = "Your Order Has Shipped - " + order.getOrderNumber();
@@ -42,24 +34,8 @@ public class DespatchConfirmationService {
             return new AcknowledgementResult(false, "No customer email address is set on this order", null, subject, body);
         }
 
-        if (mailSender == null) {
-            return new AcknowledgementResult(
-                    false,
-                    "SMTP is not configured (set SMTP_HOST) - email was not actually sent, but here's what would have gone out",
-                    order.getCustomerEmail(), subject, body);
-        }
-
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(order.getCustomerEmail());
-            message.setFrom(fromAddress);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-            return new AcknowledgementResult(true, "Sent", order.getCustomerEmail(), subject, body);
-        } catch (Exception e) {
-            return new AcknowledgementResult(false, "Failed to send: " + e.getMessage(), order.getCustomerEmail(), subject, body);
-        }
+        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body);
+        return new AcknowledgementResult(result.sent(), result.reason(), order.getCustomerEmail(), subject, body);
     }
 
     private String composeBody(Order order, List<StockItem> despatchedItems) {

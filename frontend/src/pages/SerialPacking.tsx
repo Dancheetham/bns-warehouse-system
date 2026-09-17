@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { DespatchConfirmationResult, PackedItemView, SerialCartonView, SerialPackingView } from "../types";
+import { printPdf } from "../utils/printAgent";
 
 export default function SerialPacking() {
   const { orderId } = useParams();
@@ -11,10 +12,16 @@ export default function SerialPacking() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DespatchConfirmationResult | null>(null);
+  const [printStatus, setPrintStatus] = useState<string | null>(null);
 
   const { data: view, isLoading } = useQuery({
     queryKey: ["serial-packing", orderId],
     queryFn: async () => (await api.get<SerialPackingView>(`/despatch/${orderId}/serial-packing`)).data,
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => (await api.get<Record<string, string>>("/settings")).data,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["serial-packing", orderId] });
@@ -50,8 +57,12 @@ export default function SerialPacking() {
       const confirmResponse = await api.post<DespatchConfirmationResult>(`/despatch/${orderId}/confirm`);
       setResult(confirmResponse.data);
       const pdfResponse = await api.get(`/despatch/${orderId}/labels`, { responseType: "blob" });
-      const blobUrl = window.URL.createObjectURL(pdfResponse.data);
-      window.open(blobUrl, "_blank");
+      const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
+      const printerName = settings?.["label_printer"] || "";
+      const printResult = await printPdf(pdfResponse.data, agentUrl, printerName);
+      setPrintStatus(
+        printResult.printed ? "Labels sent to printer." : "Print agent not reachable - labels opened in a new tab instead."
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong confirming despatch");
     } finally {
@@ -68,7 +79,7 @@ export default function SerialPacking() {
       <div className="max-w-2xl">
         <h2 className="text-2xl font-semibold text-slate-800 mb-1">Despatch Confirmed</h2>
         <p className="text-slate-500 mb-6">
-          {result.order.orderNumber} · Labels opened in a new tab.
+          {result.order.orderNumber} · {printStatus ?? "Labels opened in a new tab."}
         </p>
 
         <div

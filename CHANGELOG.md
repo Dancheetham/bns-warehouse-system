@@ -32,6 +32,30 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.18.0] - 2026-09-04 (evening)
+
+### Added
+- Shipping label printer, separate from the picking note printer (Settings >
+  Printing) - most warehouses have a label printer right at the despatch
+  bench, separate from wherever picking notes come out. The print-agent
+  itself needed no changes at all - it was already fully generic (any named
+  printer via a header), the gap was purely that labels never used it in
+  the first place, just opening in a browser tab for manual printing. Now
+  goes through the same silent print-agent mechanism picking notes already
+  used, with the same graceful fallback if the agent isn't running
+- Email (SMTP) is now configurable from Settings, not just .env - and
+  changes take effect on the very next email sent, no restart needed. The
+  previous setup built a single JavaMailSender bean once at application
+  startup from static .env-only properties; replaced with a new
+  EmailService that builds the sender fresh from current Settings on every
+  send, falling back to whatever's in .env as defaults so nothing breaks
+  for anyone already relying on it
+- DPD credential fields in Settings (username, password, account number) -
+  storage only for now, not yet wired to any actual DPD functionality. DPD's
+  API documentation isn't public even with a real account - it's only
+  handed to approved partners - so the real label/tracking/commercial-invoice
+  integration is still pending that reference material
+
 ## [0.17.0] - 2026-09-04
 
 ### Fixed

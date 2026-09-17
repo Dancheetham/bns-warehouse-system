@@ -1,10 +1,6 @@
 package uk.co.bns.warehouse_api.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
@@ -17,21 +13,17 @@ import java.time.LocalDateTime;
 
 /**
  * Composes the order acknowledgement email and sends it if SMTP is configured
- * (SMTP_HOST env var). If it isn't, this still returns the composed subject/body
- * so the content is visible and correct - it just says plainly that nothing was
- * actually delivered, rather than silently pretending to send.
+ * (Settings > Email, or SMTP_HOST env var as a fallback default). If it isn't,
+ * this still returns the composed subject/body so the content is visible and
+ * correct - it just says plainly that nothing was actually delivered, rather
+ * than silently pretending to send.
  */
 @Service
 @RequiredArgsConstructor
 public class AcknowledgementService {
 
     private final OrderRepository orderRepository;
-
-    @Autowired(required = false)
-    private JavaMailSender mailSender;
-
-    @Value("${mail.from-address}")
-    private String fromAddress;
+    private final EmailService emailService;
 
     @Transactional
     public AcknowledgementResult sendAcknowledgement(Long orderId) {
@@ -45,28 +37,12 @@ public class AcknowledgementService {
             return new AcknowledgementResult(false, "No customer email address is set on this order", null, subject, body);
         }
 
-        if (mailSender == null) {
-            return new AcknowledgementResult(
-                    false,
-                    "SMTP is not configured (set SMTP_HOST) - email was not actually sent, but here's what would have gone out",
-                    order.getCustomerEmail(), subject, body);
-        }
-
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(order.getCustomerEmail());
-            message.setFrom(fromAddress);
-            message.setSubject(subject);
-            message.setText(body);
-            mailSender.send(message);
-
+        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body);
+        if (result.sent()) {
             order.setAcknowledgementSentAt(LocalDateTime.now());
             orderRepository.save(order);
-
-            return new AcknowledgementResult(true, "Sent", order.getCustomerEmail(), subject, body);
-        } catch (Exception e) {
-            return new AcknowledgementResult(false, "Failed to send: " + e.getMessage(), order.getCustomerEmail(), subject, body);
         }
+        return new AcknowledgementResult(result.sent(), result.reason(), order.getCustomerEmail(), subject, body);
     }
 
     private String composeBody(Order order) {
