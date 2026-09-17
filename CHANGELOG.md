@@ -32,6 +32,27 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.0] - 2026-09-04 (night)
+
+### Added
+- Per-user email (Settings > My Email) - acknowledgement and despatch
+  confirmation emails now go out through the sending user's own configured
+  account rather than always the one shared mailbox, plus an optional CC
+  address per user (e.g. cc'ing a shared "orders@" inbox on everything sent).
+  Reuses the same per-user settings store already built for status colour
+  customisation, so no new tables needed. The shared Settings > Email
+  account remains as the fallback for anyone who hasn't set up their own
+- Sidebar navigation reworked: Reports is now a normal collapsible group
+  like every other one (previously it was a separately-implemented special
+  case with its own "Order & Stock Reports" sub-heading) - both report pages
+  now sit directly under "Reports". An open group gets a genuinely standout
+  light background rather than blending into the dark sidebar, the active
+  group's heading turns a distinct colour so it's obvious at a glance which
+  section you're in, and the current page gets a small dot marker - its
+  space is always reserved so the label never shifts depending on which row
+  is active. Dashboard pulled out of the old single-item "Overview" group
+  entirely and is now its own permanent, non-collapsible link at the top
+
 ## [0.18.0] - 2026-09-04 (evening)
 
 ### Added

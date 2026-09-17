@@ -40,6 +40,11 @@ export default function Settings() {
   const [statusColors, setStatusColors] = useState<Record<OrderStatus, string>>(DEFAULT_STATUS_COLORS);
   const [saved, setSaved] = useState(false);
   const [colorsSaved, setColorsSaved] = useState(false);
+  const [myEmailUsername, setMyEmailUsername] = useState("");
+  const [myEmailPassword, setMyEmailPassword] = useState("");
+  const [myEmailFromAddress, setMyEmailFromAddress] = useState("");
+  const [myEmailCc, setMyEmailCc] = useState("");
+  const [myEmailSaved, setMyEmailSaved] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -91,6 +96,11 @@ export default function Settings() {
 
   useEffect(() => {
     setStatusColors(resolveStatusColors(myUserSettings));
+    setMyEmailUsername(myUserSettings?.["email_username"] ?? "");
+    // email_password deliberately never populated back, same reasoning as
+    // the global smtp_password above.
+    setMyEmailFromAddress(myUserSettings?.["email_from_address"] ?? "");
+    setMyEmailCc(myUserSettings?.["email_cc_address"] ?? "");
   }, [myUserSettings]);
 
   const saveMutation = useMutation({
@@ -128,6 +138,22 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
       setColorsSaved(true);
       setTimeout(() => setColorsSaved(false), 2500);
+    },
+  });
+
+  const saveMyEmailMutation = useMutation({
+    mutationFn: async () =>
+      api.put("/users/me/settings", {
+        email_username: myEmailUsername,
+        ...(myEmailPassword ? { email_password: myEmailPassword } : {}),
+        email_from_address: myEmailFromAddress,
+        email_cc_address: myEmailCc,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
+      setMyEmailPassword("");
+      setMyEmailSaved(true);
+      setTimeout(() => setMyEmailSaved(false), 2500);
     },
   });
 
@@ -228,7 +254,7 @@ export default function Settings() {
 
       <SettingsSection
         title="Email"
-        description="Configures the acknowledgement and despatch confirmation emails sent to customers. Changing this takes effect on the very next email sent - no restart needed."
+        description="The shared/fallback email account - used for anyone who hasn't set up their own under My Email below. Changing this takes effect on the very next email sent, no restart needed."
       >
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">SMTP host</label>
@@ -456,6 +482,59 @@ export default function Settings() {
             </button>
           </div>
           {newUserError && <p className="text-xs text-red-600 mt-2">{newUserError}</p>}
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="My Email"
+        description="Just for you - acknowledgement and despatch confirmation emails you send go out through these, not the shared Settings > Email account. Leave any field blank to fall back to the shared account for that part."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Email username</label>
+            <input value={myEmailUsername} onChange={(e) => setMyEmailUsername(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Email password (leave blank to keep the current one)
+            </label>
+            <input
+              type="password"
+              value={myEmailPassword}
+              onChange={(e) => setMyEmailPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">From address</label>
+          <input
+            value={myEmailFromAddress}
+            onChange={(e) => setMyEmailFromAddress(e.target.value)}
+            placeholder="e.g. dan@bnsdistribution.co.uk"
+            className="input"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">CC (optional)</label>
+          <input
+            value={myEmailCc}
+            onChange={(e) => setMyEmailCc(e.target.value)}
+            placeholder="e.g. orders@bnsdistribution.co.uk"
+            className="input"
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => saveMyEmailMutation.mutate()}
+            disabled={saveMyEmailMutation.isPending}
+            className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
+          >
+            {saveMyEmailMutation.isPending ? "Saving..." : "Save My Email"}
+          </button>
+          {myEmailSaved && <span className="text-xs text-emerald-600">Saved.</span>}
         </div>
       </SettingsSection>
 

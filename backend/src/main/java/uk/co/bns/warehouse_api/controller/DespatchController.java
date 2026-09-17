@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.DespatchConfirmationResult;
 import uk.co.bns.warehouse_api.dto.OrderPickSummary;
@@ -26,8 +27,8 @@ public class DespatchController {
     }
 
     @PostMapping("/{orderId}/confirm")
-    public DespatchConfirmationResult confirm(@PathVariable Long orderId) {
-        return despatchService.confirmDespatch(orderId);
+    public DespatchConfirmationResult confirm(@PathVariable Long orderId, Authentication authentication) {
+        return despatchService.confirmDespatch(orderId, authentication.getName());
     }
 
     @GetMapping("/{orderId}/labels")

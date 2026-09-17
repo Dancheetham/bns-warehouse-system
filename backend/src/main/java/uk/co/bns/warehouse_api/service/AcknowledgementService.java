@@ -26,7 +26,7 @@ public class AcknowledgementService {
     private final EmailService emailService;
 
     @Transactional
-    public AcknowledgementResult sendAcknowledgement(Long orderId) {
+    public AcknowledgementResult sendAcknowledgement(Long orderId, String performedByName) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
 
@@ -37,7 +37,7 @@ public class AcknowledgementService {
             return new AcknowledgementResult(false, "No customer email address is set on this order", null, subject, body);
         }
 
-        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body);
+        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body, performedByName);
         if (result.sent()) {
             order.setAcknowledgementSentAt(LocalDateTime.now());
             orderRepository.save(order);

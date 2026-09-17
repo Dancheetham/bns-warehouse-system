@@ -6,6 +6,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
@@ -84,7 +85,7 @@ public class OrderController {
     }
 
     @PostMapping("/{id}/acknowledge")
-    public AcknowledgementResult acknowledge(@PathVariable Long id) {
-        return acknowledgementService.sendAcknowledgement(id);
+    public AcknowledgementResult acknowledge(@PathVariable Long id, Authentication authentication) {
+        return acknowledgementService.sendAcknowledgement(id, authentication.getName());
     }
 }

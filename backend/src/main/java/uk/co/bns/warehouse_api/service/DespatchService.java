@@ -60,7 +60,7 @@ public class DespatchService {
     }
 
     @Transactional
-    public DespatchConfirmationResult confirmDespatch(Long orderId) {
+    public DespatchConfirmationResult confirmDespatch(Long orderId, String performedByName) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
 
@@ -122,7 +122,7 @@ public class DespatchService {
                 .findFirst()
                 .orElse(null);
         String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, dummyTrackingNumber);
-        AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime);
+        AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime, performedByName);
 
         return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus);
     }

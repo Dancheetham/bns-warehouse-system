@@ -2,11 +2,9 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 
+const dashboardLink = { to: "/", label: "Dashboard", end: true };
+
 const navGroups: { heading: string; items: { to: string; label: string; end?: boolean }[] }[] = [
-  {
-    heading: "Overview",
-    items: [{ to: "/", label: "Dashboard", end: true }],
-  },
   {
     heading: "Sales",
     items: [
@@ -28,6 +26,13 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     ],
   },
   {
+    heading: "Reports",
+    items: [
+      { to: "/reports/orders", label: "Order Reports" },
+      { to: "/reports/stock", label: "Stock Reports" },
+    ],
+  },
+  {
     heading: "Admin",
     items: [
       { to: "/api-access", label: "API Access" },
@@ -38,32 +43,22 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
   },
 ];
 
-const reportsChildren = [
-  { to: "/reports/orders", label: "Order Reports" },
-  { to: "/reports/stock", label: "Stock Reports" },
-];
-
-const linkClasses = ({ isActive }: { isActive: boolean }) =>
-  `block px-4 py-2 text-sm ${
-    isActive ? "bg-slate-700 text-white font-medium" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-  }`;
-
-const headingClasses = "px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-slate-500";
+function isItemActive(item: { to: string; end?: boolean }, pathname: string) {
+  return item.end ? pathname === item.to : pathname.startsWith(item.to);
+}
 
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const reportsActive = location.pathname.startsWith("/reports");
-  const [reportsOpen, setReportsOpen] = useState(reportsActive);
 
   const isGroupActive = (group: (typeof navGroups)[number]) =>
-    group.items.some((item) => (item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)));
+    group.items.some((item) => isItemActive(item, location.pathname));
 
   // Collapsed by default - the sidebar was getting genuinely busy as
   // features piled up - but a group auto-opens if you're currently on one
-  // of its pages, same as Reports already did, so you're never landed on a
-  // page with no visible indication of where you are in the nav.
+  // of its pages, so you're never landed on a page with no visible
+  // indication of where you are in the nav.
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(navGroups.map((g) => [g.heading, isGroupActive(g)]))
   );
@@ -85,51 +80,63 @@ export default function Layout() {
           <p className="text-xs text-slate-400">System</p>
         </div>
         <nav className="flex-1 py-2">
-          {navGroups.map((group) => (
-            <div key={group.heading}>
-              <button
-                onClick={() => toggleGroup(group.heading)}
-                className={`w-full flex justify-between items-center ${headingClasses} hover:text-slate-300`}
-              >
-                <span>{group.heading}</span>
-                <span className="text-[10px]">{openGroups[group.heading] ? "▲" : "▼"}</span>
-              </button>
-              {openGroups[group.heading] &&
-                group.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={item.end} className={linkClasses}>
-                    {item.label}
-                  </NavLink>
-                ))}
-            </div>
-          ))}
-
-          <p className={headingClasses}>Reports</p>
-          <button
-            onClick={() => setReportsOpen((v) => !v)}
-            className={`w-full flex justify-between items-center px-4 py-2 text-sm ${
-              reportsActive ? "bg-slate-700 text-white font-medium" : "text-slate-300 hover:bg-slate-800 hover:text-white"
-            }`}
+          <NavLink
+            to={dashboardLink.to}
+            end={dashboardLink.end}
+            className={({ isActive }) =>
+              `block px-4 py-2.5 text-sm font-medium border-b border-slate-800 ${
+                isActive ? "bg-slate-100 text-slate-900" : "text-slate-200 hover:bg-slate-800 hover:text-white"
+              }`
+            }
           >
-            <span>Order &amp; Stock Reports</span>
-            <span className="text-xs">{reportsOpen ? "▲" : "▼"}</span>
-          </button>
-          {reportsOpen && (
-            <div className="bg-slate-950/40">
-              {reportsChildren.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `block pl-8 pr-4 py-2 text-sm ${
-                      isActive ? "bg-slate-700 text-white font-medium" : "text-slate-400 hover:bg-slate-800 hover:text-white"
-                    }`
-                  }
+            {dashboardLink.label}
+          </NavLink>
+
+          {navGroups.map((group) => {
+            const active = isGroupActive(group);
+            const open = openGroups[group.heading];
+            return (
+              <div key={group.heading} className={open ? "bg-slate-100" : ""}>
+                <button
+                  onClick={() => toggleGroup(group.heading)}
+                  className={`w-full flex justify-between items-center px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide ${
+                    open
+                      ? active
+                        ? "text-emerald-700"
+                        : "text-slate-500"
+                      : active
+                        ? "text-emerald-400"
+                        : "text-slate-500 hover:text-slate-300"
+                  }`}
                 >
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
-          )}
+                  <span>{group.heading}</span>
+                  <span className="text-[10px]">{open ? "▲" : "▼"}</span>
+                </button>
+                {open &&
+                  group.items.map((item) => {
+                    const itemActive = isItemActive(item, location.pathname);
+                    return (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        end={item.end}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
+                          itemActive
+                            ? "bg-slate-200 text-slate-900 font-medium"
+                            : "text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                        }`}
+                      >
+                        {/* Dot's space is always reserved (rendered either way, just
+                            transparent when inactive) so the label never shifts
+                            depending on which row is active. */}
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${itemActive ? "bg-emerald-500" : "bg-transparent"}`} />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    );
+                  })}
+              </div>
+            );
+          })}
         </nav>
         {user && (
           <div className="border-t border-slate-700 px-4 py-3 flex items-center gap-2.5 shrink-0">

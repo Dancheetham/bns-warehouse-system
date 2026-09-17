@@ -26,7 +26,7 @@ public class DespatchConfirmationService {
 
     private final EmailService emailService;
 
-    public AcknowledgementResult sendDespatchConfirmation(Order order, List<StockItem> despatchedItems) {
+    public AcknowledgementResult sendDespatchConfirmation(Order order, List<StockItem> despatchedItems, String performedByName) {
         String subject = "Your Order Has Shipped - " + order.getOrderNumber();
         String body = composeBody(order, despatchedItems);
 
@@ -34,7 +34,7 @@ public class DespatchConfirmationService {
             return new AcknowledgementResult(false, "No customer email address is set on this order", null, subject, body);
         }
 
-        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body);
+        EmailService.SendResult result = emailService.send(order.getCustomerEmail(), subject, body, performedByName);
         return new AcknowledgementResult(result.sent(), result.reason(), order.getCustomerEmail(), subject, body);
     }
 
