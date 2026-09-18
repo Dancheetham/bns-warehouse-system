@@ -32,6 +32,18 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.1] - 2026-09-05
+
+### Changed
+- Sidebar's open-group background switched from a near-white light grey to
+  a light blue - the white read as too stark against the dark sidebar
+
+### Added
+- Picking notes can now auto-print on release for despatch, same as
+  acknowledgement emails already did - one click covers acknowledgement,
+  picking note printing, and (once packed) label printing, with a matching
+  toggle in Settings > Despatch & Packing to turn it off if ever needed
+
 ## [0.19.0] - 2026-09-04 (night)
 
 ### Added

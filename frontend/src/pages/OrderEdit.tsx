@@ -204,6 +204,9 @@ export default function OrderEdit() {
       if ((settings?.["auto_acknowledge_on_release"] ?? "true") === "true") {
         acknowledgeMutation.mutate();
       }
+      if ((settings?.["auto_print_picking_note_on_release"] ?? "true") === "true") {
+        printPickingNote();
+      }
     },
     onError: (err: Error) => {
       setError(err.message);

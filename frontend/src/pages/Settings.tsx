@@ -34,6 +34,7 @@ export default function Settings() {
   const [dpdPassword, setDpdPassword] = useState("");
   const [dpdAccountNumber, setDpdAccountNumber] = useState("");
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
+  const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
   const [packingMode, setPackingMode] = useState<"SPLIT" | "SERIAL">("SPLIT");
   const [nonFaultyReturnDays, setNonFaultyReturnDays] = useState("28");
   const [faultyWarrantyDays, setFaultyWarrantyDays] = useState("365");
@@ -89,6 +90,7 @@ export default function Settings() {
     // smtp_password above.
     setDpdAccountNumber(settings["dpd_account_number"] ?? "");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
+    setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
     setNonFaultyReturnDays(settings["rma_non_faulty_return_days"] ?? "28");
     setFaultyWarrantyDays(settings["rma_faulty_warranty_days"] ?? "365");
@@ -121,6 +123,7 @@ export default function Settings() {
         ...(dpdPassword ? { dpd_password: dpdPassword } : {}),
         dpd_account_number: dpdAccountNumber,
         auto_acknowledge_on_release: String(autoAcknowledge),
+        auto_print_picking_note_on_release: String(autoPrintPickingNote),
         packing_mode: packingMode,
         rma_non_faulty_return_days: nonFaultyReturnDays,
         rma_faulty_warranty_days: faultyWarrantyDays,
@@ -333,6 +336,19 @@ export default function Settings() {
         </label>
         <p className="text-xs text-slate-400 -mt-2 ml-6">
           Removes the separate "Send Acknowledgement" step entirely for the normal case.
+        </p>
+
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={autoPrintPickingNote}
+            onChange={(e) => setAutoPrintPickingNote(e.target.checked)}
+          />
+          Automatically print the picking note (to the picking note printer above) when an order is released for
+          despatch
+        </label>
+        <p className="text-xs text-slate-400 -mt-2 ml-6">
+          Removes the separate "Print Picking Note" step for the normal case, same as acknowledgement above.
         </p>
 
         <div className="pt-2 border-t border-slate-100">

@@ -85,7 +85,7 @@ export default function Layout() {
             end={dashboardLink.end}
             className={({ isActive }) =>
               `block px-4 py-2.5 text-sm font-medium border-b border-slate-800 ${
-                isActive ? "bg-slate-100 text-slate-900" : "text-slate-200 hover:bg-slate-800 hover:text-white"
+                isActive ? "bg-blue-50 text-slate-900" : "text-slate-200 hover:bg-slate-800 hover:text-white"
               }`
             }
           >
@@ -96,7 +96,7 @@ export default function Layout() {
             const active = isGroupActive(group);
             const open = openGroups[group.heading];
             return (
-              <div key={group.heading} className={open ? "bg-slate-100" : ""}>
+              <div key={group.heading} className={open ? "bg-blue-50" : ""}>
                 <button
                   onClick={() => toggleGroup(group.heading)}
                   className={`w-full flex justify-between items-center px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide ${
@@ -122,8 +122,8 @@ export default function Layout() {
                         end={item.end}
                         className={`flex items-center gap-2 px-4 py-2 text-sm ${
                           itemActive
-                            ? "bg-slate-200 text-slate-900 font-medium"
-                            : "text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                            ? "bg-blue-100 text-slate-900 font-medium"
+                            : "text-slate-600 hover:bg-blue-100 hover:text-slate-900"
                         }`}
                       >
                         {/* Dot's space is always reserved (rendered either way, just
