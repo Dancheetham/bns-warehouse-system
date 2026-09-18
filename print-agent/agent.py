@@ -24,6 +24,7 @@ import os
 import subprocess
 import tempfile
 import time
+import uuid
 
 PORT = 9191
 
@@ -94,7 +95,11 @@ class PrintHandler(http.server.BaseHTTPRequestHandler):
                 "SUMATRA_PATH environment variable - see README.md."
             )
 
-        tmp_path = os.path.join(tempfile.gettempdir(), f"bns-picking-note-{int(time.time() * 1000)}.pdf")
+        # A genuinely unique name, not just a millisecond timestamp - now that
+        # the server handles requests concurrently (ThreadingHTTPServer), two
+        # print jobs landing in the same millisecond is no longer a
+        # vanishingly-unlikely edge case worth ignoring.
+        tmp_path = os.path.join(tempfile.gettempdir(), f"bns-print-{uuid.uuid4().hex}.pdf")
         with open(tmp_path, "wb") as f:
             f.write(pdf_bytes)
 
@@ -121,7 +126,14 @@ class PrintHandler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = http.server.HTTPServer(("localhost", PORT), PrintHandler)
+    # ThreadingHTTPServer, not plain HTTPServer - the handler deliberately
+    # blocks for a couple of seconds per print (subprocess call + a sleep
+    # to let the spooler pick up the file before deleting it), and a plain
+    # HTTPServer would queue every other request behind that single blocking
+    # call rather than handling them concurrently. Matters more now that the
+    # app can trigger more than one print in quick succession (e.g. picking
+    # note on release, label on despatch).
+    server = http.server.ThreadingHTTPServer(("localhost", PORT), PrintHandler)
     print(f"BNS Print Agent listening on http://localhost:{PORT}")
     print("Leave this window open. Press Ctrl+C to stop.")
     try:

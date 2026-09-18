@@ -85,7 +85,7 @@ export default function Layout() {
             end={dashboardLink.end}
             className={({ isActive }) =>
               `block px-4 py-2.5 text-sm font-medium border-b border-slate-800 ${
-                isActive ? "bg-blue-50 text-slate-900" : "text-slate-200 hover:bg-slate-800 hover:text-white"
+                isActive ? "bg-slate-800 text-white" : "text-slate-200 hover:bg-slate-800 hover:text-white"
               }`
             }
           >
@@ -96,17 +96,11 @@ export default function Layout() {
             const active = isGroupActive(group);
             const open = openGroups[group.heading];
             return (
-              <div key={group.heading} className={open ? "bg-blue-50" : ""}>
+              <div key={group.heading} className={open ? "bg-blue-950/40" : ""}>
                 <button
                   onClick={() => toggleGroup(group.heading)}
                   className={`w-full flex justify-between items-center px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide ${
-                    open
-                      ? active
-                        ? "text-emerald-700"
-                        : "text-slate-500"
-                      : active
-                        ? "text-emerald-400"
-                        : "text-slate-500 hover:text-slate-300"
+                    active ? "text-emerald-400" : "text-slate-500 hover:text-slate-300"
                   }`}
                 >
                   <span>{group.heading}</span>
@@ -121,9 +115,7 @@ export default function Layout() {
                         to={item.to}
                         end={item.end}
                         className={`flex items-center gap-2 px-4 py-2 text-sm ${
-                          itemActive
-                            ? "bg-blue-100 text-slate-900 font-medium"
-                            : "text-slate-600 hover:bg-blue-100 hover:text-slate-900"
+                          itemActive ? "bg-slate-700 text-white font-medium" : "text-slate-300 hover:bg-slate-800 hover:text-white"
                         }`}
                       >
                         {/* Dot's space is always reserved (rendered either way, just

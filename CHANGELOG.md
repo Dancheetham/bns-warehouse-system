@@ -32,6 +32,34 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.2] - 2026-09-05 (later)
+
+### Fixed
+- The open-group background was still reading as white even after
+  switching to blue-50 - it's just too pale a tint to register against the
+  dark sidebar. Reverted to a dark, blue-tinted overlay instead (blue-950
+  at low opacity) that can't read as white regardless of screen/monitor,
+  keeping the active-group green heading text and the active-row dot
+  exactly as they were, per explicit feedback that those two were enough
+  on their own
+- Picking notes were falling back to opening in a browser tab instead of
+  printing silently. Root cause: the print-agent's actual print call can
+  legitimately take a few seconds (launching the PDF viewer, the OS
+  spooler picking up the job) plus a deliberate 2-second pause afterwards,
+  but the frontend was only waiting 1.5 seconds before deciding the agent
+  was unreachable and falling back - a real, working print was liable to
+  lose that race even with nothing actually wrong. Bumped the timeout to
+  8 seconds (an agent that's genuinely not running still fails in
+  milliseconds, so this doesn't slow that case down at all). Also found
+  and fixed a related structural issue while in there: the print-agent
+  was single-threaded and fully blocking per request, meaning two prints
+  triggered close together (increasingly likely now that acknowledgement,
+  picking note, and label can all auto-fire from one action) would queue
+  behind each other rather than being handled concurrently - switched to
+  Python's ThreadingHTTPServer, and moved the temp filename from a
+  millisecond timestamp to a genuine UUID now that concurrent requests are
+  possible
+
 ## [0.19.1] - 2026-09-05
 
 ### Changed
