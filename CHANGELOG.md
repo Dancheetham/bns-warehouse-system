@@ -32,6 +32,34 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.20.0] - 2026-09-06
+
+### Fixed
+- "Reset for Testing" on an order failed with a foreign key error deleting
+  cartons - carton_lines reference cartons and needed deleting first. Fixed
+  as part of a bigger rework below, which this now delegates to
+- A handful of literal "&amp;" strings showing up on screen instead of a
+  real "&" (Settings > Despatch & Packing, Settings' reset section, RMA
+  detail's return/receipt headings) - JSX text doesn't HTML-decode, so
+  writing the HTML entity just displays it literally
+
+### Added
+- Real order reversal (Order page, once released) - matching how the
+  previous system worked, for genuine post-despatch changes (a customer
+  calling to change quantity, cancel, or change address), not just testing:
+  - **Reverse to Despatch**: undoes despatch only. Picking and packing are
+    left completely untouched - the same specific units (MACs etc.) stay
+    allocated and packed into their cartons, so a correction doesn't mean
+    re-picking. Re-confirm despatch once the change is made
+  - **Cancel & Return to Stock**: undoes everything back to On Hold. Every
+    allocated/despatched item genuinely returns to the bin it actually came
+    from (reconstructed from its own movement history, not a guess or a
+    default), cartons are removed, and the order ends up exactly as if it
+    had just synced in fresh
+  - "Reset for Testing" now delegates to the same real reversal, fixing the
+    original bug and removing a second, slightly different implementation
+    of the same thing
+
 ## [0.19.5] - 2026-09-05 (night)
 
 ### Changed

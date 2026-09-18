@@ -329,7 +329,7 @@ export default function Settings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Despatch &amp; Packing">
+      <SettingsSection title="Despatch & Packing">
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={autoAcknowledge} onChange={(e) => setAutoAcknowledge(e.target.checked)} />
           Automatically send the acknowledgement email when an order is released for despatch
@@ -665,7 +665,7 @@ export default function Settings() {
               four demo sample orders - useful once real product data (e.g. from Shopify) is coming in and you
               want a clean catalogue. Anything you've actually built on top of the demo data (a pick, an RMA) is
               left in place rather than broken - you'll get a per-item outcome below either way. Run
-              "Reset Stock &amp; Purchase Orders" above first for the cleanest result.
+              "Reset Stock & Purchase Orders" above first for the cleanest result.
             </p>
             <label className="block text-xs font-medium text-slate-500 mb-1">Type CLEAR to confirm</label>
             <div className="flex gap-3 items-center">

@@ -233,6 +233,28 @@ export default function OrderEdit() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const reverseToDespatchMutation = useMutation({
+    mutationFn: async () => (await api.post<Order>(`/orders/${id}/reversal/to-despatch`)).data,
+    onSuccess: (data) => {
+      setStatus(data.status);
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const cancelAndReturnMutation = useMutation({
+    mutationFn: async () => (await api.post<Order>(`/orders/${id}/reversal/cancel`)).data,
+    onSuccess: (data) => {
+      setStatus(data.status);
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const paymentMutation = useMutation({
     mutationFn: async () =>
       api.post(`/orders/${id}/payments`, {
@@ -487,6 +509,50 @@ export default function OrderEdit() {
                     Puts this order back to On Hold - test data reset is enabled on this environment
                   </span>
                   {resetOrderDone && <span className="text-xs text-emerald-600 ml-2">Reset.</span>}
+                </div>
+              )}
+              {(status === "COMPLETED" || status === "PARTIALLY_DESPATCHED") && (
+                <div className="w-full border-t border-slate-100 pt-3 mt-1 flex flex-wrap gap-3 items-center">
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Reverse this order back to ready-for-despatch? Picking and packing stay exactly as they " +
+                            "are (nothing needs re-picking) - only the despatch itself is undone, so changes can be " +
+                            "made before confirming despatch again."
+                        )
+                      ) {
+                        reverseToDespatchMutation.mutate();
+                      }
+                    }}
+                    disabled={reverseToDespatchMutation.isPending}
+                    className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200 disabled:opacity-50"
+                  >
+                    {reverseToDespatchMutation.isPending ? "Reversing..." : "Reverse to Despatch"}
+                  </button>
+                  <span className="text-xs text-slate-400">For a quantity or address change after despatch</span>
+                </div>
+              )}
+              {status !== "ON_HOLD" && (
+                <div className="w-full flex flex-wrap gap-3 items-center">
+                  <button
+                    onClick={() => {
+                      if (
+                        confirm(
+                          "Cancel this order and return every picked/despatched item to the bin it came from? " +
+                            "This undoes picking and packing completely, back to On Hold - not just the despatch. " +
+                            "This can't be undone by clicking again."
+                        )
+                      ) {
+                        cancelAndReturnMutation.mutate();
+                      }
+                    }}
+                    disabled={cancelAndReturnMutation.isPending}
+                    className="bg-red-50 text-red-700 text-xs px-3 py-1.5 rounded hover:bg-red-100 disabled:opacity-50"
+                  >
+                    {cancelAndReturnMutation.isPending ? "Cancelling..." : "Cancel & Return to Stock"}
+                  </button>
+                  <span className="text-xs text-slate-400">For a full cancellation</span>
                 </div>
               )}
             </div>

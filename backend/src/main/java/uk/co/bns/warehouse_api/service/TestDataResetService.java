@@ -5,18 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import uk.co.bns.warehouse_api.entity.Carton;
-import uk.co.bns.warehouse_api.entity.Order;
-import uk.co.bns.warehouse_api.entity.OrderLine;
-import uk.co.bns.warehouse_api.entity.StockItem;
-import uk.co.bns.warehouse_api.enums.OrderStatus;
-import uk.co.bns.warehouse_api.enums.PickingStatus;
-import uk.co.bns.warehouse_api.enums.StockItemStatus;
 import uk.co.bns.warehouse_api.exception.ForbiddenException;
-import uk.co.bns.warehouse_api.exception.NotFoundException;
-import uk.co.bns.warehouse_api.repository.CartonRepository;
-import uk.co.bns.warehouse_api.repository.OrderRepository;
-import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +26,7 @@ public class TestDataResetService {
 
     private final JdbcTemplate jdbcTemplate;
     private final DemoDataCleanupService demoDataCleanupService;
-    private final OrderRepository orderRepository;
-    private final StockItemRepository stockItemRepository;
-    private final CartonRepository cartonRepository;
+    private final OrderReversalService orderReversalService;
 
     private static final List<String> DEMO_SKUS = List.of("GWN7802P", "GRP2615", "SFP-1G", "PATCH-CAT6-1M");
     private static final List<String> DEMO_ORDER_NUMBERS = List.of("SO-10001", "SO-10002", "SO-10003", "SO-10004");
@@ -83,37 +70,18 @@ public class TestDataResetService {
      * to zero, and the order itself goes back to ON_HOLD with picking status
      * NOT_STARTED - the exact state a fresh Shopify order sync would produce.
      */
+    /**
+     * Puts a single order back to exactly where it was before release for
+     * despatch - for repeatedly testing the release/pick/pack/despatch flow
+     * against one order without needing a fresh Shopify order every time.
+     * Delegates to OrderReversalService, the same real reversal used for
+     * genuine cancellations - only the gate (test data reset must be
+     * enabled) differs between the two.
+     */
     @Transactional
     public void resetOrderForTesting(Long orderId) {
         requireEnabled();
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
-
-        List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
-        for (StockItem item : items) {
-            if (item.getStatus() == StockItemStatus.ALLOCATED || item.getStatus() == StockItemStatus.DESPATCHED) {
-                item.setStatus(StockItemStatus.AVAILABLE);
-                item.setOrderLine(null);
-                item.setCarton(null);
-                if (item.getLocation() == null) {
-                    item.setLocation(item.getProduct().getDefaultLocation());
-                }
-                stockItemRepository.save(item);
-            }
-        }
-
-        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(orderId);
-        cartonRepository.deleteAll(cartons);
-
-        for (OrderLine line : order.getLines()) {
-            line.setQuantityPicked(0);
-            line.setQuantityDespatched(0);
-        }
-
-        order.setStatus(OrderStatus.ON_HOLD);
-        order.setPickingStatus(PickingStatus.NOT_STARTED);
-        order.setAcknowledgementSentAt(null);
-        orderRepository.save(order);
+        orderReversalService.cancelAndReturnToStock(orderId);
     }
 
     /**
