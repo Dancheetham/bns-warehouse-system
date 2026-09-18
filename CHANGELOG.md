@@ -32,6 +32,20 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.5] - 2026-09-05 (night)
+
+### Changed
+- Revised the batch-scan fix from the previous entry - blocking batch codes
+  outright for tracked products was too broad and lost a genuinely useful
+  feature: picking a whole unopened carton in one scan instead of scanning
+  32 units individually. The actual rule now: a batch/carton scan is only
+  accepted when it would consume *everything* remaining in it - never a
+  partial take. A carton with 32 of a product left won't satisfy a line
+  that only needs 1 (the original bug), but a carton with exactly the
+  amount still needed left in it - however many - is accepted in one scan,
+  tracked products included, since each unit taken still carries its own
+  real MAC/serial from goods-in regardless of how it was scanned
+
 ## [0.19.4] - 2026-09-05 (evening)
 
 ### Fixed

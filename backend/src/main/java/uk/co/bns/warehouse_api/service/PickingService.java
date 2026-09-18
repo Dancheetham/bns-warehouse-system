@@ -97,32 +97,32 @@ public class PickingService {
 
         List<StockItem> batch = stockItemRepository.findByBatchCodeIgnoreCaseAndStatusOrderByIdAsc(code, StockItemStatus.AVAILABLE);
         if (!batch.isEmpty()) {
-            // A batch code is only ever a valid substitute for a NONE-tracked
-            // product - there's no individual identifier to scan in the first
-            // place, so "which specific unit" genuinely doesn't matter. For a
-            // MAC/SERIAL-tracked product it must never be accepted here: the
-            // whole point of individual tracking is knowing exactly which unit
-            // went to which order (its own MAC/password shows up correctly on
-            // the despatch email), and silently grabbing "whichever comes
-            // first" from the batch defeats that entirely.
-            if (product.getTrackingType() != TrackingType.NONE) {
-                throw new ValidationException(
-                        product.getSku() + " needs to be scanned by its own MAC or serial, not a batch code - "
-                                + "batch codes only work for untracked (quantity-only) stock");
-            }
             long matching = batch.stream().filter(i -> i.getProduct().getId().equals(product.getId())).count();
             if (matching == 0) {
                 throw new ValidationException("That batch doesn't contain " + product.getSku() + " on this line");
             }
-            int toTake = (int) Math.min(remaining, matching);
-            int taken = 0;
+            // A batch/carton scan is only accepted when it would consume
+            // everything remaining in it - never a partial take. A sealed
+            // carton is an all-or-nothing physical unit: scanning the outer
+            // barcode is a reasonable substitute for scanning each item
+            // individually only when the whole thing is genuinely going onto
+            // this line (nothing lost for tracked products either, since each
+            // StockItem taken still carries its own real MAC/serial from
+            // goods-in - fewer scans, not less traceability). But if there's
+            // more left in the batch than this line actually needs, accepting
+            // the scan would silently grab an arbitrary subset of it - exactly
+            // the "picked whichever came first" bug this replaces the fix for.
+            if (matching > remaining) {
+                throw new ValidationException(
+                        "That batch has " + matching + " of " + product.getSku() + " remaining, but only " + remaining
+                                + " needed here - scan the individual item instead, or a batch with " + remaining
+                                + " or fewer left");
+            }
             List<Long> allocatedIds = new java.util.ArrayList<>();
             for (StockItem item : batch) {
-                if (taken >= toTake) break;
                 if (!item.getProduct().getId().equals(product.getId())) continue;
                 allocateItem(item, line, request.pickedBy());
                 allocatedIds.add(item.getId());
-                taken++;
             }
             orderRepository.save(order);
             return new PickScanResult(toView(order), allocatedIds);
