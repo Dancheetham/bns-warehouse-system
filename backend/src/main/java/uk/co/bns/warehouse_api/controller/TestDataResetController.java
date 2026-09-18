@@ -28,4 +28,9 @@ public class TestDataResetController {
     public List<String> clearDemoProducts() {
         return testDataResetService.clearDemoProductCatalog();
     }
+
+    @PostMapping("/orders/{orderId}")
+    public void resetOrder(@PathVariable Long orderId) {
+        testDataResetService.resetOrderForTesting(orderId);
+    }
 }

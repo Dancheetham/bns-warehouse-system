@@ -32,6 +32,28 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.3] - 2026-09-05 (later)
+
+### Fixed
+- Confirmed (via a live diagnostic with a matching-colour test) the sidebar
+  white background was a real rendering issue, not a build/deploy problem -
+  removed the background entirely for the open state. The active-group
+  heading colour and the active-row dot now carry that signal on their own
+
+### Added
+- "Reset for Testing" on an order (Order page, once released - only visible
+  when test data reset is enabled on this environment) - puts an order
+  back to exactly where it was before release: any allocated/despatched
+  stock returns to available, cartons are removed, picked/despatched
+  quantities reset to zero, and picking status goes back to Not Started.
+  Almost certainly also the real fix for a released order silently not
+  showing up on the handheld to pick - repeatedly testing against the same
+  order without a proper way to reset picking status back to Not Started
+  would leave it stuck at Complete/Partial from a previous test, which
+  quietly excludes it from the "ready to pick" list even though the order's
+  own status looks perfectly fine. Built specifically to remove the need
+  for a fresh Shopify test order every time
+
 ## [0.19.2] - 2026-09-05 (later)
 
 ### Fixed

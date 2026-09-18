@@ -87,6 +87,11 @@ export default function OrderEdit() {
     enabled: !isNew,
   });
 
+  const { data: testDataResetStatus } = useQuery({
+    queryKey: ["test-data-reset-status"],
+    queryFn: async () => (await api.get<{ enabled: boolean }>("/admin/test-data-reset")).data,
+  });
+
   useEffect(() => {
     if (!existingOrder) return;
     setOrderNumber(existingOrder.orderNumber);
@@ -214,6 +219,18 @@ export default function OrderEdit() {
         setShowCreditOverride(true);
       }
     },
+  });
+
+  const [resetOrderDone, setResetOrderDone] = useState(false);
+  const resetOrderMutation = useMutation({
+    mutationFn: async () => api.post(`/admin/test-data-reset/orders/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setResetOrderDone(true);
+      setTimeout(() => setResetOrderDone(false), 2500);
+    },
+    onError: (err: Error) => setError(err.message),
   });
 
   const paymentMutation = useMutation({
@@ -453,6 +470,25 @@ export default function OrderEdit() {
                 </span>
               )}
               {printStatus && <p className="w-full text-xs text-slate-500">{printStatus}</p>}
+              {testDataResetStatus?.enabled && (
+                <div className="w-full border-t border-slate-100 pt-3 mt-1">
+                  <button
+                    onClick={() => {
+                      if (confirm("Reset this order back to On Hold, undoing any picking/packing/despatch? For testing only.")) {
+                        resetOrderMutation.mutate();
+                      }
+                    }}
+                    disabled={resetOrderMutation.isPending}
+                    className="bg-amber-100 text-amber-800 text-xs px-3 py-1.5 rounded hover:bg-amber-200 disabled:opacity-50"
+                  >
+                    {resetOrderMutation.isPending ? "Resetting..." : "Reset for Testing"}
+                  </button>
+                  <span className="text-xs text-slate-400 ml-2">
+                    Puts this order back to On Hold - test data reset is enabled on this environment
+                  </span>
+                  {resetOrderDone && <span className="text-xs text-emerald-600 ml-2">Reset.</span>}
+                </div>
+              )}
             </div>
           )}
 
