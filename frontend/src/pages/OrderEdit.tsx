@@ -533,8 +533,7 @@ export default function OrderEdit() {
                   <span className="text-xs text-slate-400">For a quantity or address change after despatch</span>
                 </div>
               )}
-              {status !== "ON_HOLD" && (
-                <div className="w-full flex flex-wrap gap-3 items-center">
+              <div className="w-full flex flex-wrap gap-3 items-center">
                   <button
                     onClick={() => {
                       if (
@@ -554,7 +553,6 @@ export default function OrderEdit() {
                   </button>
                   <span className="text-xs text-slate-400">For a full cancellation</span>
                 </div>
-              )}
             </div>
           )}
 

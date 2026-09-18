@@ -32,6 +32,17 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.20.1] - 2026-09-06 (later)
+
+### Fixed
+- The build itself failed to compile - a redundant `status !== "ON_HOLD"`
+  check on the new Cancel & Return to Stock button, which TypeScript
+  correctly flagged as impossible: it's already nested inside the "order
+  is not On Hold" branch of an earlier check, so the type checker had
+  already narrowed status to exclude On Hold entirely by that point.
+  Removed the redundant check - the button was always going to render
+  correctly regardless, this was purely a compile-time issue
+
 ## [0.20.0] - 2026-09-06
 
 ### Fixed
