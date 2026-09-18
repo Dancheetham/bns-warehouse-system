@@ -96,7 +96,12 @@ export default function Layout() {
             const active = isGroupActive(group);
             const open = openGroups[group.heading];
             return (
-              <div key={group.heading} className={open ? "bg-blue-950/40" : ""}>
+              <div key={group.heading} className={open ? "bg-slate-900" : ""}>
+                {/* Deliberately the exact same colour as the sidebar itself
+                    right now - a diagnostic step, not the real design. If
+                    this still shows as white/light after a genuine rebuild,
+                    that rules out the specific colour choice entirely and
+                    points at something in the build/deploy pipeline instead. */}
                 <button
                   onClick={() => toggleGroup(group.heading)}
                   className={`w-full flex justify-between items-center px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide ${
