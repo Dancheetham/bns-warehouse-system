@@ -11,6 +11,7 @@ import uk.co.bns.warehouse_api.dto.OrderRequest;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
+import uk.co.bns.warehouse_api.enums.PickingStatus;
 import uk.co.bns.warehouse_api.exception.ConflictException;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
@@ -27,6 +28,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final CompanyService companyService;
+    private final OrderReversalService orderReversalService;
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -39,6 +41,10 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order " + id + " not found"));
     }
 
+    /**
+     * A brand-new order has no picked stock to worry about - clear and
+     * recreate is simple and correct here.
+     */
     @Transactional
     public Order create(OrderRequest request) {
         Order order = new Order();
@@ -55,12 +61,23 @@ public class OrderService {
         return orderRepository.save(order);
     }
 
+    /**
+     * An existing order may already have picked stock (StockItems pointing
+     * at its lines) - naively clearing and recreating lines, like create()
+     * does, fails outright with a foreign key violation the moment that's
+     * true. reconcileLines diffs against what's actually changed instead:
+     * an unchanged or increased quantity leaves picked stock completely
+     * alone (nothing needs re-picking); a decreased quantity returns the
+     * excess specific units to stock via OrderReversalService rather than
+     * leaving them allocated to nothing; a removed line does the same for
+     * everything on it before the line itself goes.
+     */
     @Transactional
     public Order update(Long id, OrderRequest request) {
         Order order = findById(id);
         applyFields(order, request);
-        order.getLines().clear();
-        applyLines(order, request.lines());
+        reconcileLines(order, request.lines());
+        recomputePickingStatusIfMoreNeeded(order);
         return orderRepository.save(order);
     }
 
@@ -141,6 +158,83 @@ public class OrderService {
             lines.add(line);
         }
         order.getLines().addAll(lines);
+    }
+
+    /**
+     * Matches existing lines to the new request by product (the request
+     * carries no line id - there's normally only one line per product on an
+     * order, and if there happens to be more than one for the same product,
+     * they're paired up in order rather than treated as ambiguous). A line
+     * whose quantity drops below what's already been picked returns the
+     * excess to stock before the quantity itself changes; a line missing
+     * from the new request does the same for everything on it before being
+     * removed. A line that's new or unpicked needs nothing beyond the plain
+     * field updates applyLines already does for a brand-new order.
+     */
+    private void reconcileLines(Order order, List<OrderLineRequest> lineRequests) {
+        List<OrderLine> existingLines = new ArrayList<>(order.getLines());
+        List<OrderLine> keptLines = new ArrayList<>();
+
+        for (OrderLineRequest lr : lineRequests) {
+            Product product = productRepository.findById(lr.productId())
+                    .orElseThrow(() -> new NotFoundException("Product " + lr.productId() + " not found"));
+
+            OrderLine existing = existingLines.stream()
+                    .filter(l -> l.getProduct().getId().equals(product.getId()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (existing != null) {
+                existingLines.remove(existing);
+                int newQty = lr.quantityOrdered();
+                if (existing.getQuantityPicked() > newQty) {
+                    orderReversalService.deallocateFromLine(existing, existing.getQuantityPicked() - newQty);
+                    existing.setQuantityPicked(newQty);
+                }
+                existing.setQuantityOrdered(newQty);
+                existing.setQuantityDespatched(lr.quantityDespatched() != null ? lr.quantityDespatched() : existing.getQuantityDespatched());
+                existing.setUnitPrice(lr.unitPrice());
+                existing.setNotes(lr.notes());
+                keptLines.add(existing);
+            } else {
+                OrderLine line = new OrderLine();
+                line.setOrder(order);
+                line.setProduct(product);
+                line.setQuantityOrdered(lr.quantityOrdered());
+                line.setQuantityDespatched(lr.quantityDespatched() != null ? lr.quantityDespatched() : 0);
+                line.setUnitPrice(lr.unitPrice());
+                line.setNotes(lr.notes());
+                keptLines.add(line);
+            }
+        }
+
+        // Anything left over wasn't in the new request at all.
+        for (OrderLine removed : existingLines) {
+            if (removed.getQuantityPicked() > 0) {
+                orderReversalService.deallocateFromLine(removed, removed.getQuantityPicked());
+            }
+        }
+
+        order.getLines().clear();
+        order.getLines().addAll(keptLines);
+    }
+
+    /**
+     * Only ever pushes picking status forward into IN_PROGRESS when an edit
+     * has genuinely left a line short of what's needed - never touches it
+     * otherwise, since COMPLETE/PARTIAL/NOT_STARTED are all still accurate
+     * as they are if nothing outstanding needs picking. Once IN_PROGRESS,
+     * the order naturally drops off the packing-ready list and reappears on
+     * the handheld showing just the extra quantity needed - picking's own
+     * existing "Complete Pick" action moves it back to COMPLETE/PARTIAL (and
+     * therefore back onto the packing-ready list) exactly as it always has.
+     */
+    private void recomputePickingStatusIfMoreNeeded(Order order) {
+        boolean anyLineShort = order.getLines().stream()
+                .anyMatch(l -> l.getQuantityPicked() < l.getQuantityOrdered());
+        if (anyLineShort && order.getPickingStatus() != PickingStatus.NOT_STARTED) {
+            order.setPickingStatus(PickingStatus.IN_PROGRESS);
+        }
     }
 
     @Transactional

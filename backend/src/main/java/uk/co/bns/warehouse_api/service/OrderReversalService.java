@@ -125,6 +125,53 @@ public class OrderReversalService {
     }
 
     /**
+     * Returns a specific number of already-allocated units on one order line
+     * back to stock - used when editing an order reduces a line's quantity
+     * below what's already been picked. Only ever touches ALLOCATED items
+     * (not DESPATCHED - by the time an order reaches editing, it's already
+     * been through reverseToDespatch if it needed to be, so nothing on it
+     * should still be DESPATCHED). Clears any carton assignment too, in
+     * either packing mode, since an item no longer on the order can't stay
+     * packed into a carton for it.
+     */
+    @Transactional
+    public void deallocateFromLine(OrderLine line, int count) {
+        if (count <= 0) return;
+        List<StockItem> items = stockItemRepository.findByOrderLine_Id(line.getId()).stream()
+                .filter(i -> i.getStatus() == StockItemStatus.ALLOCATED)
+                .sorted(Comparator.comparing(StockItem::getId))
+                .limit(count)
+                .toList();
+
+        for (StockItem item : items) {
+            Location original = item.getLocation(); // ALLOCATE never clears location
+            item.setStatus(StockItemStatus.AVAILABLE);
+            item.setOrderLine(null);
+            item.setCarton(null);
+            stockItemRepository.save(item);
+            recordReturnMovement(item, original, MovementType.DEALLOCATE, line.getOrder());
+        }
+
+        // SPLIT-mode packing tracks quantity via CartonLine rather than a
+        // direct StockItem.carton link - shrink those to match. Unassigned
+        // slices (not yet packed into a real carton) are removed first;
+        // only dips into an already-packed slice if genuinely necessary.
+        List<CartonLine> cartonLines = cartonLineRepository.findByOrderLine_Id(line.getId());
+        int toRemove = items.size();
+        for (CartonLine cl : cartonLines.stream().sorted(Comparator.comparing(cl -> cl.getCarton() == null ? 0 : 1)).toList()) {
+            if (toRemove <= 0) break;
+            if (cl.getQuantity() <= toRemove) {
+                toRemove -= cl.getQuantity();
+                cartonLineRepository.delete(cl);
+            } else {
+                cl.setQuantity(cl.getQuantity() - toRemove);
+                cartonLineRepository.save(cl);
+                toRemove = 0;
+            }
+        }
+    }
+
+    /**
      * The bin a specific item was in immediately before the given movement
      * type last happened to it - e.g. before it was despatched. Movements are
      * looked at newest-first since an item could plausibly have more than one

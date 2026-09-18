@@ -32,6 +32,28 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.20.2] - 2026-09-06 (evening)
+
+### Fixed
+- Saving an order after "Reverse to Despatch" failed with a foreign key
+  error - order editing worked by blindly deleting and recreating every
+  line on every save, which is fine for a never-picked order but breaks
+  outright the moment a StockItem references a specific line's id. Order
+  editing now reconciles against what's actually changed instead: an
+  unchanged or increased quantity leaves picked stock completely alone (no
+  re-picking needed), a decreased quantity returns the excess specific
+  units to stock first, and a removed line does the same for everything on
+  it before the line itself goes. A brand-new order (nothing picked yet)
+  still uses the simple create-fresh path, since there's nothing to
+  reconcile against
+
+### Added
+- A quantity increase after reversal now correctly makes the order
+  reappear on the handheld to pick just the extra amount needed, and drop
+  off the packing-ready list until that's done - reusing the existing
+  picking/packing pipeline exactly as it already worked, not a new
+  concept. No separate "resume picking" flow needed
+
 ## [0.20.1] - 2026-09-06 (later)
 
 ### Fixed
