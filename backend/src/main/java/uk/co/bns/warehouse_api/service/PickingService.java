@@ -97,6 +97,19 @@ public class PickingService {
 
         List<StockItem> batch = stockItemRepository.findByBatchCodeIgnoreCaseAndStatusOrderByIdAsc(code, StockItemStatus.AVAILABLE);
         if (!batch.isEmpty()) {
+            // A batch code is only ever a valid substitute for a NONE-tracked
+            // product - there's no individual identifier to scan in the first
+            // place, so "which specific unit" genuinely doesn't matter. For a
+            // MAC/SERIAL-tracked product it must never be accepted here: the
+            // whole point of individual tracking is knowing exactly which unit
+            // went to which order (its own MAC/password shows up correctly on
+            // the despatch email), and silently grabbing "whichever comes
+            // first" from the batch defeats that entirely.
+            if (product.getTrackingType() != TrackingType.NONE) {
+                throw new ValidationException(
+                        product.getSku() + " needs to be scanned by its own MAC or serial, not a batch code - "
+                                + "batch codes only work for untracked (quantity-only) stock");
+            }
             long matching = batch.stream().filter(i -> i.getProduct().getId().equals(product.getId())).count();
             if (matching == 0) {
                 throw new ValidationException("That batch doesn't contain " + product.getSku() + " on this line");

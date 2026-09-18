@@ -32,6 +32,18 @@ are just a scanning aid, not a promise of semver-style compatibility.
   relies on whatever Gradle your Android Studio has bundled" workaround;
   8.5 is comfortably compatible with the existing AGP 8.2.2 pin
 
+## [0.19.4] - 2026-09-05 (evening)
+
+### Fixed
+- Picking would silently accept a batch code scan for a MAC/serial-tracked
+  product, grabbing whichever matching unit happened to come first rather
+  than requiring the unit's own identifier - defeating the entire point of
+  individual tracking (the wrong unit's MAC/password could end up on the
+  despatch email for that customer). Batch code scanning is now only
+  accepted for genuinely untracked (quantity-only) products; scanning a
+  batch code against a tracked product now gives a clear rejection message
+  on the handheld instead of silently succeeding
+
 ## [0.19.3] - 2026-09-05 (later)
 
 ### Fixed
