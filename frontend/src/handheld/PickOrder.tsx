@@ -4,16 +4,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { PickOrderView, PickScanResult } from "../types";
 import ScanInput from "./components/ScanInput";
-
-const PICKER_NAME_KEY = "bns-picker-name";
+import { useAuth } from "../auth/AuthContext";
 
 export default function PickOrder() {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
 
-  const [pickerName, setPickerName] = useState(localStorage.getItem(PICKER_NAME_KEY) ?? "");
   const [scanValue, setScanValue] = useState("");
   const [message, setMessage] = useState<{ type: "error" | "info"; text: string } | null>(null);
   const [lastAllocatedIds, setLastAllocatedIds] = useState<number[]>([]);
@@ -25,17 +24,19 @@ export default function PickOrder() {
   });
 
   const startMutation = useMutation({
-    mutationFn: async () => api.post(`/orders/${orderId}/picking/start`, { pickedBy: pickerName || undefined }),
+    // Who's picking is attributed server-side from the actual logged-in
+    // session, not anything sent here - see PickingController.
+    mutationFn: async () => api.post(`/orders/${orderId}/picking/start`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["pick-order", orderId] }),
   });
 
-  // Kick off (idempotent) picking as soon as we know the picker's name.
+  // Kick off (idempotent) picking as soon as the order's loaded.
   useEffect(() => {
-    if (view && view.pickingStatus === "NOT_STARTED" && pickerName) {
+    if (view && view.pickingStatus === "NOT_STARTED") {
       startMutation.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view?.pickingStatus, pickerName]);
+  }, [view?.pickingStatus]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -49,7 +50,6 @@ export default function PickOrder() {
         await api.post<PickScanResult>(`/orders/${orderId}/picking/scan`, {
           orderLineId: currentLine?.orderLineId,
           code,
-          pickedBy: pickerName || undefined,
         })
       ).data,
     onSuccess: (result) => {
@@ -70,7 +70,6 @@ export default function PickOrder() {
         await api.post<PickScanResult>(`/orders/${orderId}/picking/quantity`, {
           orderLineId: currentLine?.orderLineId,
           quantity,
-          pickedBy: pickerName || undefined,
         })
       ).data,
     onSuccess: (result) => {
@@ -87,7 +86,7 @@ export default function PickOrder() {
   });
 
   const completeMutation = useMutation({
-    mutationFn: async () => api.post(`/orders/${orderId}/picking/complete`, { pickedBy: pickerName || undefined }),
+    mutationFn: async () => api.post(`/orders/${orderId}/picking/complete`),
     onSuccess: () => navigate("/handheld/pick", { replace: true }),
   });
 
@@ -98,29 +97,6 @@ export default function PickOrder() {
     setLastAllocatedIds([]);
     queryClient.invalidateQueries({ queryKey: ["pick-order", orderId] });
   };
-
-  if (!pickerName) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
-        <p className="text-lg mb-4">Who's picking?</p>
-        <input
-          autoFocus
-          className="w-full max-w-xs text-center text-lg bg-slate-800 rounded-lg px-4 py-3 mb-4"
-          placeholder="Your name"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              const val = (e.target as HTMLInputElement).value.trim();
-              if (val) {
-                localStorage.setItem(PICKER_NAME_KEY, val);
-                setPickerName(val);
-              }
-            }
-          }}
-        />
-        <p className="text-slate-500 text-sm">Enter your name and press Enter</p>
-      </div>
-    );
-  }
 
   if (!view) {
     return <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">Loading...</div>;
@@ -135,7 +111,7 @@ export default function PickOrder() {
           ← Orders
         </button>
         <span className="text-lg font-bold">{view.orderNumber}</span>
-        <span className="text-xs text-slate-500">{pickerName}</span>
+        <span className="text-xs text-slate-500">{user?.name}</span>
       </header>
       <p className="text-center text-slate-400 text-sm py-1 border-b border-slate-900">{view.customerName}</p>
 

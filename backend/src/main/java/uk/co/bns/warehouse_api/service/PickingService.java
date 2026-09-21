@@ -175,7 +175,7 @@ public class PickingService {
      * order line, and logs the reversal so the audit trail shows both sides.
      */
     @Transactional
-    public PickOrderView undo(Long orderId, PickUndoRequest request) {
+    public PickOrderView undo(Long orderId, PickUndoRequest request, String performedBy) {
         Order order = findOrder(orderId);
         StockItem item = stockItemRepository.findById(request.stockItemId())
                 .orElseThrow(() -> new NotFoundException("Stock item " + request.stockItemId() + " not found"));
@@ -196,6 +196,7 @@ public class PickingService {
         movement.setQuantity(1);
         movement.setReference("ORDER-" + order.getOrderNumber());
         movement.setNotes("Pick undone");
+        movement.setCreatedBy(performedBy);
         stockMovementRepository.save(movement);
 
         orderRepository.save(order);

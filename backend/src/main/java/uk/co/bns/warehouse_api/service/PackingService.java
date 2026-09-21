@@ -170,19 +170,30 @@ public class PackingService {
     }
 
     /**
-     * Guarantees every picked order line has at least one CartonLine covering its
-     * full quantityPicked before it's ever shown or split - lazily created the
-     * first time packing is opened for an order.
+     * Guarantees every picked order line's CartonLines sum to its full
+     * quantityPicked before it's ever shown or split - lazily topped up the
+     * first time packing is opened after quantityPicked has grown (e.g.
+     * after a reversal's quantity increase and the extra units being
+     * picked). Checking the actual total covered, not just whether *any*
+     * CartonLine exists, matters here specifically: a line that already had
+     * one from before (still correctly sitting in its original carton) would
+     * otherwise silently swallow the top-up, leaving the newly picked units
+     * with no CartonLine at all - invisible to packing entirely, rather than
+     * showing up unassigned and ready to pack alongside what's already done.
      */
     private void ensureInitialised(Order order) {
         for (OrderLine line : order.getLines()) {
             if (line.getQuantityPicked() <= 0) continue;
-            if (cartonLineRepository.existsByOrderLine_Id(line.getId())) continue;
+            int existingTotal = cartonLineRepository.findByOrderLine_Id(line.getId()).stream()
+                    .mapToInt(CartonLine::getQuantity)
+                    .sum();
+            int shortfall = line.getQuantityPicked() - existingTotal;
+            if (shortfall <= 0) continue;
 
-            CartonLine initial = new CartonLine();
-            initial.setOrderLine(line);
-            initial.setQuantity(line.getQuantityPicked());
-            cartonLineRepository.save(initial);
+            CartonLine additional = new CartonLine();
+            additional.setOrderLine(line);
+            additional.setQuantity(shortfall);
+            cartonLineRepository.save(additional);
         }
     }
 

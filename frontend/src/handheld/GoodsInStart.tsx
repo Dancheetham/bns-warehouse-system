@@ -32,7 +32,6 @@ export default function GoodsInStart() {
         await api.post<GoodsInSession>("/goods-in/sessions", {
           purchaseOrderId: Number(purchaseOrderId),
           locationId: Number(locationId),
-          startedBy: "handheld",
         })
       ).data,
     onSuccess: (session) => navigate(`/handheld/goods-in/${session.id}`),

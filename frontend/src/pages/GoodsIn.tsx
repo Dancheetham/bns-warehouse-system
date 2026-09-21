@@ -39,7 +39,6 @@ export default function GoodsIn() {
         await api.post<GoodsInSession>("/goods-in/sessions", {
           purchaseOrderId: Number(purchaseOrderId),
           locationId: Number(locationId),
-          startedBy: "warehouse",
         })
       ).data,
     onSuccess: (data) => {
@@ -77,8 +76,9 @@ export default function GoodsIn() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async () =>
-      (await api.post<GoodsInSession>(`/goods-in/sessions/${session?.id}/save`, { savedBy: "warehouse" })).data,
+    // Who saved it is attributed server-side from the actual logged-in
+    // session, not anything sent here.
+    mutationFn: async () => (await api.post<GoodsInSession>(`/goods-in/sessions/${session?.id}/save`)).data,
     onSuccess: () => {
       setSavedMessage("Session saved. Stock has been booked in.");
       setSession(null);

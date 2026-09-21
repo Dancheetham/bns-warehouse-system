@@ -94,6 +94,7 @@ public class DespatchService {
             movement.setMovementType(MovementType.DESPATCH);
             movement.setQuantity(1);
             movement.setReference("ORDER-" + order.getOrderNumber());
+            movement.setCreatedBy(performedByName);
             stockMovementRepository.save(movement);
 
             item.setStatus(StockItemStatus.DESPATCHED);

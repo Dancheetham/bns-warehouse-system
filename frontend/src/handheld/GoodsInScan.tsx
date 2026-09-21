@@ -50,7 +50,9 @@ export default function GoodsInScan() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async () => api.post(`/goods-in/sessions/${sessionId}/save`, { savedBy: "handheld" }),
+    // Who saved it is attributed server-side from the actual logged-in
+    // session, not anything sent here.
+    mutationFn: async () => api.post(`/goods-in/sessions/${sessionId}/save`),
     onSuccess: () => navigate("/handheld/goods-in", { replace: true }),
   });
 

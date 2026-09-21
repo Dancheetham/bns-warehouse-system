@@ -56,6 +56,12 @@ public class OrderReversalService {
             throw new ValidationException("Only a despatched order can be reversed to despatch");
         }
 
+        // TODO once DPD integration exists: void/cancel the real DPD shipment
+        // here too, not just our own records - a label will have already
+        // been generated and the parcel may be booked in for collection.
+        // Explicit, deliberate requirement (not an oversight) - noted here
+        // so it isn't lost when that integration is actually built.
+
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
         for (StockItem item : items) {
             if (item.getStatus() != StockItemStatus.DESPATCHED) continue;

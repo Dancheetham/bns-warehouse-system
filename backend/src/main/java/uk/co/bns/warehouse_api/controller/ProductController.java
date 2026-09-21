@@ -3,6 +3,7 @@ package uk.co.bns.warehouse_api.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.LocationStockSummary;
 import uk.co.bns.warehouse_api.dto.MoveStockRequest;
@@ -48,7 +49,8 @@ public class ProductController {
     }
 
     @PostMapping("/{id}/move")
-    public void moveStock(@PathVariable Long id, @Valid @RequestBody MoveStockRequest request) {
-        inventoryService.moveStock(id, request);
+    public void moveStock(@PathVariable Long id, @Valid @RequestBody MoveStockRequest request, Authentication authentication) {
+        inventoryService.moveStock(id, new MoveStockRequest(
+                request.fromLocationId(), request.toLocationId(), request.quantity(), authentication.getName(), request.notes()));
     }
 }
