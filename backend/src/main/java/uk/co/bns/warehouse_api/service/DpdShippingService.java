@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.entity.Order;
@@ -53,7 +52,17 @@ public class DpdShippingService {
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    @Transactional
+    // Deliberately NOT @Transactional. When this is called from inside
+    // DespatchService's own @Transactional confirmDespatch (auto-booking at
+    // despatch), a @Transactional method here that throws marks the shared
+    // transaction rollback-only the instant the exception crosses this
+    // method's proxy boundary - before DespatchService's try/catch ever gets
+    // a chance to handle it and let despatch continue. That's exactly what
+    // caused "Transaction silently rolled back because it has been marked as
+    // rollback-only": the despatch itself (stock movements, order status)
+    // got wiped out by a DPD failure that was supposed to be best-effort and
+    // non-blocking. The single order save below still runs in its own
+    // implicit transaction via Spring Data either way.
     public DpdShipmentResult createShipment(Order order) {
         validateOrder(order);
 

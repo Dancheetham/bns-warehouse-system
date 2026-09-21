@@ -88,7 +88,7 @@ public class ShopifyOrderSyncService {
                     note
                     poNumber
                     customer { firstName lastName email }
-                    shippingAddress { name city province provinceCode country countryCodeV2 zip }
+                    shippingAddress { name address1 address2 phone city province provinceCode country countryCodeV2 zip }
                     totalShippingPriceSet { shopMoney { amount } }
                     purchasingEntity {
                       __typename

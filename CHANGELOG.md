@@ -5,6 +5,27 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.2] - 2026-09-21 (v0.067)
+
+### Fixed
+- Confirming despatch could fail with "Transaction silently rolled back
+  because it has been marked as rollback-only" - the DPD auto-booking added
+  in v0.066 was itself `@Transactional`, so when it threw (e.g. missing
+  address data on a test order), Spring marked the *shared* despatch
+  transaction rollback-only the instant the exception crossed that method
+  boundary - before DespatchService's own try/catch ever got a chance to
+  handle it as the best-effort failure it was meant to be. Removed the
+  annotation - DPD booking failures no longer touch the despatch transaction
+  at all, exactly as intended
+
+### Changed
+- Shopify order sync now pulls the delivery address line 1/2 and phone
+  number from the order's shipping address (the GraphQL query wasn't
+  requesting them before) - needed so a DPD shipment can be booked straight
+  off a Shopify-synced order without someone manually typing the street
+  address in first. Applies to orders synced from now on, not a backfill of
+  existing ones
+
 ## [0.23.1] - 2026-09-21 (v0.066, later same day)
 
 ### Fixed

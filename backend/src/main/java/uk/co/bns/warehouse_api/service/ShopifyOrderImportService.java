@@ -106,6 +106,11 @@ class ShopifyOrderImportService {
 
         JsonNode shipping = node.path("shippingAddress");
         order.setDeliveryName(shipping.path("name").asText(null));
+        // Needed for DPD shipping (a street address is mandatory on every
+        // shipment) - address1/address2 map directly onto our two lines.
+        order.setDeliveryAddressLine1(shipping.path("address1").asText(null));
+        order.setDeliveryAddressLine2(shipping.path("address2").asText(null));
+        order.setDeliveryPhone(shipping.path("phone").asText(null));
         order.setDeliveryTown(shipping.path("city").asText(null));
         order.setDeliveryCountry(shipping.path("country").asText(null));
         order.setDeliveryPostcode(shipping.path("zip").asText(null));
