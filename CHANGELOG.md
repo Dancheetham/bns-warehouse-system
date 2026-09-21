@@ -5,6 +5,31 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.3] - 2026-09-21 (v0.068)
+
+### Added
+- A "Print a placeholder sample label at despatch when no DPD shipment could
+  be booked" toggle under Settings > DPD (on by default, matching the old
+  behaviour). Turn it off once DPD is fully working so a despatch never
+  silently prints an old test label - it'll simply report no label was
+  available instead
+
+### Fixed
+- A DPD auth failure only ever showed a bare "DPD returned HTTP 401" with no
+  way to tell whether the key, the secret, or the sandbox/live environment
+  choice was wrong. Now surfaces DPD's own error message (e.g. "Failed to
+  validate client-id")
+- Errors from the labels endpoint (used by Confirm Despatch, which fetches
+  the label as a file download) were showing a generic "Request failed with
+  status code 400" instead of the real reason - axios returns error bodies
+  as unparsed Blob/text for file-download requests, so the friendly server
+  message was being silently dropped. Fixed at the API client level so this
+  can't recur for any future file-download endpoint either
+- Confirming despatch when no label could be produced (DPD not booked and
+  sample labels turned off) no longer shows a top-level error on the
+  despatch confirmation - the despatch itself succeeded, so this is now
+  reported alongside the DPD status instead
+
 ## [0.23.2] - 2026-09-21 (v0.067)
 
 ### Fixed

@@ -44,6 +44,7 @@ export default function Settings() {
   const [dpdSenderContactPhone, setDpdSenderContactPhone] = useState("");
   const [dpdSenderContactEmail, setDpdSenderContactEmail] = useState("");
   const [dpdEoriNumber, setDpdEoriNumber] = useState("");
+  const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
   const [packingMode, setPackingMode] = useState<"SPLIT" | "SERIAL">("SPLIT");
@@ -111,6 +112,7 @@ export default function Settings() {
     setDpdSenderContactPhone(settings["dpd_sender_contact_phone"] ?? "");
     setDpdSenderContactEmail(settings["dpd_sender_contact_email"] ?? "");
     setDpdEoriNumber(settings["dpd_eori_number"] ?? "");
+    setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
@@ -156,6 +158,7 @@ export default function Settings() {
         dpd_sender_contact_phone: dpdSenderContactPhone,
         dpd_sender_contact_email: dpdSenderContactEmail,
         dpd_eori_number: dpdEoriNumber,
+        print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
         packing_mode: packingMode,
@@ -444,6 +447,14 @@ export default function Settings() {
         <p className="text-xs text-slate-400">
           A white-label/no-return-address label is a DPD account-level template setting, not something this
           integration can control - ask your DPD account manager to configure it if you need one.
+        </p>
+        <label className="flex items-center gap-2 text-sm text-slate-700 pt-2 border-t border-slate-100">
+          <input type="checkbox" checked={printSampleLabels} onChange={(e) => setPrintSampleLabels(e.target.checked)} />
+          Print a placeholder sample label at despatch when no DPD shipment could be booked
+        </label>
+        <p className="text-xs text-slate-400 -mt-2 ml-6">
+          Turn this off once DPD is fully set up, so a despatch never accidentally prints an old test label instead
+          of failing loudly - "Confirm Despatch" will simply not offer a label to print if DPD wasn't booked.
         </p>
       </SettingsSection>
 

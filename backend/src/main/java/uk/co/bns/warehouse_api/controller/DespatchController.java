@@ -10,9 +10,11 @@ import uk.co.bns.warehouse_api.dto.DespatchConfirmationResult;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.OrderPickSummary;
 import uk.co.bns.warehouse_api.entity.Order;
+import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.service.DespatchService;
 import uk.co.bns.warehouse_api.service.DpdShippingService;
 import uk.co.bns.warehouse_api.service.OrderService;
+import uk.co.bns.warehouse_api.service.SettingsService;
 import uk.co.bns.warehouse_api.service.ShippingLabelService;
 
 import java.nio.charset.StandardCharsets;
@@ -27,6 +29,7 @@ public class DespatchController {
     private final ShippingLabelService shippingLabelService;
     private final DpdShippingService dpdShippingService;
     private final OrderService orderService;
+    private final SettingsService settingsService;
 
     @GetMapping("/ready-to-pack")
     public List<OrderPickSummary> readyToPack() {
@@ -54,6 +57,10 @@ public class DespatchController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + orderId + ".html\"")
                     .contentType(MediaType.TEXT_HTML)
                     .body(label.rawLabelData().getBytes(StandardCharsets.UTF_8));
+        }
+        if (!"true".equals(settingsService.get("print_sample_labels", "true"))) {
+            throw new ValidationException(
+                    "No DPD shipment was booked for this order, and placeholder sample labels are turned off in Settings > DPD");
         }
         byte[] pdf = shippingLabelService.generate(orderId);
         return ResponseEntity.ok()

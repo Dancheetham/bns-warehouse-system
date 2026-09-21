@@ -12,7 +12,31 @@ export const api = axios.create({
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    // A request made with responseType "blob" (PDF/label downloads) gets its
+    // error body back as a Blob too, not parsed JSON - so error.response.data.message
+    // is silently undefined even though the server sent a perfectly good
+    // error message, and everyone just sees a generic "Request failed with
+    // status code 400" instead. Read it back out as text and parse it here
+    // once, rather than every caller having to remember to do this.
+    if (error?.response?.data instanceof Blob && error.response.data.type?.includes("json")) {
+      try {
+        const text = await error.response.data.text();
+        error.response.data = JSON.parse(text);
+      } catch {
+        // leave error.response.data as the Blob - fall through to the generic message below
+      }
+    } else if (typeof error?.response?.data === "string" && error.response.data.trim().startsWith("{")) {
+      // Same problem, one step removed: a request made with responseType
+      // "text" gets an error body back as a raw (unparsed) string instead of
+      // an object, so .message is likewise silently undefined.
+      try {
+        error.response.data = JSON.parse(error.response.data);
+      } catch {
+        // leave error.response.data as the string - fall through to the generic message below
+      }
+    }
+
     const message =
       error?.response?.data?.message || error?.message || "Something went wrong";
     const status = error?.response?.status;

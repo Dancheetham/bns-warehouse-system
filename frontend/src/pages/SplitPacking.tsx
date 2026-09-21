@@ -68,9 +68,23 @@ export default function SplitPacking() {
   const confirmAndLabel = async () => {
     setError(null);
     setConfirming(true);
+    // Two separate try/catches on purpose - a despatch that fails to confirm
+    // is a real problem (stays on this screen with the error shown), but a
+    // label that can't be fetched afterwards (DPD not booked and sample
+    // labels turned off, say) is not - the despatch has already gone through
+    // by that point, so that's reported on the confirmed screen instead via
+    // printStatus, not as a top-level error.
+    let confirmed: DespatchConfirmationResult;
     try {
-      const confirmResponse = await api.post<DespatchConfirmationResult>(`/despatch/${orderId}/confirm`);
-      setResult(confirmResponse.data);
+      confirmed = (await api.post<DespatchConfirmationResult>(`/despatch/${orderId}/confirm`)).data;
+      setResult(confirmed);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong confirming despatch");
+      setConfirming(false);
+      return;
+    }
+
+    try {
       const labelResponse = await api.get(`/despatch/${orderId}/labels`, { responseType: "blob" });
       const contentType = labelResponse.headers?.["content-type"] || labelResponse.data.type || "";
       if (contentType.includes("html")) {
@@ -89,7 +103,7 @@ export default function SplitPacking() {
         );
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong confirming despatch");
+      setPrintStatus(e instanceof Error ? e.message : "No label could be printed for this order.");
     } finally {
       setConfirming(false);
     }

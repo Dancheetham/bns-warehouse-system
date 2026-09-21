@@ -134,12 +134,36 @@ public class DpdAuthService {
                 return objectMapper.readTree(response.body());
             }
             log.error("Failed to {} - DPD returned {}: {}", actionDescription, response.statusCode(), response.body());
-            throw new RuntimeException("Failed to " + actionDescription + " - DPD returned HTTP " + response.statusCode());
+            throw new ValidationException("Failed to " + actionDescription + " - " + describeAuthError(response.body(), response.statusCode()));
         } catch (java.io.IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
             throw new RuntimeException("Failed to " + actionDescription + ": " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * DPD's auth error body is {"error": {"statusCode", "error", "message"}} -
+     * a different shape from the shipping/collection error format ({"error":
+     * [...]})  - surfaces the real reason (e.g. "Failed to validate
+     * client-id", "Invalid client secret") instead of a bare HTTP 401, which
+     * on its own gives no clue whether the key, the secret, or the
+     * sandbox/live environment choice is wrong.
+     */
+    private String describeAuthError(String responseBody, int statusCode) {
+        try {
+            JsonNode parsed = objectMapper.readTree(responseBody);
+            JsonNode error = parsed.path("error");
+            String message = error.path("message").asText(null);
+            if (message != null && !message.isBlank()) {
+                return "DPD said: " + message
+                        + " - check the API key/secret and sandbox/live environment under Settings > DPD";
+            }
+        } catch (Exception ignored) {
+            // fall through to the generic message below
+        }
+        return "DPD returned HTTP " + statusCode
+                + " - check the API key/secret and sandbox/live environment under Settings > DPD";
     }
 }
