@@ -9,6 +9,8 @@ export interface Product {
   trackingType: TrackingType;
   defaultLocation?: Location;
   weightKg?: number;
+  commodityCode?: string;
+  countryOfOrigin?: string;
   active: boolean;
   needsReview?: boolean;
   shopifyProductId?: string;
@@ -515,6 +517,9 @@ export interface Order {
   ecommerceOrderNumber?: string;
   orderedBy?: string;
   deliveryName?: string;
+  deliveryAddressLine1?: string;
+  deliveryAddressLine2?: string;
+  deliveryPhone?: string;
   deliveryTown?: string;
   deliveryCountry?: string;
   deliveryPostcode?: string;
@@ -525,6 +530,10 @@ export interface Order {
   courierMethod?: string;
   specialInstructions?: string;
   acknowledgementSentAt?: string;
+  dpdShipmentId?: string;
+  dpdConsignmentNumber?: string;
+  dpdParcelNumbers?: string;
+  dpdShippedAt?: string;
   lines: OrderLine[];
 }
 

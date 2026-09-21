@@ -43,6 +43,20 @@ public class Product {
     @Column(name = "weight_kg", precision = 10, scale = 3)
     private java.math.BigDecimal weightKg;
 
+    // 8-digit HS/commodity code - required by DPD for any parcel needing a
+    // customs declaration (e.g. Ireland). Nullable: only becomes mandatory at
+    // the point a shipment is actually being booked for a destination that
+    // needs one, not at product-creation time.
+    @Column(name = "commodity_code", length = 20)
+    private String commodityCode;
+
+    // ISO 3166-1 alpha-2. Defaults to GB since that's true for the overwhelming
+    // majority of BNS's catalogue (Grandstream/other distributor stock landed
+    // and held in the UK) - only needs overriding for the rare product that
+    // genuinely originates elsewhere.
+    @Column(name = "country_of_origin", length = 2, nullable = false)
+    private String countryOfOrigin = "GB";
+
     @Column(nullable = false)
     private Boolean active = true;
 

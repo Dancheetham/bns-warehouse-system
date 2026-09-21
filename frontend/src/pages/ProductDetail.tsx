@@ -36,6 +36,8 @@ export default function ProductDetail() {
   const [trackingType, setTrackingType] = useState<TrackingType>("NONE");
   const [defaultLocationId, setDefaultLocationId] = useState("");
   const [weightKg, setWeightKg] = useState("");
+  const [commodityCode, setCommodityCode] = useState("");
+  const [countryOfOrigin, setCountryOfOrigin] = useState("GB");
   const [active, setActive] = useState(true);
 
   // Populate the form once the product loads - a plain useState default can't
@@ -47,6 +49,8 @@ export default function ProductDetail() {
     setTrackingType(product.trackingType);
     setDefaultLocationId(product.defaultLocation ? String(product.defaultLocation.id) : "");
     setWeightKg(product.weightKg != null ? String(product.weightKg) : "");
+    setCommodityCode(product.commodityCode ?? "");
+    setCountryOfOrigin(product.countryOfOrigin ?? "GB");
     setActive(product.active);
   }, [product]);
 
@@ -59,6 +63,8 @@ export default function ProductDetail() {
         trackingType,
         defaultLocationId: defaultLocationId ? Number(defaultLocationId) : undefined,
         weightKg: weightKg ? Number(weightKg) : undefined,
+        commodityCode: commodityCode || undefined,
+        countryOfOrigin: countryOfOrigin || undefined,
         active,
       }),
     onSuccess: () => {
@@ -145,6 +151,26 @@ export default function ProductDetail() {
               value={weightKg}
               onChange={(e) => setWeightKg(e.target.value)}
               className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Commodity Code <span className="text-slate-400">(HS code, for customs)</span>
+            </label>
+            <input
+              value={commodityCode}
+              onChange={(e) => setCommodityCode(e.target.value)}
+              placeholder="e.g. 85176200"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Country of Origin</label>
+            <input
+              value={countryOfOrigin}
+              onChange={(e) => setCountryOfOrigin(e.target.value.toUpperCase())}
+              maxLength={2}
+              className="input uppercase"
             />
           </div>
           <div className="flex items-center">

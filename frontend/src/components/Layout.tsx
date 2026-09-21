@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { APP_VERSION } from "../version";
 
 const dashboardLink = { to: "/", label: "Dashboard", end: true };
 
@@ -77,7 +78,9 @@ export default function Layout() {
       <aside className="w-56 bg-slate-900 text-slate-100 flex flex-col shrink-0 h-full overflow-y-auto">
         <div className="px-4 py-5 border-b border-slate-700">
           <h1 className="text-lg font-semibold">BNS Warehouse</h1>
-          <p className="text-xs text-slate-400">System</p>
+          <p className="text-xs text-slate-400">
+            System <span className="text-slate-500">{APP_VERSION}</span>
+          </p>
         </div>
         <nav className="flex-1 py-2">
           <NavLink

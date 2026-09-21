@@ -45,6 +45,9 @@ export default function OrderEdit() {
   const [ecommerceOrderNumber, setEcommerceOrderNumber] = useState("");
   const [orderedBy, setOrderedBy] = useState("");
   const [deliveryName, setDeliveryName] = useState("");
+  const [deliveryAddressLine1, setDeliveryAddressLine1] = useState("");
+  const [deliveryAddressLine2, setDeliveryAddressLine2] = useState("");
+  const [deliveryPhone, setDeliveryPhone] = useState("");
   const [deliveryTown, setDeliveryTown] = useState("");
   const [deliveryCountry, setDeliveryCountry] = useState("");
   const [deliveryPostcode, setDeliveryPostcode] = useState("");
@@ -106,6 +109,9 @@ export default function OrderEdit() {
     setEcommerceOrderNumber(existingOrder.ecommerceOrderNumber ?? "");
     setOrderedBy(existingOrder.orderedBy ?? "");
     setDeliveryName(existingOrder.deliveryName ?? "");
+    setDeliveryAddressLine1(existingOrder.deliveryAddressLine1 ?? "");
+    setDeliveryAddressLine2(existingOrder.deliveryAddressLine2 ?? "");
+    setDeliveryPhone(existingOrder.deliveryPhone ?? "");
     setDeliveryTown(existingOrder.deliveryTown ?? "");
     setDeliveryCountry(existingOrder.deliveryCountry ?? "");
     setDeliveryPostcode(existingOrder.deliveryPostcode ?? "");
@@ -141,6 +147,9 @@ export default function OrderEdit() {
         ecommerceOrderNumber: ecommerceOrderNumber || undefined,
         orderedBy: orderedBy || undefined,
         deliveryName: deliveryName || undefined,
+        deliveryAddressLine1: deliveryAddressLine1 || undefined,
+        deliveryAddressLine2: deliveryAddressLine2 || undefined,
+        deliveryPhone: deliveryPhone || undefined,
         deliveryTown: deliveryTown || undefined,
         deliveryCountry: deliveryCountry || undefined,
         deliveryPostcode: deliveryPostcode || undefined,
@@ -266,6 +275,25 @@ export default function OrderEdit() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const bookDpdShipmentMutation = useMutation({
+    mutationFn: async () => (await api.post(`/orders/${id}/dpd-shipment`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
+  const viewDpdLabel = async () => {
+    try {
+      const response = await api.get(`/orders/${id}/dpd-labels`, { responseType: "text" });
+      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: "text/html" }));
+      window.open(blobUrl, "_blank");
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const paymentMutation = useMutation({
     mutationFn: async () =>
       api.post(`/orders/${id}/payments`, {
@@ -377,6 +405,15 @@ export default function OrderEdit() {
           </Field>
           <Field label="Delivery Name">
             <input value={deliveryName} onChange={(e) => setDeliveryName(e.target.value)} className="input" />
+          </Field>
+          <Field label="Delivery Address Line 1">
+            <input value={deliveryAddressLine1} onChange={(e) => setDeliveryAddressLine1(e.target.value)} className="input" />
+          </Field>
+          <Field label="Delivery Address Line 2">
+            <input value={deliveryAddressLine2} onChange={(e) => setDeliveryAddressLine2(e.target.value)} className="input" />
+          </Field>
+          <Field label="Delivery Phone">
+            <input value={deliveryPhone} onChange={(e) => setDeliveryPhone(e.target.value)} className="input" />
           </Field>
           <Field label="Delivery Town">
             <input value={deliveryTown} onChange={(e) => setDeliveryTown(e.target.value)} className="input" />
@@ -564,6 +601,33 @@ export default function OrderEdit() {
                   </button>
                   <span className="text-xs text-slate-400">For a full cancellation</span>
                 </div>
+            </div>
+          )}
+
+          {!isNew && existingOrder && (
+            <div className="mt-4 border-t border-slate-100 pt-4 flex flex-wrap gap-3 items-center">
+              {existingOrder.dpdConsignmentNumber ? (
+                <>
+                  <span className="text-sm text-slate-700">
+                    DPD consignment <span className="font-medium">{existingOrder.dpdConsignmentNumber}</span>
+                    {existingOrder.dpdParcelNumbers ? ` (parcel ${existingOrder.dpdParcelNumbers})` : ""}
+                  </span>
+                  <button
+                    onClick={viewDpdLabel}
+                    className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
+                  >
+                    View / Print Label
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => bookDpdShipmentMutation.mutate()}
+                  disabled={bookDpdShipmentMutation.isPending}
+                  className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-900 disabled:opacity-50"
+                >
+                  {bookDpdShipmentMutation.isPending ? "Booking..." : "Book DPD Shipment"}
+                </button>
+              )}
             </div>
           )}
 

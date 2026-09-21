@@ -72,6 +72,11 @@ public class ProductService {
         if (request.active() != null) {
             product.setActive(request.active());
         }
+        product.setCommodityCode(request.commodityCode() != null && !request.commodityCode().isBlank()
+                ? request.commodityCode().trim() : null);
+        if (request.countryOfOrigin() != null && !request.countryOfOrigin().isBlank()) {
+            product.setCountryOfOrigin(request.countryOfOrigin().trim().toUpperCase());
+        }
 
         if (request.defaultLocationId() != null) {
             Location location = locationRepository.findById(request.defaultLocationId())

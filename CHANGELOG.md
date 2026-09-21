@@ -5,6 +5,30 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.0] - 2026-09-21 (v0.066)
+
+### Added
+- DPD shipping integration - book a real DPD shipment straight from an order
+  ("Book DPD Shipment" button) and view/print the label, using DPD's actual
+  REST API (auth, shipment creation, label retrieval) rather than the
+  placeholder credential fields that were there before. Shipments to the
+  Republic of Ireland automatically include the full commercial-invoice
+  customs declaration DPD requires, built from the new per-product commodity
+  code/country of origin fields
+- Commodity Code and Country of Origin fields on products (Product Detail
+  page) - needed for the Ireland customs declaration; Country of Origin
+  defaults to GB
+- Delivery Address Line 1/2 and Delivery Phone fields on orders - DPD
+  requires a street address per shipment, which wasn't captured before
+- DPD settings reworked: real API key/secret (Basic-auth), a sandbox/live
+  environment toggle, a default network/service code, and a full sender
+  address block (used as both the collection address and the customs
+  exporter details) including an EORI number field, replacing the old
+  placeholder username/password/account-number fields
+- A small version number next to "System" in the top-left branding
+  (currently v0.066) - an easy visual check that a deployed update has
+  actually gone through; bump `frontend/src/version.ts` with each release
+
 ## [0.22.1] - 2026-09-07 (night)
 
 ### Fixed

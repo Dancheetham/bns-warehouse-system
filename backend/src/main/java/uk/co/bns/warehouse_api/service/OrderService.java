@@ -102,6 +102,9 @@ public class OrderService {
         order.setEcommerceOrderNumber(request.ecommerceOrderNumber());
         order.setOrderedBy(request.orderedBy());
         order.setDeliveryName(request.deliveryName());
+        order.setDeliveryAddressLine1(request.deliveryAddressLine1());
+        order.setDeliveryAddressLine2(request.deliveryAddressLine2());
+        order.setDeliveryPhone(request.deliveryPhone());
         order.setDeliveryTown(request.deliveryTown());
         order.setDeliveryCountry(request.deliveryCountry());
         order.setDeliveryPostcode(request.deliveryPostcode());

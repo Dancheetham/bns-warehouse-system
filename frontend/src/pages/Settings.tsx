@@ -31,9 +31,19 @@ export default function Settings() {
   const [smtpUsername, setSmtpUsername] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [mailFromAddress, setMailFromAddress] = useState("");
-  const [dpdUsername, setDpdUsername] = useState("");
-  const [dpdPassword, setDpdPassword] = useState("");
-  const [dpdAccountNumber, setDpdAccountNumber] = useState("");
+  const [dpdApiKey, setDpdApiKey] = useState("");
+  const [dpdApiSecret, setDpdApiSecret] = useState("");
+  const [dpdEnvironment, setDpdEnvironment] = useState<"sandbox" | "live">("sandbox");
+  const [dpdNetworkCode, setDpdNetworkCode] = useState("");
+  const [dpdSenderOrganisation, setDpdSenderOrganisation] = useState("");
+  const [dpdSenderStreet, setDpdSenderStreet] = useState("");
+  const [dpdSenderTown, setDpdSenderTown] = useState("");
+  const [dpdSenderPostcode, setDpdSenderPostcode] = useState("");
+  const [dpdSenderCountryCode, setDpdSenderCountryCode] = useState("GB");
+  const [dpdSenderContactName, setDpdSenderContactName] = useState("");
+  const [dpdSenderContactPhone, setDpdSenderContactPhone] = useState("");
+  const [dpdSenderContactEmail, setDpdSenderContactEmail] = useState("");
+  const [dpdEoriNumber, setDpdEoriNumber] = useState("");
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
   const [packingMode, setPackingMode] = useState<"SPLIT" | "SERIAL">("SPLIT");
@@ -87,10 +97,20 @@ export default function Settings() {
     // load is the wrong default. Left blank and only sent on save if the
     // user actually types a new one - see saveMutation below.
     setMailFromAddress(settings["mail_from_address"] ?? "");
-    setDpdUsername(settings["dpd_username"] ?? "");
-    // dpd_password deliberately never populated back, same reasoning as
+    setDpdApiKey(settings["dpd_api_key"] ?? "");
+    // dpd_api_secret deliberately never populated back, same reasoning as
     // smtp_password above.
-    setDpdAccountNumber(settings["dpd_account_number"] ?? "");
+    setDpdEnvironment((settings["dpd_environment"] as "sandbox" | "live") ?? "sandbox");
+    setDpdNetworkCode(settings["dpd_network_code"] ?? "");
+    setDpdSenderOrganisation(settings["dpd_sender_organisation"] ?? "");
+    setDpdSenderStreet(settings["dpd_sender_street"] ?? "");
+    setDpdSenderTown(settings["dpd_sender_town"] ?? "");
+    setDpdSenderPostcode(settings["dpd_sender_postcode"] ?? "");
+    setDpdSenderCountryCode(settings["dpd_sender_country_code"] ?? "GB");
+    setDpdSenderContactName(settings["dpd_sender_contact_name"] ?? "");
+    setDpdSenderContactPhone(settings["dpd_sender_contact_phone"] ?? "");
+    setDpdSenderContactEmail(settings["dpd_sender_contact_email"] ?? "");
+    setDpdEoriNumber(settings["dpd_eori_number"] ?? "");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
@@ -121,9 +141,21 @@ export default function Settings() {
         // is left untouched when saving any other setting on this page.
         ...(smtpPassword ? { smtp_password: smtpPassword } : {}),
         mail_from_address: mailFromAddress,
-        dpd_username: dpdUsername,
-        ...(dpdPassword ? { dpd_password: dpdPassword } : {}),
-        dpd_account_number: dpdAccountNumber,
+        dpd_api_key: dpdApiKey,
+        // Only included when actually typed - same reasoning as smtp_password
+        // above, so saving anything else on this page doesn't wipe the secret.
+        ...(dpdApiSecret ? { dpd_api_secret: dpdApiSecret } : {}),
+        dpd_environment: dpdEnvironment,
+        dpd_network_code: dpdNetworkCode,
+        dpd_sender_organisation: dpdSenderOrganisation,
+        dpd_sender_street: dpdSenderStreet,
+        dpd_sender_town: dpdSenderTown,
+        dpd_sender_postcode: dpdSenderPostcode,
+        dpd_sender_country_code: dpdSenderCountryCode,
+        dpd_sender_contact_name: dpdSenderContactName,
+        dpd_sender_contact_phone: dpdSenderContactPhone,
+        dpd_sender_contact_email: dpdSenderContactEmail,
+        dpd_eori_number: dpdEoriNumber,
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
         packing_mode: packingMode,
@@ -308,30 +340,111 @@ export default function Settings() {
 
       <SettingsSection
         title="DPD"
-        description="Credentials for your existing DPD account. This just stores them for now - the actual label/tracking/commercial-invoice integration is a separate, larger piece of work still to come once there's real API documentation to build against."
+        description="API credentials and sender details for creating DPD shipments and printing labels directly from an order. The API key/secret pair comes from your DPD developer account (My DPD > API Access), not your normal DPD login."
       >
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">DPD username (User Login ID)</label>
-            <input value={dpdUsername} onChange={(e) => setDpdUsername(e.target.value)} className="input" />
+            <label className="block text-xs font-medium text-slate-500 mb-1">API key (Client-Id)</label>
+            <input value={dpdApiKey} onChange={(e) => setDpdApiKey(e.target.value)} className="input" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
-              DPD password (leave blank to keep the current one)
+              API secret (leave blank to keep the current one)
             </label>
             <input
               type="password"
-              value={dpdPassword}
-              onChange={(e) => setDpdPassword(e.target.value)}
+              value={dpdApiSecret}
+              onChange={(e) => setDpdApiSecret(e.target.value)}
               placeholder="••••••••"
               className="input"
             />
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">DPD customer account number</label>
-          <input value={dpdAccountNumber} onChange={(e) => setDpdAccountNumber(e.target.value)} className="input" />
+          <label className="block text-xs font-medium text-slate-500 mb-1">Environment</label>
+          <select
+            value={dpdEnvironment}
+            onChange={(e) => setDpdEnvironment(e.target.value as "sandbox" | "live")}
+            className="input w-48"
+          >
+            <option value="sandbox">Sandbox (testing)</option>
+            <option value="live">Live</option>
+          </select>
         </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Default network/service code</label>
+          <input
+            value={dpdNetworkCode}
+            onChange={(e) => setDpdNetworkCode(e.target.value)}
+            placeholder="e.g. 1^06 for Next Day"
+            className="input w-48"
+          />
+        </div>
+
+        <h4 className="text-sm font-medium text-slate-700 pt-2">Sender / collection address</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          Used as both the collection address and the exporter details on any customs declaration (e.g. for
+          shipments to Ireland).
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Organisation</label>
+            <input
+              value={dpdSenderOrganisation}
+              onChange={(e) => setDpdSenderOrganisation(e.target.value)}
+              placeholder="BNS Distribution"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Contact name</label>
+            <input value={dpdSenderContactName} onChange={(e) => setDpdSenderContactName(e.target.value)} className="input" />
+          </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-slate-500 mb-1">Street</label>
+            <input value={dpdSenderStreet} onChange={(e) => setDpdSenderStreet(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Town</label>
+            <input value={dpdSenderTown} onChange={(e) => setDpdSenderTown(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Postcode</label>
+            <input value={dpdSenderPostcode} onChange={(e) => setDpdSenderPostcode(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Country code</label>
+            <input
+              value={dpdSenderCountryCode}
+              onChange={(e) => setDpdSenderCountryCode(e.target.value.toUpperCase())}
+              maxLength={2}
+              className="input uppercase w-24"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Contact phone</label>
+            <input value={dpdSenderContactPhone} onChange={(e) => setDpdSenderContactPhone(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Contact email</label>
+            <input value={dpdSenderContactEmail} onChange={(e) => setDpdSenderContactEmail(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              EORI number <span className="text-slate-400">(required for Ireland)</span>
+            </label>
+            <input
+              value={dpdEoriNumber}
+              onChange={(e) => setDpdEoriNumber(e.target.value.toUpperCase())}
+              placeholder="GB123456789000"
+              className="input"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          A white-label/no-return-address label is a DPD account-level template setting, not something this
+          integration can control - ask your DPD account manager to configure it if you need one.
+        </p>
       </SettingsSection>
 
       <SettingsSection title="Despatch & Packing">

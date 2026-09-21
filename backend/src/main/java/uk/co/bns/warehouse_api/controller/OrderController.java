@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
+import uk.co.bns.warehouse_api.dto.DpdLabelResult;
+import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
 import uk.co.bns.warehouse_api.dto.OrderRequest;
 import uk.co.bns.warehouse_api.dto.PaymentRequest;
@@ -16,6 +18,7 @@ import uk.co.bns.warehouse_api.dto.PaymentView;
 import uk.co.bns.warehouse_api.dto.ReleaseForDespatchRequest;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.service.AcknowledgementService;
+import uk.co.bns.warehouse_api.service.DpdShippingService;
 import uk.co.bns.warehouse_api.service.OrderService;
 import uk.co.bns.warehouse_api.service.PaymentService;
 import uk.co.bns.warehouse_api.service.PickingNoteService;
@@ -31,6 +34,7 @@ public class OrderController {
     private final PickingNoteService pickingNoteService;
     private final AcknowledgementService acknowledgementService;
     private final PaymentService paymentService;
+    private final DpdShippingService dpdShippingService;
 
     @GetMapping
     public List<Order> getAll() {
@@ -87,5 +91,24 @@ public class OrderController {
     @PostMapping("/{id}/acknowledge")
     public AcknowledgementResult acknowledge(@PathVariable Long id, Authentication authentication) {
         return acknowledgementService.sendAcknowledgement(id, authentication.getName());
+    }
+
+    @PostMapping("/{id}/dpd-shipment")
+    public DpdShipmentResult createDpdShipment(@PathVariable Long id) {
+        return dpdShippingService.createShipment(orderService.findById(id));
+    }
+
+    // printerType/printerDpi/format follow DPD's own label API (see
+    // dpd-api-findings.md) - format defaults to plain HTML since that's the
+    // simplest thing for the browser to open and print directly with no
+    // extra plumbing; a thermal-label integration can request text/vnd.zebra-zpl
+    // instead once that's wired up to a specific printer.
+    @GetMapping(value = "/{id}/dpd-labels", produces = MediaType.TEXT_PLAIN_VALUE)
+    public ResponseEntity<String> getDpdLabels(@PathVariable Long id,
+                                                @RequestParam(defaultValue = "0") int printerType,
+                                                @RequestParam(defaultValue = "203") int printerDpi,
+                                                @RequestParam(defaultValue = "text/html") String format) {
+        DpdLabelResult result = dpdShippingService.getLabels(orderService.findById(id), printerType, printerDpi, format);
+        return ResponseEntity.ok(result.rawLabelData());
     }
 }

@@ -66,6 +66,15 @@ public class Order {
     @Column(name = "delivery_name")
     private String deliveryName;
 
+    @Column(name = "delivery_address_line1")
+    private String deliveryAddressLine1;
+
+    @Column(name = "delivery_address_line2")
+    private String deliveryAddressLine2;
+
+    @Column(name = "delivery_phone")
+    private String deliveryPhone;
+
     @Column(name = "delivery_town")
     private String deliveryTown;
 
@@ -102,6 +111,23 @@ public class Order {
 
     @Column(name = "acknowledgement_sent_at")
     private LocalDateTime acknowledgementSentAt;
+
+    // Populated once a DPD shipment has actually been booked for this order.
+    // shipmentId is DPD's own internal UUID (needed if a label ever needs
+    // re-fetching); consignmentNumber/parcelNumbers are what's shown to staff
+    // and given to the customer for tracking.
+    @Column(name = "dpd_shipment_id")
+    private String dpdShipmentId;
+
+    @Column(name = "dpd_consignment_number")
+    private String dpdConsignmentNumber;
+
+    // Comma-separated - a multi-parcel shipment gets more than one parcel number.
+    @Column(name = "dpd_parcel_numbers")
+    private String dpdParcelNumbers;
+
+    @Column(name = "dpd_shipped_at")
+    private LocalDateTime dpdShippedAt;
 
     // Picking (handheld) tracking - separate from despatch/packing, which happens
     // afterwards on the web GUI once a pick is COMPLETE or PARTIAL.
