@@ -1,10 +1,13 @@
 package uk.co.bns.warehouse_api.service;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
 import uk.co.bns.warehouse_api.dto.DespatchConfirmationResult;
+import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderPickSummary;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.Order;
@@ -35,6 +38,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class DespatchService {
 
+    private static final Logger log = LoggerFactory.getLogger(DespatchService.class);
+
     private final OrderRepository orderRepository;
     private final StockItemRepository stockItemRepository;
     private final StockMovementRepository stockMovementRepository;
@@ -45,6 +50,7 @@ public class DespatchService {
     private final SettingsService settingsService;
     private final ShopifyFulfillmentService shopifyFulfillmentService;
     private final DespatchConfirmationService despatchConfirmationService;
+    private final DpdShippingService dpdShippingService;
 
     public static final String PACKING_MODE_KEY = "packing_mode";
     public static final String PACKING_MODE_SPLIT = "SPLIT";
@@ -113,18 +119,48 @@ public class DespatchService {
         order.setStatus(anyShort ? OrderStatus.PARTIALLY_DESPATCHED : OrderStatus.COMPLETED);
         order = orderRepository.save(order);
 
-        // Both best-effort, deliberately after the order is already saved -
-        // neither should ever be able to block the actual despatch, which is
-        // the part that matters (stock genuinely leaving the building).
+        // All three of these are best-effort, deliberately after the order is
+        // already saved - none of them should ever be able to block the actual
+        // despatch, which is the part that matters (stock genuinely leaving the
+        // building). Booking DPD here - at the exact point staff would previously
+        // have printed a dummy placeholder label - replaces that with a real
+        // shipment and a real tracking number, which is then preferred over the
+        // old manually-typed carton tracking number for the Shopify push.
+        String dpdStatus = bookDpdShipment(order);
+
         List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(orderId);
-        String dummyTrackingNumber = cartons.stream()
+        String manualTrackingNumber = cartons.stream()
                 .map(Carton::getTrackingNumber)
                 .filter(t -> t != null && !t.isBlank())
                 .findFirst()
                 .orElse(null);
-        String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, dummyTrackingNumber);
+        String trackingNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber() : manualTrackingNumber;
+        String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, trackingNumber);
         AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime, performedByName);
 
-        return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus);
+        return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus, dpdStatus);
+    }
+
+    /**
+     * Only attempts a booking when DPD is actually configured (an API key is
+     * set) - orders/environments not using DPD yet get a silent null rather
+     * than a confusing "DPD not booked" message on every single despatch.
+     * Already-booked orders (re-confirming, or booked manually beforehand via
+     * the order screen) are left alone rather than booking a second shipment.
+     */
+    private String bookDpdShipment(Order order) {
+        if (order.getDpdShipmentId() != null) {
+            return "DPD shipment already booked (consignment " + order.getDpdConsignmentNumber() + ")";
+        }
+        if (settingsService.get("dpd_api_key", "").isBlank()) {
+            return null;
+        }
+        try {
+            DpdShipmentResult result = dpdShippingService.createShipment(order);
+            return "DPD shipment booked - consignment " + result.consignmentNumber();
+        } catch (Exception e) {
+            log.warn("DPD shipment booking failed for order {} at despatch confirmation: {}", order.getOrderNumber(), e.getMessage());
+            return "DPD shipment NOT booked: " + e.getMessage() + " - book it manually from the order screen once fixed";
+        }
     }
 }

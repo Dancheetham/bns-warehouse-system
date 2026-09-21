@@ -275,22 +275,30 @@ export default function OrderEdit() {
     onError: (err: Error) => setError(err.message),
   });
 
+  const [dpdError, setDpdError] = useState<string | null>(null);
   const bookDpdShipmentMutation = useMutation({
     mutationFn: async () => (await api.post(`/orders/${id}/dpd-shipment`)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["order", id] });
-      setError(null);
+      setDpdError(null);
+      showToast("DPD shipment booked.");
     },
-    onError: (err: Error) => setError(err.message),
+    // Shown right here, next to the button, rather than only in the
+    // page's main error banner further down the page - that one's easy to
+    // miss below a long line-items table, which made this look like the
+    // button "did nothing" when it had actually failed with a clear reason
+    // (e.g. missing DPD credentials or a missing delivery address).
+    onError: (err: Error) => setDpdError(err.message),
   });
 
   const viewDpdLabel = async () => {
+    setDpdError(null);
     try {
       const response = await api.get(`/orders/${id}/dpd-labels`, { responseType: "text" });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: "text/html" }));
       window.open(blobUrl, "_blank");
     } catch (err) {
-      setError((err as Error).message);
+      setDpdError((err as Error).message);
     }
   };
 
@@ -605,29 +613,32 @@ export default function OrderEdit() {
           )}
 
           {!isNew && existingOrder && (
-            <div className="mt-4 border-t border-slate-100 pt-4 flex flex-wrap gap-3 items-center">
-              {existingOrder.dpdConsignmentNumber ? (
-                <>
-                  <span className="text-sm text-slate-700">
-                    DPD consignment <span className="font-medium">{existingOrder.dpdConsignmentNumber}</span>
-                    {existingOrder.dpdParcelNumbers ? ` (parcel ${existingOrder.dpdParcelNumbers})` : ""}
-                  </span>
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap gap-3 items-center">
+                {existingOrder.dpdConsignmentNumber ? (
+                  <>
+                    <span className="text-sm text-slate-700">
+                      DPD consignment <span className="font-medium">{existingOrder.dpdConsignmentNumber}</span>
+                      {existingOrder.dpdParcelNumbers ? ` (parcel ${existingOrder.dpdParcelNumbers})` : ""}
+                    </span>
+                    <button
+                      onClick={viewDpdLabel}
+                      className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
+                    >
+                      View / Print Label
+                    </button>
+                  </>
+                ) : (
                   <button
-                    onClick={viewDpdLabel}
-                    className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
+                    onClick={() => bookDpdShipmentMutation.mutate()}
+                    disabled={bookDpdShipmentMutation.isPending}
+                    className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-900 disabled:opacity-50"
                   >
-                    View / Print Label
+                    {bookDpdShipmentMutation.isPending ? "Booking..." : "Book DPD Shipment"}
                   </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => bookDpdShipmentMutation.mutate()}
-                  disabled={bookDpdShipmentMutation.isPending}
-                  className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-900 disabled:opacity-50"
-                >
-                  {bookDpdShipmentMutation.isPending ? "Booking..." : "Book DPD Shipment"}
-                </button>
-              )}
+                )}
+              </div>
+              {dpdError && <p className="text-sm text-red-600 mt-2">{dpdError}</p>}
             </div>
           )}
 

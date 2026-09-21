@@ -5,6 +5,26 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.1] - 2026-09-21 (v0.066, later same day)
+
+### Fixed
+- "Book DPD Shipment" on the order screen looked like it did nothing when it
+  failed - the error was set correctly but only shown in the page's main
+  error banner, far below a long line-items table. Now shown immediately
+  next to the button itself, plus a toast on success
+
+### Changed
+- DPD shipments are now booked automatically at the point of despatch
+  confirmation (both Split and Serial packing "Confirm Despatch & Print
+  Labels") - exactly where the old placeholder test labels used to print.
+  The real DPD label (HTML) opens in a new tab to print in place of the
+  dummy PDF once a shipment is booked; the DPD consignment number is also
+  used as the tracking number pushed to Shopify instead of a manually-typed
+  carton tracking number. Booking is best-effort and never blocks the
+  despatch itself - failure (or DPD not being configured) is shown on the
+  despatch confirmation screen, and the "Book DPD Shipment" button on the
+  order screen remains as a manual fallback/retry
+
 ## [0.23.0] - 2026-09-21 (v0.066)
 
 ### Added

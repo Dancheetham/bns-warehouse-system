@@ -71,13 +71,23 @@ export default function SplitPacking() {
     try {
       const confirmResponse = await api.post<DespatchConfirmationResult>(`/despatch/${orderId}/confirm`);
       setResult(confirmResponse.data);
-      const pdfResponse = await api.get(`/despatch/${orderId}/labels`, { responseType: "blob" });
-      const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
-      const printerName = settings?.["label_printer"] || "";
-      const printResult = await printPdf(pdfResponse.data, agentUrl, printerName);
-      setPrintStatus(
-        printResult.printed ? "Labels sent to printer." : "Print agent not reachable - labels opened in a new tab instead."
-      );
+      const labelResponse = await api.get(`/despatch/${orderId}/labels`, { responseType: "blob" });
+      const contentType = labelResponse.headers?.["content-type"] || labelResponse.data.type || "";
+      if (contentType.includes("html")) {
+        // A real DPD label - HTML, not a PDF the print agent can send to a
+        // printer, so it's opened directly for the operator to print from
+        // the browser (Ctrl+P) instead.
+        const blobUrl = window.URL.createObjectURL(labelResponse.data);
+        window.open(blobUrl, "_blank");
+        setPrintStatus("DPD label opened in a new tab - print from there.");
+      } else {
+        const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
+        const printerName = settings?.["label_printer"] || "";
+        const printResult = await printPdf(labelResponse.data, agentUrl, printerName);
+        setPrintStatus(
+          printResult.printed ? "Labels sent to printer." : "Print agent not reachable - labels opened in a new tab instead."
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong confirming despatch");
     } finally {
@@ -115,10 +125,22 @@ export default function SplitPacking() {
           </details>
         </div>
 
-        <div className="rounded-lg p-4 mb-6 text-sm border bg-slate-50 border-slate-200 text-slate-600">
+        <div className="rounded-lg p-4 mb-4 text-sm border bg-slate-50 border-slate-200 text-slate-600">
           <span className="font-medium">Shopify: </span>
           {result.shopifyFulfillmentStatus}
         </div>
+
+        {result.dpdStatus && (
+          <div
+            className={`rounded-lg p-4 mb-6 text-sm border ${
+              result.dpdStatus.startsWith("DPD shipment NOT booked")
+                ? "bg-red-50 border-red-200 text-red-700"
+                : "bg-emerald-50 border-emerald-200 text-emerald-700"
+            }`}
+          >
+            {result.dpdStatus}
+          </div>
+        )}
 
         <button
           onClick={() => navigate("/despatch")}

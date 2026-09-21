@@ -549,6 +549,7 @@ export interface DespatchConfirmationResult {
   order: Order;
   despatchEmail: AcknowledgementResult;
   shopifyFulfillmentStatus: string;
+  dpdStatus?: string;
 }
 
 export interface UnmatchedSkuSummary {
