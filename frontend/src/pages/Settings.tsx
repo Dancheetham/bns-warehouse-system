@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { DEFAULT_STATUS_COLORS, ORDER_STATUSES, resolveStatusColors, statusColorSettingKey, statusLabel } from "../utils/statusColors";
 import { OrderStatus } from "../types";
 import { useAuth } from "../auth/AuthContext";
+import { useToast } from "../components/ToastContext";
 
 interface UserView {
   id: number;
@@ -48,6 +49,7 @@ export default function Settings() {
   const [myEmailSaved, setMyEmailSaved] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { showToast } = useToast();
 
   const { data: settings } = useQuery({
     queryKey: ["settings"],
@@ -130,6 +132,7 @@ export default function Settings() {
       }),
     onSuccess: () => {
       setSaved(true);
+      showToast("Saved.");
       setTimeout(() => setSaved(false), 2500);
     },
   });
@@ -140,6 +143,7 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
       setColorsSaved(true);
+      showToast("Saved.");
       setTimeout(() => setColorsSaved(false), 2500);
     },
   });
@@ -156,6 +160,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
       setMyEmailPassword("");
       setMyEmailSaved(true);
+      showToast("Saved.");
       setTimeout(() => setMyEmailSaved(false), 2500);
     },
   });

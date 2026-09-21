@@ -75,12 +75,18 @@ public class OrderService {
     @Transactional
     public Order update(Long id, OrderRequest request) {
         Order order = findById(id);
-        // Explicitly applying the version the editor actually loaded (rather
-        // than leaving whatever findById just fetched) is what makes the
-        // optimistic lock check meaningful - Hibernate compares this against
-        // the database's current version at save time, not at load time.
-        if (request.version() != null) {
-            order.setVersion(request.version());
+        // Comparing explicitly against the version this edit actually
+        // started from, rather than relying on Hibernate's own automatic
+        // @Version check - manually setting an entity's version field once
+        // it's already loaded/managed is explicitly unsupported by JPA, and
+        // in practice Hibernate just ignores it rather than using it for the
+        // update's WHERE clause. This check is deterministic and doesn't
+        // depend on any of that: if the version this edit started from
+        // doesn't match what's actually in the database right now, someone
+        // else has saved in between.
+        if (request.version() != null && !request.version().equals(order.getVersion())) {
+            throw new ConflictException(
+                    "This was changed by someone else while you had it open - reload the page to see their changes, then try your edit again");
         }
         applyFields(order, request);
         reconcileLines(order, request.lines());

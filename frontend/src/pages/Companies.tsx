@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { CompanyRequest, CompanyView } from "../types";
+import { useToast } from "../components/ToastContext";
 
 function CompanyRow({ company }: { company: CompanyView }) {
+  const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const queryClient = useQueryClient();
   const [name, setName] = useState(company.name);
@@ -26,6 +28,7 @@ function CompanyRow({ company }: { company: CompanyView }) {
       queryClient.invalidateQueries({ queryKey: ["companies"] });
       setEditing(false);
       setError(null);
+      showToast("Saved.");
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -101,6 +104,7 @@ function CompanyRow({ company }: { company: CompanyView }) {
 
 export default function Companies() {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
@@ -122,6 +126,7 @@ export default function Companies() {
       setCreditLimit("");
       setShowForm(false);
       setError(null);
+      showToast("Created.");
     },
     onError: (err: Error) => setError(err.message),
   });

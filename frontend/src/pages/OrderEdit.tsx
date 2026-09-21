@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AcknowledgementResult, CompanyView, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product } from "../types";
 import { printPdf } from "../utils/printAgent";
+import { useToast } from "../components/ToastContext";
 
 const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "AWAITING_CONVERSION"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
@@ -32,6 +33,7 @@ export default function OrderEdit() {
   const { id } = useParams();
   const isNew = id === "new";
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
 
   const [orderNumber, setOrderNumber] = useState("");
@@ -170,6 +172,7 @@ export default function OrderEdit() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       setError(null);
+      showToast(isNew ? "Order created." : "Saved.");
       navigate(`/sales-activity/${data.id}`, { replace: true });
     },
     onError: (err: Error & { status?: number }) => {

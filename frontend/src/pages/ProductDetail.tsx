@@ -4,12 +4,14 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Product, TrackingType, LocationStockSummary, Location } from "../types";
 import BinSelect from "../components/BinSelect";
+import { useToast } from "../components/ToastContext";
 
 const TRACKING_TYPES: TrackingType[] = ["NONE", "SERIAL", "MAC"];
 
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -64,6 +66,7 @@ export default function ProductDetail() {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setError(null);
       setSaved(true);
+      showToast("Saved.");
       setTimeout(() => setSaved(false), 2500);
     },
     onError: (err: Error) => setError(err.message),

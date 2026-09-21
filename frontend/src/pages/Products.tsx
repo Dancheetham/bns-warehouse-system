@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { Product, TrackingType, LocationStockSummary, Location } from "../types";
 import BinSelect from "../components/BinSelect";
+import { useToast } from "../components/ToastContext";
 
 const TRACKING_TYPES: TrackingType[] = ["NONE", "SERIAL", "MAC"];
 
@@ -110,6 +111,7 @@ function ProductRow({ product }: { product: Product }) {
 
 export default function Products() {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [sku, setSku] = useState("");
   const [name, setName] = useState("");
@@ -149,6 +151,7 @@ export default function Products() {
       setWeightKg("");
       setShowForm(false);
       setError(null);
+      showToast("Created.");
     },
     onError: (err: Error) => setError(err.message),
   });

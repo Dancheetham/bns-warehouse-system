@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { PurchaseOrder, Product, Supplier } from "../types";
 import { formatDate } from "../utils/format";
+import { useToast } from "../components/ToastContext";
 
 interface LineDraft {
   productId: string;
@@ -20,6 +21,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function PurchaseOrders() {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [supplierId, setSupplierId] = useState("");
   const [expectedDate, setExpectedDate] = useState("");
@@ -62,6 +64,7 @@ export default function PurchaseOrders() {
       setExpectedDate("");
       setLines([{ productId: "", quantityOrdered: "" }]);
       setError(null);
+      showToast("Created.");
     },
     onError: (err: Error) => setError(err.message),
   });

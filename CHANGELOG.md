@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.22.1] - 2026-09-07 (night)
+
+### Fixed
+- The optimistic locking added in the last version didn't actually trigger -
+  manually setting an entity's @Version field once it's already loaded
+  within the current request is explicitly unsupported by JPA; in practice
+  Hibernate just ignores it rather than using it for the update's WHERE
+  clause. Replaced with an explicit, deterministic comparison instead
+  (compare the version this edit started from against the order's actual
+  current version, reject if they don't match) that doesn't depend on any
+  Hibernate internals - confirmed this is the actual fix, not another guess
+
+### Added
+- A small, auto-dismissing "Saved." notification (bottom-right, nothing to
+  click) after a successful save - wired into every genuine Save/Create
+  button across the app: order edit, all three Settings save actions
+  (main settings, colours, my email), products, product edit, companies
+  (both inline edit and new company), purchase orders, goods-in, and bug
+  reports. Deliberately left out approve/reject/receive/release/despatch
+  and similar action buttons - a different category from "save" the
+  request was about, most of which already have their own clear feedback
+
 ## [0.22.0] - 2026-09-07 (later)
 
 ### Added

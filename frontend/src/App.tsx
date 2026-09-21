@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { ToastProvider } from "./components/ToastContext";
 import Login from "./auth/Login";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
@@ -37,7 +38,8 @@ import RmaDetail from "./pages/RmaDetail";
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
+      <ToastProvider>
+        <Routes>
         {/* Public, unauthenticated - the RMA request form customers use
             directly, and both login pages. */}
         <Route path="/rma" element={<RmaRequestForm />} />
@@ -97,6 +99,7 @@ export default function App() {
             broken page rather than a wrong URL. This makes that visible instead. */}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </ToastProvider>
     </AuthProvider>
   );
 }

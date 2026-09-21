@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { BugReport } from "../types";
 import { formatDateTime } from "../utils/format";
+import { useToast } from "../components/ToastContext";
 
 // Uses plain axios rather than the shared `api` client - this page must not
 // trigger the auto-bug-report interceptor if its own requests fail. Still
@@ -12,6 +13,7 @@ const rawApi = axios.create({ baseURL: "/api", withCredentials: true });
 
 export default function BugReports() {
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
   const [description, setDescription] = useState("");
   const [errorCode, setErrorCode] = useState("");
 
@@ -30,6 +32,7 @@ export default function BugReports() {
     onSuccess: () => {
       setDescription("");
       setErrorCode("");
+      showToast("Reported.");
       queryClient.invalidateQueries({ queryKey: ["bug-reports"] });
     },
   });
