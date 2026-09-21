@@ -30,5 +30,11 @@ public record OrderRequest(
         BigDecimal shippingCost,
         String courierMethod,
         String specialInstructions,
+        // Only meaningful on update, not create - the version the editor
+        // loaded, so a stale save (someone else has saved since) can be
+        // rejected with a clear conflict rather than silently overwriting
+        // their change. Null is treated as "don't check" (new orders, and
+        // any older client that hasn't been updated to send it yet).
+        Long version,
         @NotEmpty @Valid List<OrderLineRequest> lines
 ) {}

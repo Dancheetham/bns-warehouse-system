@@ -54,6 +54,7 @@ export default function OrderEdit() {
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
+  const [errorIsConflict, setErrorIsConflict] = useState(false);
   const [ackResult, setAckResult] = useState<AcknowledgementResult | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
@@ -147,6 +148,10 @@ export default function OrderEdit() {
         shippingCost: shippingCost ? Number(shippingCost) : undefined,
         courierMethod: courierMethod || undefined,
         specialInstructions: specialInstructions || undefined,
+        // Only meaningful for an existing order - lets the backend reject
+        // the save with a clear conflict if someone else has already saved
+        // since this page loaded, rather than silently overwriting them.
+        version: !isNew ? existingOrder?.version : undefined,
         lines: lines
           .filter((l) => l.productId)
           .map((l) => ({
@@ -167,7 +172,10 @@ export default function OrderEdit() {
       setError(null);
       navigate(`/sales-activity/${data.id}`, { replace: true });
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error & { status?: number }) => {
+      setError(err.message);
+      setErrorIsConflict(err.status === 409);
+    },
   });
 
   const { data: settings } = useQuery({
@@ -714,7 +722,19 @@ export default function OrderEdit() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+      {error && (
+        <div className="mb-4">
+          <p className="text-sm text-red-600">{error}</p>
+          {errorIsConflict && (
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-1 text-sm text-red-700 underline hover:text-red-800"
+            >
+              Reload this page
+            </button>
+          )}
+        </div>
+      )}
 
       <button
         onClick={() => saveMutation.mutate()}

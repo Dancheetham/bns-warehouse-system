@@ -506,6 +506,7 @@ export interface PaymentRequest {
 export interface Order {
   id: number;
   orderNumber: string;
+  version: number;
   orderDate: string;
   customerName: string;
   customerEmail?: string;

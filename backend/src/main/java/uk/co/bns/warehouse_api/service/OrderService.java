@@ -75,6 +75,13 @@ public class OrderService {
     @Transactional
     public Order update(Long id, OrderRequest request) {
         Order order = findById(id);
+        // Explicitly applying the version the editor actually loaded (rather
+        // than leaving whatever findById just fetched) is what makes the
+        // optimistic lock check meaningful - Hibernate compares this against
+        // the database's current version at save time, not at load time.
+        if (request.version() != null) {
+            order.setVersion(request.version());
+        }
         applyFields(order, request);
         reconcileLines(order, request.lines());
         recomputePickingStatusIfMoreNeeded(order);

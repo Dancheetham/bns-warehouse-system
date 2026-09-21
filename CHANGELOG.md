@@ -5,6 +5,34 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.22.0] - 2026-09-07 (later)
+
+### Added
+- Optimistic locking on order edits, for production with multiple concurrent
+  users - deliberately not the old system's "lock the order until the
+  current user exits" approach, which has a real failure mode: a crashed
+  session or a closed laptop lid leaves the order stuck locked for everyone
+  until someone with admin rights forces it open. Instead, every order
+  carries a version number; saving states which version was actually
+  loaded, and a save is rejected with a clear "this was changed by someone
+  else - reload and try again" (plus a one-click reload button) if someone
+  else has saved in between, rather than either blocking upfront or
+  silently overwriting their change
+- Sales Activity now quietly refreshes in the background every 15 seconds,
+  same interval and reasoning as the handheld's picking list already used -
+  a status change made by someone else (despatched, released, picked) shows
+  up without a manual refresh. Deliberately not added to the order edit
+  form itself - auto-refreshing fields while someone's mid-edit risks
+  overwriting their unsaved typing, a genuinely different problem the
+  optimistic lock above already handles correctly at save time instead
+
+### Fixed
+- The global error handler was auto-logging every non-401 error to Bug
+  Reports, which would have meant a normal, expected edit conflict (the
+  new 409 above) got logged as if it were a bug every single time it
+  happened. Excluded 409 from that logging, same reasoning as the existing
+  401 exclusion - expected, handled behaviour, not a bug
+
 ## [0.21.0] - 2026-09-07
 
 ### Fixed

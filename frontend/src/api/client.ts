@@ -20,9 +20,11 @@ api.interceptors.response.use(
     const method: string = (error?.config?.method ?? "").toUpperCase();
 
     // Auto-log to Bug Reports, but never for the bug-reports endpoint itself (a
-    // failure there shouldn't try to log itself and loop) or for 401s (routine
-    // "not logged in" responses - e.g. checking auth state on page load - not bugs).
-    if (!url.includes("/bug-reports") && status !== 401) {
+    // failure there shouldn't try to log itself and loop), 401s (routine "not
+    // logged in" responses - e.g. checking auth state on page load), or 409s
+    // (an optimistic-lock conflict - two people editing the same thing is
+    // expected, handled behaviour, not a bug).
+    if (!url.includes("/bug-reports") && status !== 401 && status !== 409) {
       axios
         .post("/api/bug-reports", {
           description: message,
@@ -36,6 +38,8 @@ api.interceptors.response.use(
         });
     }
 
-    return Promise.reject(new Error(message));
+    const enrichedError = new Error(message) as Error & { status?: number };
+    enrichedError.status = status;
+    return Promise.reject(enrichedError);
   }
 );

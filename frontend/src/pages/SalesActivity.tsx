@@ -34,6 +34,12 @@ export default function SalesActivity() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => (await api.get<Order[]>("/orders")).data,
+    // Quietly refreshes in the background, same interval as the handheld's
+    // picking list - so a status change made by someone else (despatched,
+    // released, picked) shows up here without needing a manual refresh.
+    // Not real-time, but this is an ops screen someone reads continuously,
+    // not something that needs sub-second updates.
+    refetchInterval: 15000,
   });
 
   const { data: myUserSettings } = useQuery({

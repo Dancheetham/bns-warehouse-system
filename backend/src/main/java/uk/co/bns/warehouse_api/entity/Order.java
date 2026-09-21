@@ -23,6 +23,12 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Optimistic locking - Hibernate checks this automatically on every
+    // update (WHERE id=? AND version=?) and throws if it's moved on since
+    // this entity was loaded, meaning someone else has saved in between.
+    @Version
+    private Long version;
+
     @Column(name = "order_number", nullable = false, unique = true)
     private String orderNumber;
 
