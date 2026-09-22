@@ -5,6 +5,27 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.21] - 2026-09-22 (v0.086)
+
+### Added
+- The order edit page's Save button is now fixed to the bottom-right of the
+  screen, so it's reachable from anywhere on what can be a genuinely long
+  form (order details, lines, payments, DPD section) without scrolling
+  all the way down.
+
+### Fixed
+- Found the actual cause of "I changed the delivery address to Ireland and
+  saved, but the courier options didn't update until I left and came back
+  in": saving an order only ever told the Sales Activity list to refresh -
+  nothing told the order edit page itself, or its DPD available-services
+  lookup, that anything had changed. The page's own "current order" data
+  and its list of DPD services are now both refreshed as part of a
+  successful save, so a change like the delivery country is reflected
+  immediately rather than needing to navigate away and back. This was also
+  a latent risk for spurious "someone else already edited this" conflict
+  errors on a second save in the same visit, since the save-conflict check
+  was comparing against that same stale cached order.
+
 ## [0.23.20] - 2026-09-22 (v0.085)
 
 ### Added

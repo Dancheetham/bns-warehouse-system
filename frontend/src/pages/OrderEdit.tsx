@@ -187,6 +187,20 @@ export default function OrderEdit() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
+      // Without these two, this page kept showing what was true *before*
+      // the save - e.g. changing the delivery address to Ireland and
+      // saving still showed the old (UK) list of DPD courier services,
+      // because dpd-services is looked up from the order as it stands in
+      // the database, and nothing here was telling that query (or the
+      // single-order query the whole form is populated from) that the
+      // order underneath it had just changed. navigate() below re-points
+      // the URL at the same order, but React Router doesn't remount the
+      // page just because the path resolved to is identical, so this is
+      // what actually makes the page reflect the save - not the
+      // navigation. Keyed off data.id (not the id from the URL) since a
+      // brand new order only gets its real id back here.
+      queryClient.invalidateQueries({ queryKey: ["order", String(data.id)] });
+      queryClient.invalidateQueries({ queryKey: ["dpd-services", String(data.id)] });
       setError(null);
       showToast(isNew ? "Order created." : "Saved.");
       // Set only when this order originated from Shopify and something
@@ -390,7 +404,11 @@ export default function OrderEdit() {
   };
 
   return (
-    <div>
+    // pb-24 keeps the last bit of page content (the error block, whatever's
+    // last in the form) clear of the floating Save button below, which sits
+    // fixed to the viewport rather than the page and would otherwise cover
+    // it at the bottom of a short page or once scrolled all the way down.
+    <div className="pb-24">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-semibold text-slate-800">
           {isNew ? "New Order" : `Edit Order ${existingOrder?.orderNumber ?? ""}`}
@@ -936,12 +954,17 @@ export default function OrderEdit() {
         </div>
       )}
 
+      {/* Fixed to the viewport (not the page) so it's reachable from any
+          scroll position on what can be a genuinely long form - order
+          details, lines, payments, DPD section etc. z-50 keeps it above
+          everything else on the page; shadow-lg gives it visual separation
+          from whatever's scrolling underneath it. */}
       <button
         onClick={() => saveMutation.mutate()}
         disabled={saveMutation.isPending || !customerName}
-        className="bg-emerald-600 text-white text-sm px-5 py-2.5 rounded-md hover:bg-emerald-500 disabled:opacity-50"
+        className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg hover:bg-emerald-500 disabled:opacity-50"
       >
-        {saveMutation.isPending ? "Saving..." : "Save Order"}
+        {saveMutation.isPending ? "Saving..." : isNew ? "Create Order" : "Save Order"}
       </button>
 
       <style>{`.input { width: 100%; border: 1px solid #cbd5e1; border-radius: 0.375rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; }`}</style>

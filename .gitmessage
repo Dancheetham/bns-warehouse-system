@@ -1,4 +1,12 @@
-v0.085: sortable Order ID/Order Date columns, Status/Order Type filter dropdowns on Sales Activity
+v0.086: floating Save button on order edit, fix stale DPD services/order data after save
+
+- Save button on the order edit page is now fixed to the bottom-right of
+  the viewport instead of at the end of the form, reachable from any
+  scroll position.
+- Saving an order now invalidates that order's own cached data and its
+  DPD available-services lookup, not just the Sales Activity list - fixes
+  courier options not updating after changing the delivery country (or any
+  other order field) until leaving and re-entering the page.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
