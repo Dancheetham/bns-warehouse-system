@@ -5,6 +5,12 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.19] - 2026-09-22 (v0.084)
+
+### Changed
+- The sidebar branding text now reads "System - Version: v0.084" instead of
+  "System v0.084".
+
 ## [0.23.18] - 2026-09-22 (v0.083)
 
 ### Fixed
