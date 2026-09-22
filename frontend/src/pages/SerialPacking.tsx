@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { DespatchConfirmationResult, PackedItemView, SerialCartonView, SerialPackingView } from "../types";
-import { printPdf } from "../utils/printAgent";
+import { openAndPrintHtmlLabel, printPdf, printRaw } from "../utils/printAgent";
 
 export default function SerialPacking() {
   const { orderId } = useParams();
@@ -72,16 +72,29 @@ export default function SerialPacking() {
     try {
       const labelResponse = await api.get(`/despatch/${orderId}/labels`, { responseType: "blob" });
       const contentType = labelResponse.headers?.["content-type"] || labelResponse.data.type || "";
-      if (contentType.includes("html")) {
-        // A real DPD label - HTML, not a PDF the print agent can send to a
-        // printer, so it's opened directly for the operator to print from
-        // the browser (Ctrl+P) instead.
-        const blobUrl = window.URL.createObjectURL(labelResponse.data);
-        window.open(blobUrl, "_blank");
-        setPrintStatus("DPD label opened in a new tab - print from there.");
+      const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
+      const printerName = settings?.["label_printer"] || "";
+      if (contentType.includes("zpl")) {
+        // A real DPD label, as raw ZPL - sent straight to the label printer
+        // with no browser rendering step, so it prints at the label's real
+        // physical size instead of being scaled to a page.
+        const zplText = await labelResponse.data.text();
+        const printResult = await printRaw(zplText, agentUrl, printerName);
+        setPrintStatus(
+          printResult.printed
+            ? "Label sent to printer."
+            : "Print agent not reachable - start it on this PC (see Settings > DPD) and try again."
+        );
+      } else if (contentType.includes("html")) {
+        // Older/fallback format - opened in a new tab with the browser's
+        // print dialog triggered automatically.
+        const opened = openAndPrintHtmlLabel(labelResponse.data);
+        setPrintStatus(
+          opened
+            ? "DPD label opened - the print dialog should appear automatically."
+            : "DPD label ready, but the pop-up was blocked - allow pop-ups for this site and try again."
+        );
       } else {
-        const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
-        const printerName = settings?.["label_printer"] || "";
         const printResult = await printPdf(labelResponse.data, agentUrl, printerName);
         setPrintStatus(
           printResult.printed ? "Labels sent to printer." : "Print agent not reachable - labels opened in a new tab instead."

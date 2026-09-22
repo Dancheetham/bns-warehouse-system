@@ -16,6 +16,7 @@ import StockTrace from "./pages/StockTrace";
 import ApiAccess from "./pages/ApiAccess";
 import ReportsOrders from "./pages/ReportsOrders";
 import ReportsStock from "./pages/ReportsStock";
+import ReportsInvoices from "./pages/ReportsInvoices";
 import BugReports from "./pages/BugReports";
 import SalesActivity from "./pages/SalesActivity";
 import OrderEdit from "./pages/OrderEdit";
@@ -87,6 +88,7 @@ export default function App() {
             <Route path="/api-access" element={<ApiAccess />} />
             <Route path="/reports/orders" element={<ReportsOrders />} />
             <Route path="/reports/stock" element={<ReportsStock />} />
+            <Route path="/reports/invoices" element={<ReportsInvoices />} />
             <Route path="/bug-reports" element={<BugReports />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/settings/stock-import" element={<StockImport />} />

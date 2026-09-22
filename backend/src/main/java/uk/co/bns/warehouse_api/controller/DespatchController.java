@@ -43,19 +43,19 @@ public class DespatchController {
 
     // Once a real DPD shipment has been booked for this order (normally
     // automatic, at confirmDespatch above), this serves the real DPD label
-    // instead of the old dummy placeholder PDF - as HTML, since that's what
-    // DPD's own label endpoint returns for printerType 0 and it opens/prints
-    // fine directly in a browser tab with no extra plumbing needed. Falls
-    // back to the placeholder PDF for any order that was despatched without
-    // a DPD shipment (DPD not configured, or booking failed).
+    // as raw ZPL - the warehouse's actual thermal printer format - so the
+    // frontend sends it straight to the print agent with no browser
+    // rendering step (and no page-scaling mismatch) in between. Falls back
+    // to the placeholder PDF for any order that was despatched without a
+    // DPD shipment (DPD not configured, or booking failed).
     @GetMapping("/{orderId}/labels")
     public ResponseEntity<byte[]> labels(@PathVariable Long orderId) {
         Order order = orderService.findById(orderId);
         if (order.getDpdShipmentId() != null) {
-            DpdLabelResult label = dpdShippingService.getLabels(order, 0, 203, "text/html");
+            DpdLabelResult label = dpdShippingService.getLabelsForPrint(order);
             return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + orderId + ".html\"")
-                    .contentType(MediaType.TEXT_HTML)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + orderId + ".zpl\"")
+                    .contentType(MediaType.valueOf("application/x-zpl"))
                     .body(label.rawLabelData().getBytes(StandardCharsets.UTF_8));
         }
         if (!"true".equals(settingsService.get("print_sample_labels", "true"))) {

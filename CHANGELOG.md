@@ -5,6 +5,384 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.18] - 2026-09-22 (v0.083)
+
+### Fixed
+- Found the real shape of DPD's label response, from an actual raw response
+  now visible thanks to v0.079's error message improvement: it's
+  `{"data": {"printString": ["<label 1>", "<label 2>", ...]}}` - the label
+  array is nested one level deeper, inside a "printString" field, not
+  directly under "data" as originally assumed from the docs alone. That
+  wrong assumption is exactly why despatching this kind of shipment hit the
+  "unexpected label response shape" safety-net error and produced no label
+  at all. Both shapes are now handled - the confirmed real one, and the
+  originally-assumed one kept as a fallback.
+- Timestamps shown across the app (Bug Reports' "when this happened" being
+  the one reported, but this affects any LocalDateTime shown anywhere) were
+  reading a full hour behind the real time during British Summer Time. The
+  backend records these in UTC but was serializing them with no timezone
+  marker at all, which browsers then read as already being in the viewer's
+  own local time - silently skipping the UTC-to-BST conversion rather than
+  applying it. Timestamps are now sent with an explicit UTC marker so the
+  browser converts them correctly, in BST or GMT.
+
+## [0.23.17] - 2026-09-22 (v0.082)
+
+### Fixed
+- v0.081's fix for the Excel-chart build failure didn't actually work -
+  `mvn dependency:go-offline` itself failed to resolve the `poi-ooxml-full`
+  dependency that fix added, before compilation even started. Rather than
+  keep guessing at POI's dependency setup blind (this project's build tools
+  aren't reachable to verify a fix compiles before sending it), the
+  higher-risk part of the Invoice Report's Excel chart has been removed
+  instead: the chart itself (title, legend, both series, markers) still
+  builds natively in the exported .xlsx exactly as before, but it no longer
+  tries to add an on-chart value label to each point, since that was the
+  one part needing the schema classes that wouldn't resolve. The exact
+  figure for every point is still right there in the small data table next
+  to the chart on the same sheet. (The Dashboard's own line chart isn't
+  affected by any of this - it's hand-drawn, not an Excel-native chart, so
+  it already shows its value labels as before.)
+- `backend/pom.xml` reverted to the plain `poi-ooxml` dependency it had
+  before v0.081 - no more schema-jar swap needed now the code that needed
+  it is gone.
+
+## [0.23.16] - 2026-09-22 (v0.081)
+
+### Fixed
+- The v0.080 build failed to compile (`docker compose build` failing on the
+  `api` target with `mvn clean package` exiting non-zero). Root cause: the
+  native Excel line chart added to the Invoice Report export back in v0.078
+  (the data-label code in `addMonthlyChartSheet`) reaches directly into raw
+  OOXML schema classes (`CTLineChart`, `CTDLbls`) that only exist in POI's
+  full schemas jar - `poi-ooxml` alone pulls in `poi-ooxml-lite`, a reduced
+  jar that doesn't include them. This had been sitting uncompiled/unverified
+  since v0.078 (flagged as such at the time) and only surfaced now on a
+  clean rebuild. Fixed by swapping `poi-ooxml-lite` for `poi-ooxml-full` in
+  `backend/pom.xml`.
+
+### Changed
+- The DPD service/courier picked on the Sales Activity/order screen is now
+  always what gets booked, full stop. Previously, at despatch time that
+  choice was re-checked against DPD's live "what's available now" list and
+  silently swapped out (for the Settings default, or DPD's first available
+  option) if it no longer matched - which could happen simply because the
+  weight this re-check saw differed slightly from what was true when the
+  choice was made on the order. That meant the courier shown on the picking
+  note wasn't always the one actually booked. The order's chosen service is
+  now booked exactly as picked, with no re-validation or silent override;
+  the live-lookup/Settings-default/first-available fallback chain only
+  still applies when nothing was picked on the order at all.
+
+## [0.23.15] - 2026-09-22 (v0.080)
+
+### Added
+- The weight-cap override that was deliberately held off on in v0.079 has
+  now been added after all, for a different reason than originally asked:
+  Settings > DPD now has a **"Never offer Freight - cap the weight sent
+  for the service check at (kg)"** field (`dpd_max_lookup_weight_kg`,
+  blank by default = no change in behaviour). This isn't for the despatch
+  booking itself - the real weight is always sent to DPD when a shipment
+  is actually booked, unchanged. It's specifically for the Service dropdown
+  on the Sales Activity/order screen, which is queried *before* an order
+  is packed - at that point no cartons exist yet, so it has no choice but
+  to treat the whole order as one parcel carrying its full weight, and a
+  genuinely heavy order (e.g. 35kg) will always tip that lookup into
+  Freight-only, however many cartons it eventually gets packed into. That
+  matters beyond just the dropdown, because whatever service gets picked
+  there is what shows on the picking note to tell the picker which courier
+  to use. Setting a cap here only ever lowers what's sent to that one
+  lookup call, never raises it, and never touches the real booked shipment
+  weight.
+
+### Fixed
+- When DPD's label response doesn't match the shape the app expects (the
+  "unexpected label response shape" error introduced in v0.079 to stop
+  garbled labels reaching the printer), the error now includes the actual
+  raw response text from DPD (truncated to 1000 characters) directly in
+  the error message, so it's visible straight from the Bug Reports screen
+  without needing server log access. Needed to actually diagnose what a
+  Freight-tier shipment's label response looks like, since it's evidently
+  not shaped the same way as an ordinary parcel shipment's.
+
+## [0.23.14] - 2026-09-22 (v0.079)
+
+### Fixed
+- Found the actual cause of the "still 1 label, still freight" reports:
+  **Reverse to Despatch** (and Cancel & Return to Stock) never cleared an
+  order's DPD shipment reference. Confirming despatch already refuses to
+  book a second DPD shipment for an order that has one - a sensible guard
+  on its own - but because reversing an order back for correction (fix the
+  quantity, address, etc.) left the *old* shipment's ID sitting on the
+  order, re-confirming despatch after a correction silently skipped booking
+  a new shipment altogether and kept pointing at the stale one - wrong
+  weight, wrong parcel count, wrong service, whatever it was booked as the
+  first time. This is what made the previous fixes look like they hadn't
+  worked: reducing the quantity, repacking into 2 cartons and picking
+  "Parcel Next Day" all did nothing, because despatch never rebooked
+  against any of it. Both reversal actions now clear the old DPD shipment
+  fields, so the next despatch books a genuinely fresh shipment reflecting
+  whatever's actually true at that point. (DPD's documented API has no
+  cancel/void-shipment endpoint, so the old shipment isn't actually
+  cancelled on DPD's side by this - if it was already scanned in for
+  collection, that still needs cancelling from DPD's own portal)
+- The garbled "&n"-scattered label from the 35kg test was very likely the
+  same stale-shipment bug compounding with the new label-fetch code: when a
+  label response didn't come back in the shape that code expected, it
+  silently fell back to printing the raw response text - including,
+  potentially, a raw JSON error body straight to the printer. It no longer
+  does that: an unrecognised response is now a clear error instead of
+  whatever garbage would otherwise have gone to the label stock.
+
+### Not changed (see reasoning)
+- Didn't add a "cap the weight sent to DPD so freight never gets offered"
+  override, despite being asked for one - once a despatch actually books a
+  fresh shipment (the real bug above), the multi-carton weight-splitting
+  fix from v0.078 should already keep an ordinary multi-carton order out of
+  freight without needing to understate its weight to DPD. Deliberately
+  holding off on quietly sending DPD a lower weight than the parcel
+  actually is (a real compliance/liability question, not just a code
+  change) until this is confirmed still needed on a **freshly created**
+  order rather than one that had been reversed - please retest on a new
+  order and let me know if freight still turns up.
+
+## [0.23.13] - 2026-09-22 (v0.078)
+
+### Fixed
+- The real reason a 2-carton order still only produced one DPD label after
+  the previous fix: two separate gaps, both now fixed together -
+  - The label-fetch call was only ever getting one label back from DPD
+    regardless of how many parcels the shipment actually had - DPD's docs
+    say the plain response format returns a single response body, and only
+    asking for the JSON array form (`Accept: application/json`) gets one
+    raw label string back per parcel. Now always requests that form and
+    joins every label together, so a shipment with 2+ parcels prints all of
+    them, not just the first
+  - The DPD "which services are available" lookup - used both to fill the
+    Service dropdown and to pick the service actually booked - was still
+    always asking DPD for a single parcel carrying the order's *entire*
+    weight, regardless of how many cartons it was really packed into. For a
+    heavier multi-carton order, that can tip DPD into only offering its
+    freight/pallet-network service (which doesn't split into multiple
+    everyday parcels) instead of an ordinary multi-parcel Parcel service -
+    so even once multiple parcels were being requested in the booking
+    itself, they were being booked under a service that doesn't support
+    more than one. This lookup now reflects the order's real parcel split
+    (from its packed cartons) the same way the shipment booking itself
+    already did, so a normal multi-carton order gets offered - and booked
+    against - an ordinary Parcel service rather than being pushed to freight
+
+### Changed
+- Dashboard's "Invoiced Values by Month" chart is now a line chart (was
+  bars), with each point's value shown directly on the chart in a small
+  label box, matching the original report this figure was modelled on
+- The exportable Invoice Report (Reports > Invoice Reports) now includes a
+  second sheet with the same monthly invoiced/credited figures as a data
+  table and a real, native Excel line chart built from it (not a picture of
+  one) - opens and can be edited/resized like any other Excel chart, with
+  each point labelled with its value. It covers the calendar year of the
+  report's "from" date (or the current year, if no date filter is set),
+  since a by-month view only makes sense for a single year
+
+## [0.23.12] - 2026-09-22 (v0.077)
+
+### Fixed
+- A multi-carton order only ever produced one DPD label. The shipment
+  booking request had `numberOfParcels` hardcoded to 1 with a single parcel
+  entry, regardless of how many cartons the order was actually packed
+  into - so DPD only ever generated one label no matter how many boxes were
+  going out. It now sends one parcel per carton the order was packed into
+  (from the cartons created during packing), each with its own weight, so a
+  2-carton order gets 2 labels, a 3-carton order gets 3, and so on
+  - Each carton's own weight is used when it's been entered on the packing
+    screen; if it hasn't, that carton's weight is worked out from what's
+    actually in it (same basis as the previous single-parcel fallback) so a
+    parcel is never sent to DPD with a weight of 0
+  - Orders shipping to the Republic of Ireland (the one destination needing
+    a full customs declaration) now get each parcel's own product/value
+    breakdown from what's actually packed in that specific carton, instead
+    of the whole order's contents being declared against a single parcel
+  - If DPD is booked manually from the order screen before the order has
+    been packed into cartons yet, this falls back to exactly the previous
+    behaviour (one parcel covering the whole order) - there's nothing to
+    go by yet at that point
+
+### Investigated
+- Asked whether the sender/return address shown on a DPD label can be
+  blanked out or "white labelled". Checked DPD's full shipping API schema
+  again specifically for this - there is no request field for it. DPD's own
+  docs point to label sign-off being handled by their Customer Integration
+  Team and a shipping-defaults template configured at the account level, so
+  this needs to be requested from DPD directly (via the account manager),
+  not something togglable from here - see `dpd-api-findings.md` in the
+  project for the full note
+
+## [0.23.11] - 2026-09-22 (v0.076)
+
+### Changed
+- Order screen's DPD "Service" dropdown no longer forces free text the
+  moment the live DPD lookup fails - it now falls back to the last list of
+  services DPD returned successfully (from any order), so there's always a
+  real set of options to pick from rather than staff needing to remember and
+  type an exact service code. A small badge on the right of the box shows
+  "Live" (checked against DPD just now for this exact address/weight) or
+  "Cached" (last known list, not re-verified for this address) - hover it
+  for why. The dropdown only drops back to a free-text field when there's
+  truly no fallback yet (nothing has ever been fetched successfully) or the
+  order has no delivery postcode/country set yet
+- The error shown under the Service field, when there is one, is now the
+  actual message from DPD/the backend (e.g. the specific auth or validation
+  failure) instead of a generic "check the postcode and Settings" line -
+  the real reason was already being captured automatically in Bug Reports,
+  this just also surfaces it right where staff are looking
+
+## [0.23.10] - 2026-09-22 (v0.075)
+
+### Added
+- Orders that originated from Shopify now sync amendments back to the
+  customer's Shopify order automatically on every save here, best-effort and
+  non-blocking (it never holds up or reverses the save in this system if
+  Shopify is unreachable or rejects the edit):
+  - Address changes (name, address lines, town, postcode, country, phone)
+    push via Shopify's `orderUpdate`
+  - Removing a line, adding a line, or changing a line's quantity pushes via
+    Shopify's order-edit flow (`orderEditBegin` → `orderEditSetQuantity` /
+    `orderEditAddVariant` → `orderEditCommit`), matched by SKU. A line that's
+    already fully fulfilled on Shopify's side can't be edited further there -
+    that's reported back, not treated as an error
+  - A newly-added line needs the product to already have its Shopify variant
+    recorded (from the normal Shopify product sync) - if it doesn't, that
+    one line is reported as not pushed rather than failing the whole sync
+  - Price changes are detected and reported either way, but **not pushed
+    automatically yet** - a price rise genuinely can't be (Shopify's
+    order-edit API can only ever lower a line, never raise one above its
+    original variant price), and a price fall, while technically possible
+    via a discount, isn't implemented in this release since it touches
+    customer-facing order totals directly and this whole feature hasn't
+    been tried against a live Shopify store yet. Both cases show a message
+    on save saying to adjust the price on Shopify directly for now
+  - The result of the sync shows as a toast after saving the order (e.g.
+    "Pushed to Shopify: added SKU123 x2. Address updated on Shopify.")
+
+### Note
+- This is a new feature that writes to live, customer-facing Shopify orders
+  and has not been tested against a real Shopify store from this environment
+  (no outbound network access here to verify it end-to-end). Try it on a
+  low-stakes order first and check the result actually looks right on
+  Shopify before relying on it for real amendments
+
+## [0.23.9] - 2026-09-22 (v0.074)
+
+### Fixed
+- Docker build was failing at `mvn clean package` - `ReportService.java`'s
+  new invoice-report methods (v0.073) used `BigDecimal` without the file
+  ever importing `java.math.BigDecimal` (it only had `java.util.*`, which
+  doesn't cover it). No other file touched this week had the same gap -
+  checked explicitly across all of it.
+
+## [0.23.8] - 2026-09-22 (v0.073)
+
+### Fixed
+- The print agent's CORS preflight response was never updated when raw ZPL
+  printing was added in v0.072 - it only allowed the `Content-Type` and
+  `X-Printer-Name` headers, so the browser silently blocked every raw print
+  request over the new `X-Print-Format` header before it ever reached the
+  agent. This showed up as "Print agent not reachable" everywhere a DPD
+  label tried to print (despatch and the order screen's Print Label button)
+  even with the agent running and working fine for picking notes
+- The Shopify fulfillment push's "No matching Shopify fulfillment line
+  items found (already fulfilled there, or SKUs don't match)" message
+  didn't distinguish two very different situations. Now, when the SKU is
+  genuinely on the Shopify order but nothing is left there to fulfil - the
+  common case after an order's quantity is increased here beyond what
+  Shopify's own order (and an earlier despatch) already used up - the
+  message says so directly and explains the underlying Shopify order needs
+  editing to match. A true SKU mismatch still gets its own distinct message
+
+### Added
+- Dashboard: an "Invoiced Values by Month" chart for the current year -
+  invoiced (green) vs credited (red) net value per month, drawn with no new
+  charting dependency (same approach as the existing status pie chart)
+- Reports > Invoice Reports: an exportable Invoiced Values report (Excel),
+  filterable by invoice date from/to, tick boxes for invoices and/or
+  credits, and a searchable company dropdown
+- A generic searchable dropdown component (`SearchableSelect`), used for
+  the company filter above and reusable anywhere else a long list needs
+  searching instead of scrolling
+
+## [0.23.7] - 2026-09-22 (v0.072)
+
+### Changed
+- DPD shipping labels now print as raw ZPL (Zebra's own label command
+  language) sent straight to the configured label printer via the print
+  agent, instead of opening as HTML in a browser tab. This is the actual
+  fix for labels not fitting the label stock properly - HTML/PDF printing
+  has no idea what size label is physically loaded and scales to a normal
+  page, where raw ZPL always comes out at the label's real size. Applies
+  everywhere a DPD label is printed: Split Packing, Serial Packing, and the
+  order screen's Print Label button
+- Added a "Label printer DPI" setting under Settings > DPD (203/300 -
+  matches the label printer's actual resolution)
+
+### Added
+- The print agent (`print-agent/agent.py`) now handles raw print jobs as
+  well as PDFs - needs the `pywin32` package installed alongside it
+  (`pip install pywin32`) to talk to the printer directly. See
+  `print-agent/README.md` for the updated setup steps
+
+## [0.23.6] - 2026-09-22 (v0.071)
+
+### Fixed
+- A DPD label opening in a new tab left the operator to remember to hit
+  Ctrl+P themselves - now the browser's print dialog opens automatically as
+  soon as the label tab has loaded, for all three places a DPD label can be
+  printed (Split Packing, Serial Packing, and the order screen's "View/Print
+  Label" button). If a pop-up blocker stops the tab from opening at all,
+  that's now reported clearly ("pop-up was blocked") instead of silently
+  doing nothing. DPD only ever returns labels as HTML, not a PDF, so this
+  still goes through the browser's own print dialog rather than the fully
+  silent print-agent path used for picking notes and the old placeholder
+  labels
+
+## [0.23.5] - 2026-09-22 (v0.070)
+
+### Added
+- The old free-text "Courier Method" box on the order screen (at Release for
+  Despatch) is now two dropdowns: Courier (DPD today, built so another
+  courier can be added later) and Service, which is populated live from
+  DPD's own lookup for this exact order's delivery postcode and weight - the
+  same live lookup despatch itself now uses, so what's shown here is exactly
+  what's actually available, not a guessed or stale code. The chosen service
+  is used first when the shipment is actually booked at despatch (re-checked
+  against DPD's live list at that point, in case availability changed)
+- If the live lookup can't be reached (e.g. the order has no delivery
+  postcode yet, or DPD is unreachable), the Service field falls back to a
+  plain text box so an order can still be released
+
+### Fixed
+- DPD was rejecting every shipment with "Shipment Date is mandatory" -
+  `shipmentDate` is a required field DPD expects on every shipment (the
+  date/approximate collection time) that wasn't being sent at all. Now sent
+  automatically as the current date/time at the point of booking
+
+## [0.23.4] - 2026-09-22 (v0.069)
+
+### Fixed
+- DPD shipments were being rejected with "Failed to query network". DPD
+  requires a `networkCode` (their delivery service code) on every shipment,
+  but it was only ever sent if a value happened to be typed into Settings -
+  so if that field was left blank, the required field was silently missing
+  altogether. On top of that, DPD's own documentation says network codes
+  "may change at any time and should not be hardcoded", so a fixed code
+  typed into Settings was never going to be reliable long-term anyway.
+  Shipments now look up the real, currently-available delivery service for
+  each shipment's actual collection and delivery postcodes and weight,
+  every time, via DPD's own "validate outbound services" endpoint. The
+  Settings > DPD network/service code field is now just an optional
+  preference - if it matches one of the services DPD actually offers for
+  that shipment it's used, otherwise DPD's first available service is used
+  automatically and the shipment isn't blocked
+
 ## [0.23.3] - 2026-09-21 (v0.068)
 
 ### Added

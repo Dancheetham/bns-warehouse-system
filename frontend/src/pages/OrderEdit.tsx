@@ -2,12 +2,16 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product } from "../types";
-import { printPdf } from "../utils/printAgent";
+import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product } from "../types";
+import { printPdf, printRaw } from "../utils/printAgent";
 import { useToast } from "../components/ToastContext";
 
 const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "AWAITING_CONVERSION"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
+// Only DPD is wired up today - this is a real dropdown (not hardcoded into the
+// service picker) so another courier can be added here later without
+// reworking the release screen.
+const COURIERS = ["DPD"] as const;
 
 // crypto.randomUUID() is only exposed in "secure contexts" (HTTPS or localhost) -
 // it's silently undefined on plain http://<LAN-IP>, which crashed this whole page.
@@ -56,6 +60,8 @@ export default function OrderEdit() {
   const [orderType, setOrderType] = useState<OrderType>("ORDER");
   const [shippingCost, setShippingCost] = useState("");
   const [courierMethod, setCourierMethod] = useState("");
+  const [courier, setCourier] = useState<string>(COURIERS[0]);
+  const [dpdNetworkKey, setDpdNetworkKey] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +126,7 @@ export default function OrderEdit() {
     setOrderType(existingOrder.orderType);
     setShippingCost(existingOrder.shippingCost != null ? String(existingOrder.shippingCost) : "");
     setCourierMethod(existingOrder.courierMethod ?? "");
+    setDpdNetworkKey(existingOrder.dpdNetworkKey ?? "");
     setSpecialInstructions(existingOrder.specialInstructions ?? "");
     setLines(
       existingOrder.lines.length > 0
@@ -182,6 +189,13 @@ export default function OrderEdit() {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
       setError(null);
       showToast(isNew ? "Order created." : "Saved.");
+      // Set only when this order originated from Shopify and something
+      // changed that needed pushing back there - shown as a second toast
+      // rather than replacing the "Saved." one, since the save itself always
+      // succeeds locally regardless of whether the Shopify push did.
+      if (data.shopifyAmendStatus) {
+        showToast(data.shopifyAmendStatus);
+      }
       navigate(`/sales-activity/${data.id}`, { replace: true });
     },
     onError: (err: Error & { status?: number }) => {
@@ -194,6 +208,28 @@ export default function OrderEdit() {
     queryKey: ["settings"],
     queryFn: async () => (await api.get<Record<string, string>>("/settings")).data,
   });
+
+  // Live DPD services for this order's actual delivery postcode/weight - only
+  // fetched while there's an order to fetch it for and it's still On Hold
+  // (no point once it's already been released). DPD's own docs say these
+  // codes can change and shouldn't be hardcoded, so this is always a fresh
+  // lookup, never a fixed list baked into the app - but the backend falls
+  // back to the last list it fetched successfully (from any order) when the
+  // live check itself fails, so this still gets real, previously-offered
+  // options rather than nothing. `isError` here only fires for the one case
+  // there's truly no fallback for - no delivery postcode/country set yet.
+  const {
+    data: dpdServiceResult,
+    isLoading: dpdServicesLoading,
+    isError: dpdServicesError,
+    error: dpdServicesLookupError,
+  } = useQuery({
+    queryKey: ["dpd-services", id],
+    queryFn: async () => (await api.get<DpdServiceLookupResult>(`/orders/${id}/dpd-services`)).data,
+    enabled: !isNew && status === "ON_HOLD" && courier === "DPD",
+    retry: false,
+  });
+  const dpdServices = dpdServiceResult?.services;
 
   const acknowledgeMutation = useMutation({
     mutationFn: async () => (await api.post<AcknowledgementResult>(`/orders/${id}/acknowledge`)).data,
@@ -213,6 +249,7 @@ export default function OrderEdit() {
         await api.post<Order>(`/orders/${id}/release-for-despatch`, {
           shippingCost: shippingCost ? Number(shippingCost) : undefined,
           courierMethod: courierMethod || undefined,
+          dpdNetworkKey: dpdNetworkKey || undefined,
           overrideCreditHold: override ?? false,
           overrideReason: override ? creditOverrideReason : undefined,
         })
@@ -295,8 +332,14 @@ export default function OrderEdit() {
     setDpdError(null);
     try {
       const response = await api.get(`/orders/${id}/dpd-labels`, { responseType: "text" });
-      const blobUrl = window.URL.createObjectURL(new Blob([response.data], { type: "text/html" }));
-      window.open(blobUrl, "_blank");
+      const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
+      const printerName = settings?.["label_printer"] || "";
+      const printResult = await printRaw(response.data, agentUrl, printerName);
+      if (printResult.printed) {
+        showToast("Label sent to printer.");
+      } else {
+        setDpdError("Print agent not reachable - start it on this PC (see Settings > DPD) and try again.");
+      }
     } catch (err) {
       setDpdError((err as Error).message);
     }
@@ -487,13 +530,92 @@ export default function OrderEdit() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Courier Method</label>
-                  <input
-                    value={courierMethod}
-                    onChange={(e) => setCourierMethod(e.target.value)}
-                    placeholder="e.g. DPD Next Day"
-                    className="input w-48"
-                  />
+                  <label className="block text-xs text-slate-400 mb-1">Courier</label>
+                  <select
+                    value={courier}
+                    onChange={(e) => {
+                      setCourier(e.target.value);
+                      setDpdNetworkKey("");
+                      setCourierMethod("");
+                    }}
+                    className="input w-32"
+                  >
+                    {COURIERS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Service</label>
+                  {dpdServicesError ? (
+                    <input
+                      value={courierMethod}
+                      onChange={(e) => setCourierMethod(e.target.value)}
+                      placeholder="e.g. DPD Next Day"
+                      title="Couldn't look up DPD services for this order - type the service manually."
+                      className="input w-56"
+                    />
+                  ) : (
+                    <div className="relative w-56">
+                      <select
+                        value={dpdNetworkKey}
+                        onChange={(e) => {
+                          const selected = dpdServices?.find((s) => s.networkKey === e.target.value);
+                          setDpdNetworkKey(e.target.value);
+                          setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
+                        }}
+                        disabled={dpdServicesLoading || !dpdServices?.length}
+                        className="input w-56 pr-14"
+                      >
+                        <option value="">
+                          {dpdServicesLoading
+                            ? "Looking up services..."
+                            : dpdServices?.length
+                            ? "Select a service..."
+                            : "No services available"}
+                        </option>
+                        {dpdServices?.map((s) => (
+                          <option key={s.networkKey} value={s.networkKey}>
+                            {s.networkDesc} - {s.serviceDesc}
+                          </option>
+                        ))}
+                      </select>
+                      {/* Whether this list is DPD's live answer for this exact address/weight,
+                          or the last list DPD gave us for anything, kept as a fallback so the
+                          dropdown still has real options instead of forcing free text - see
+                          dpdServiceResult.liveError (surfaced below) for why it isn't live. */}
+                      {!dpdServicesLoading && dpdServiceResult && (
+                        <span
+                          title={
+                            dpdServiceResult.live
+                              ? "Live - checked against DPD just now for this address and weight"
+                              : `Not live - showing the last services DPD offered. ${dpdServiceResult.liveError ?? ""}`
+                          }
+                          className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
+                            dpdServiceResult.live
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {dpdServiceResult.live ? "Live" : "Cached"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {dpdServicesError && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {dpdServicesLookupError instanceof Error
+                        ? dpdServicesLookupError.message
+                        : "Couldn't look up DPD services - check the delivery postcode and Settings > DPD."}
+                    </p>
+                  )}
+                  {dpdServiceResult && !dpdServiceResult.live && dpdServiceResult.liveError && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      Not live for this address: {dpdServiceResult.liveError}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => releaseMutation.mutate(undefined)}
@@ -625,7 +747,7 @@ export default function OrderEdit() {
                       onClick={viewDpdLabel}
                       className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
                     >
-                      View / Print Label
+                      Print Label
                     </button>
                   </>
                 ) : (

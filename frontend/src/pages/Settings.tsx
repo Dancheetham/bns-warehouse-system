@@ -25,6 +25,7 @@ function SettingsSection({ title, description, children }: { title: string; desc
 export default function Settings() {
   const [printerName, setPrinterName] = useState("");
   const [labelPrinterName, setLabelPrinterName] = useState("");
+  const [labelPrinterDpi, setLabelPrinterDpi] = useState("203");
   const [printAgentUrl, setPrintAgentUrl] = useState("");
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
@@ -35,6 +36,7 @@ export default function Settings() {
   const [dpdApiSecret, setDpdApiSecret] = useState("");
   const [dpdEnvironment, setDpdEnvironment] = useState<"sandbox" | "live">("sandbox");
   const [dpdNetworkCode, setDpdNetworkCode] = useState("");
+  const [dpdMaxLookupWeightKg, setDpdMaxLookupWeightKg] = useState("");
   const [dpdSenderOrganisation, setDpdSenderOrganisation] = useState("");
   const [dpdSenderStreet, setDpdSenderStreet] = useState("");
   const [dpdSenderTown, setDpdSenderTown] = useState("");
@@ -88,6 +90,7 @@ export default function Settings() {
     if (!settings) return;
     setPrinterName(settings["picking_note_printer"] ?? "");
     setLabelPrinterName(settings["label_printer"] ?? "");
+    setLabelPrinterDpi(settings["dpd_label_printer_dpi"] ?? "203");
     setPrintAgentUrl(settings["print_agent_url"] ?? "http://localhost:9191/print");
     setSmtpHost(settings["smtp_host"] ?? "");
     setSmtpPort(settings["smtp_port"] ?? "587");
@@ -103,6 +106,7 @@ export default function Settings() {
     // smtp_password above.
     setDpdEnvironment((settings["dpd_environment"] as "sandbox" | "live") ?? "sandbox");
     setDpdNetworkCode(settings["dpd_network_code"] ?? "");
+    setDpdMaxLookupWeightKg(settings["dpd_max_lookup_weight_kg"] ?? "");
     setDpdSenderOrganisation(settings["dpd_sender_organisation"] ?? "");
     setDpdSenderStreet(settings["dpd_sender_street"] ?? "");
     setDpdSenderTown(settings["dpd_sender_town"] ?? "");
@@ -134,6 +138,7 @@ export default function Settings() {
       api.put("/settings", {
         picking_note_printer: printerName,
         label_printer: labelPrinterName,
+        dpd_label_printer_dpi: labelPrinterDpi,
         print_agent_url: printAgentUrl,
         smtp_host: smtpHost,
         smtp_port: smtpPort,
@@ -149,6 +154,7 @@ export default function Settings() {
         ...(dpdApiSecret ? { dpd_api_secret: dpdApiSecret } : {}),
         dpd_environment: dpdEnvironment,
         dpd_network_code: dpdNetworkCode,
+        dpd_max_lookup_weight_kg: dpdMaxLookupWeightKg,
         dpd_sender_organisation: dpdSenderOrganisation,
         dpd_sender_street: dpdSenderStreet,
         dpd_sender_town: dpdSenderTown,
@@ -288,6 +294,26 @@ export default function Settings() {
             placeholder="e.g. Despatch Label Printer"
             className="input"
           />
+          <p className="text-xs text-slate-400 mt-1">
+            DPD shipping labels print as raw ZPL straight to this printer via the print agent (Print Agent URL
+            below) - needs a ZPL-compatible thermal printer (e.g. Zebra) and pywin32 installed alongside the
+            agent. See the print-agent README for setup.
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Label printer DPI</label>
+          <select
+            value={labelPrinterDpi}
+            onChange={(e) => setLabelPrinterDpi(e.target.value)}
+            className="input w-32"
+          >
+            <option value="203">203 dpi</option>
+            <option value="300">300 dpi</option>
+          </select>
+          <p className="text-xs text-slate-400 mt-1">
+            Must match the shipping label printer's actual resolution (check the printer or its datasheet) -
+            a mismatch here can throw off barcode scaling on the printed label.
+          </p>
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Print agent URL</label>
@@ -375,13 +401,39 @@ export default function Settings() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Default network/service code</label>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Preferred service (optional)</label>
           <input
             value={dpdNetworkCode}
             onChange={(e) => setDpdNetworkCode(e.target.value)}
             placeholder="e.g. 1^06 for Next Day"
             className="input w-48"
           />
+          <p className="text-xs text-slate-400 mt-1">
+            DPD looks up the real available services for every shipment automatically (they can change route to
+            route and aren't safe to hardcode). If you set a code here and it's one of the services DPD offers for
+            that shipment, it's used - otherwise DPD's first available service is used instead, so this is a
+            preference, not a requirement.
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            Never offer Freight - cap the weight sent for the service check at (kg)
+          </label>
+          <input
+            value={dpdMaxLookupWeightKg}
+            onChange={(e) => setDpdMaxLookupWeightKg(e.target.value)}
+            placeholder="Leave blank to send the real weight"
+            className="input w-48"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            A heavy order can tip DPD's "what services are available" check into only offering its freight/pallet
+            service, even when it's really going out as ordinary parcels - this affects the Service dropdown here
+            (and on the order screen, which is what the picking note shows to the picker) and which service actually
+            gets booked, but never the weight declared on the real shipment itself at despatch - that always uses
+            each carton's genuine weight. Set a value below whatever weight tips your account into freight (start
+            around 19.9 and adjust from what you see happening) and Freight stops being offered at all; leave blank
+            to let DPD decide normally.
+          </p>
         </div>
 
         <h4 className="text-sm font-medium text-slate-700 pt-2">Sender / collection address</h4>

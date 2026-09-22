@@ -31,6 +31,7 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     items: [
       { to: "/reports/orders", label: "Order Reports" },
       { to: "/reports/stock", label: "Stock Reports" },
+      { to: "/reports/invoices", label: "Invoice Reports" },
     ],
   },
   {

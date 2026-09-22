@@ -475,6 +475,12 @@ export interface CompanyRequest {
   notes?: string;
 }
 
+export interface InvoicedMonthValue {
+  month: number; // 1-12
+  invoiceTotal: number;
+  creditTotal: number;
+}
+
 export interface OrderCreditStatus {
   companyId: number;
   companyName: string;
@@ -528,6 +534,7 @@ export interface Order {
   orderType: OrderType;
   shippingCost?: number;
   courierMethod?: string;
+  dpdNetworkKey?: string;
   specialInstructions?: string;
   acknowledgementSentAt?: string;
   dpdShipmentId?: string;
@@ -535,6 +542,30 @@ export interface Order {
   dpdParcelNumbers?: string;
   dpdShippedAt?: string;
   lines: OrderLine[];
+  // Set only on the response to a save - whether (and how) that save's
+  // changes were pushed back to the underlying Shopify order. Never present
+  // otherwise (e.g. on a plain GET), so always optional here.
+  shopifyAmendStatus?: string;
+}
+
+// One DPD service actually available right now for an order's delivery
+// address and weight, per DPD's live "validate outbound services" lookup -
+// networkKey is what's sent back to DPD as the shipment's networkCode.
+export interface DpdServiceOption {
+  networkKey: string;
+  networkDesc: string;
+  serviceDesc: string;
+}
+
+// Response for the Service dropdown. `live` is true only when `services`
+// came straight from DPD's own live lookup just now; when that fails,
+// `services` falls back to the last list DPD returned successfully (from
+// any order) so the dropdown still has real options, `live` is false, and
+// `liveError` carries why the fresh check failed.
+export interface DpdServiceLookupResult {
+  services: DpdServiceOption[];
+  live: boolean;
+  liveError?: string;
 }
 
 export interface AcknowledgementResult {

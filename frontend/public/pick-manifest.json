@@ -1,0 +1,10 @@
+{
+  "name": "BNS Warehouse Picking",
+  "short_name": "BNS Pick",
+  "start_url": "/pick",
+  "scope": "/pick",
+  "display": "standalone",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "orientation": "portrait"
+}

@@ -2,10 +2,30 @@ package uk.co.bns.warehouse_api.service;
 
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xddf.usermodel.chart.AxisCrosses;
+import org.apache.poi.xddf.usermodel.chart.AxisPosition;
+import org.apache.poi.xddf.usermodel.chart.ChartTypes;
+import org.apache.poi.xddf.usermodel.chart.LegendPosition;
+import org.apache.poi.xddf.usermodel.chart.MarkerStyle;
+import org.apache.poi.xddf.usermodel.chart.XDDFCategoryAxis;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFChartLegend;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFDataSourcesFactory;
+import org.apache.poi.xddf.usermodel.chart.XDDFLineChartData;
+import org.apache.poi.xddf.usermodel.chart.XDDFNumericalDataSource;
+import org.apache.poi.xddf.usermodel.chart.XDDFValueAxis;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
+import org.apache.poi.xssf.usermodel.XSSFClientAnchor;
+import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import uk.co.bns.warehouse_api.dto.InvoicedMonthValue;
 import uk.co.bns.warehouse_api.entity.*;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
+import uk.co.bns.warehouse_api.enums.OrderType;
 import uk.co.bns.warehouse_api.enums.StockItemStatus;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.ProductRepository;
@@ -15,6 +35,7 @@ import uk.co.bns.warehouse_api.repository.StockMovementRepository;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -34,8 +55,19 @@ public class ReportService {
     private final StockItemRepository stockItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final OrderRepository orderRepository;
+    private final CompanyService companyService;
 
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    // "Invoiced" here means an order that actually represents money changing
+    // hands - ORDER (a normal sale) or CREDIT_REFUND (money back) - not a
+    // QUOTE, PAUSED order, or SCHEDULED order that was never placed, and not
+    // a CANCELLED order that was never actually fulfilled/invoiced.
+    private boolean countsAsInvoiced(Order order) {
+        return (order.getOrderType() == OrderType.ORDER || order.getOrderType() == OrderType.CREDIT_REFUND)
+                && order.getStatus() != OrderStatus.CANCELLED;
+    }
 
     public byte[] generateStockLevelsReport() {
         try (XSSFWorkbook workbook = new XSSFWorkbook()) {
@@ -248,6 +280,160 @@ public class ReportService {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * Monthly invoiced (ORDER) vs credited (CREDIT_REFUND) net value for one
+     * calendar year - the data behind the Dashboard's "Invoiced Values by
+     * Month" chart. Always returns exactly 12 entries (Jan-Dec), zero-filled
+     * for months with nothing invoiced, so the frontend never has to handle
+     * missing months.
+     */
+    public List<InvoicedMonthValue> invoicedValuesByMonth(int year) {
+        BigDecimal[] invoiceTotals = new BigDecimal[12];
+        BigDecimal[] creditTotals = new BigDecimal[12];
+        Arrays.fill(invoiceTotals, BigDecimal.ZERO);
+        Arrays.fill(creditTotals, BigDecimal.ZERO);
+
+        for (Order order : orderRepository.findAll()) {
+            if (!countsAsInvoiced(order)) continue;
+            if (order.getOrderDate() == null || order.getOrderDate().getYear() != year) continue;
+
+            int monthIndex = order.getOrderDate().getMonthValue() - 1;
+            BigDecimal value = companyService.orderTotal(order);
+            if (order.getOrderType() == OrderType.CREDIT_REFUND) {
+                creditTotals[monthIndex] = creditTotals[monthIndex].add(value);
+            } else {
+                invoiceTotals[monthIndex] = invoiceTotals[monthIndex].add(value);
+            }
+        }
+
+        List<InvoicedMonthValue> result = new ArrayList<>(12);
+        for (int m = 0; m < 12; m++) {
+            result.add(new InvoicedMonthValue(m + 1, invoiceTotals[m], creditTotals[m]));
+        }
+        return result;
+    }
+
+    /**
+     * The exportable version of the same data, one row per order (not
+     * aggregated by month) - filterable by invoice date range, invoice
+     * and/or credit, and a specific company, matching the old OrderWise
+     * "Invoiced Values by Month" report's own filters.
+     */
+    public byte[] generateInvoiceReport(LocalDate from, LocalDate to, boolean includeInvoices,
+                                         boolean includeCredits, Long companyId) {
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Invoice Report");
+            CellStyle headerStyle = headerStyle(workbook);
+
+            String[] headers = {"Order Number", "Invoice Date", "Type", "Customer Name", "Company", "Goods Net", "Delivery Net", "Total Net"};
+            writeHeaderRow(sheet, headers, headerStyle);
+
+            int[] widths = {4000, 4000, 3200, 7000, 7000, 3200, 3200, 3200};
+            setColumnWidths(sheet, widths);
+
+            LocalDateTime fromDt = from != null ? from.atStartOfDay() : LocalDateTime.MIN;
+            LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : LocalDateTime.MAX;
+
+            List<Order> orders = orderRepository.findAll().stream()
+                    .filter(this::countsAsInvoiced)
+                    .filter(o -> o.getOrderDate() != null && !o.getOrderDate().isBefore(fromDt) && o.getOrderDate().isBefore(toDt))
+                    .filter(o -> includeInvoices || o.getOrderType() != OrderType.ORDER)
+                    .filter(o -> includeCredits || o.getOrderType() != OrderType.CREDIT_REFUND)
+                    .filter(o -> companyId == null || (o.getCompany() != null && companyId.equals(o.getCompany().getId())))
+                    .sorted(Comparator.comparing(Order::getOrderDate))
+                    .toList();
+
+            int rowNum = 1;
+            for (Order o : orders) {
+                Row row = sheet.createRow(rowNum++);
+                row.createCell(0).setCellValue(o.getOrderNumber());
+                row.createCell(1).setCellValue(o.getOrderDate().format(DATE_FORMAT));
+                row.createCell(2).setCellValue(o.getOrderType() == OrderType.CREDIT_REFUND ? "Credit" : "Invoice");
+                row.createCell(3).setCellValue(o.getCustomerName());
+                row.createCell(4).setCellValue(o.getCompany() != null ? o.getCompany().getName() : "");
+                row.createCell(5).setCellValue(companyService.goodsTotal(o).doubleValue());
+                row.createCell(6).setCellValue(companyService.deliveryTotal(o).doubleValue());
+                row.createCell(7).setCellValue(companyService.orderTotal(o).doubleValue());
+            }
+
+            // A "by month" view only means something for a single calendar
+            // year, so the chart always covers the year the filter's "from"
+            // date falls in (or the current year, with no date filter set) -
+            // same basis as the Dashboard's own chart - rather than trying
+            // to chart an arbitrary custom date range month-by-month.
+            int chartYear = from != null ? from.getYear() : LocalDate.now().getYear();
+            addMonthlyChartSheet(workbook, chartYear, invoicedValuesByMonth(chartYear));
+
+            return toBytes(workbook);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * A second sheet alongside the row-by-row export: the same monthly
+     * invoiced-vs-credited figures as the Dashboard chart, as both a small
+     * data table and a native Excel line chart built from it (not a picture
+     * of a chart), so it can be opened, styled, or copied like any other
+     * Excel chart. The exact value for each point is in the data table
+     * immediately to its left rather than in an on-chart label - POI's
+     * high-level chart API (XDDF) doesn't expose a "show data labels"
+     * setter, and reaching around it via the raw OOXML schema classes
+     * (CTLineChart/CTDLbls) needs a dependency (poi-ooxml-full) that failed
+     * to resolve cleanly in this project's Docker build, so that approach
+     * was dropped rather than risk another broken build - see CHANGELOG.
+     */
+    private void addMonthlyChartSheet(XSSFWorkbook workbook, int year, List<InvoicedMonthValue> monthly) {
+        XSSFSheet dataSheet = workbook.createSheet("Monthly Chart");
+        CellStyle headerStyle = headerStyle(workbook);
+        writeHeaderRow(dataSheet, new String[]{"Month", "Invoiced", "Credited"}, headerStyle);
+        setColumnWidths(dataSheet, new int[]{3000, 3500, 3500});
+
+        String[] monthNames = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        for (int i = 0; i < monthly.size(); i++) {
+            InvoicedMonthValue m = monthly.get(i);
+            Row row = dataSheet.createRow(i + 1);
+            row.createCell(0).setCellValue(monthNames[m.month() - 1]);
+            row.createCell(1).setCellValue(m.invoiceTotal().doubleValue());
+            row.createCell(2).setCellValue(m.creditTotal().doubleValue());
+        }
+        int lastRow = monthly.size(); // header is row 0, data is rows 1..monthly.size()
+
+        XSSFDrawing drawing = dataSheet.createDrawingPatriarch();
+        XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, 4, 0, 16, 22);
+        XSSFChart chart = drawing.createChart(anchor);
+        chart.setTitleText("Invoiced Values by Month - " + year);
+        chart.setTitleOverlay(false);
+
+        XDDFChartLegend legend = chart.getOrAddLegend();
+        legend.setPosition(LegendPosition.BOTTOM);
+
+        XDDFCategoryAxis bottomAxis = chart.createCategoryAxis(AxisPosition.BOTTOM);
+        XDDFValueAxis leftAxis = chart.createValueAxis(AxisPosition.LEFT);
+        leftAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+
+        XDDFDataSource<String> monthLabels = XDDFDataSourcesFactory.fromStringCellRange(dataSheet,
+                new CellRangeAddress(1, lastRow, 0, 0));
+        XDDFNumericalDataSource<Double> invoicedValues = XDDFDataSourcesFactory.fromNumericCellRange(dataSheet,
+                new CellRangeAddress(1, lastRow, 1, 1));
+        XDDFNumericalDataSource<Double> creditedValues = XDDFDataSourcesFactory.fromNumericCellRange(dataSheet,
+                new CellRangeAddress(1, lastRow, 2, 2));
+
+        XDDFLineChartData chartData = (XDDFLineChartData) chart.createData(ChartTypes.LINE, bottomAxis, leftAxis);
+
+        XDDFLineChartData.Series invoicedSeries = (XDDFLineChartData.Series) chartData.addSeries(monthLabels, invoicedValues);
+        invoicedSeries.setTitle("Invoiced", null);
+        invoicedSeries.setSmooth(false);
+        invoicedSeries.setMarkerStyle(MarkerStyle.CIRCLE);
+
+        XDDFLineChartData.Series creditedSeries = (XDDFLineChartData.Series) chartData.addSeries(monthLabels, creditedValues);
+        creditedSeries.setTitle("Credited", null);
+        creditedSeries.setSmooth(false);
+        creditedSeries.setMarkerStyle(MarkerStyle.CIRCLE);
+
+        chart.plot(chartData);
     }
 
     private CellStyle headerStyle(Workbook workbook) {

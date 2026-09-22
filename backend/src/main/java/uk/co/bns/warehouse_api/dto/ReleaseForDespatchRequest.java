@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 public record ReleaseForDespatchRequest(
         BigDecimal shippingCost,
         String courierMethod,
+        String dpdNetworkKey,
         boolean overrideCreditHold,
         String overrideReason
 ) {}

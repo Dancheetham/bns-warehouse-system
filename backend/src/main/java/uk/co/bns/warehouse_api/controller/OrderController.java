@@ -60,7 +60,16 @@ public class OrderController {
     @PostMapping("/{id}/release-for-despatch")
     public Order releaseForDespatch(@PathVariable Long id, @RequestBody ReleaseForDespatchRequest request) {
         return orderService.releaseForDespatch(id, request.shippingCost(), request.courierMethod(),
-                request.overrideCreditHold(), request.overrideReason());
+                request.dpdNetworkKey(), request.overrideCreditHold(), request.overrideReason());
+    }
+
+    // Populates the "Service" dropdown on the order screen with whatever DPD
+    // actually has available right now for this order's delivery address and
+    // weight - never a static list, since DPD's own docs say these can change
+    // route to route and shouldn't be hardcoded.
+    @GetMapping("/{id}/dpd-services")
+    public uk.co.bns.warehouse_api.dto.DpdServiceLookupResult dpdServices(@PathVariable Long id) {
+        return dpdShippingService.listAvailableServices(orderService.findById(id));
     }
 
     @GetMapping("/{id}/credit-status")
@@ -98,17 +107,15 @@ public class OrderController {
         return dpdShippingService.createShipment(orderService.findById(id));
     }
 
-    // printerType/printerDpi/format follow DPD's own label API (see
-    // dpd-api-findings.md) - format defaults to plain HTML since that's the
-    // simplest thing for the browser to open and print directly with no
-    // extra plumbing; a thermal-label integration can request text/vnd.zebra-zpl
-    // instead once that's wired up to a specific printer.
-    @GetMapping(value = "/{id}/dpd-labels", produces = MediaType.TEXT_PLAIN_VALUE)
-    public ResponseEntity<String> getDpdLabels(@PathVariable Long id,
-                                                @RequestParam(defaultValue = "0") int printerType,
-                                                @RequestParam(defaultValue = "203") int printerDpi,
-                                                @RequestParam(defaultValue = "text/html") String format) {
-        DpdLabelResult result = dpdShippingService.getLabels(orderService.findById(id), printerType, printerDpi, format);
-        return ResponseEntity.ok(result.rawLabelData());
+    // Raw ZPL - the warehouse's actual thermal printer format - same as the
+    // despatch labels endpoint, so this manual "View/Print Label" button
+    // prints at the label's real physical size too, not scaled to a page.
+    @GetMapping("/{id}/dpd-labels")
+    public ResponseEntity<byte[]> getDpdLabels(@PathVariable Long id) {
+        DpdLabelResult result = dpdShippingService.getLabelsForPrint(orderService.findById(id));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + id + ".zpl\"")
+                .contentType(MediaType.valueOf("application/x-zpl"))
+                .body(result.rawLabelData().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 }

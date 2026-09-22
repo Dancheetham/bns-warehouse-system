@@ -42,7 +42,7 @@ class PrintHandler(http.server.BaseHTTPRequestHandler):
         # talking to this agent on localhost - needs CORS headers to be allowed.
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Printer-Name")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Printer-Name, X-Print-Format")
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -71,11 +71,20 @@ class PrintHandler(http.server.BaseHTTPRequestHandler):
             return
 
         content_length = int(self.headers.get("Content-Length", 0))
-        pdf_bytes = self.rfile.read(content_length)
+        body = self.rfile.read(content_length)
         printer_name = self.headers.get("X-Printer-Name", "").strip()
+        # "raw" = send the bytes straight to the printer untouched (used for
+        # DPD's ZPL shipping labels, so they print at the label's real
+        # physical size). Anything else (or missing) = the original PDF
+        # path via SumatraPDF, used for picking notes and the placeholder
+        # sample labels.
+        print_format = self.headers.get("X-Print-Format", "pdf").strip().lower()
 
         try:
-            self._print_pdf(pdf_bytes, printer_name)
+            if print_format == "raw":
+                self._print_raw(body, printer_name)
+            else:
+                self._print_pdf(body, printer_name)
             self.send_response(200)
             self._cors_headers()
             self.send_header("Content-Type", "application/json")
@@ -119,6 +128,36 @@ class PrintHandler(http.server.BaseHTTPRequestHandler):
                 os.remove(tmp_path)
             except OSError:
                 pass
+
+    def _print_raw(self, data: bytes, printer_name: str):
+        # Raw printer command data (ZPL, from DPD's thermal label format) -
+        # sent straight to the printer's own engine with the Windows RAW
+        # datatype, which skips GDI/driver reprocessing entirely. That's the
+        # whole point: a label sent this way always comes out at the label
+        # stock's real physical size, because nothing tries to scale it to
+        # a page the way printing HTML or a PDF through a normal driver
+        # does. Needs pywin32 (`pip install pywin32`) - the PDF path above
+        # doesn't need it, so it's only imported here, on demand.
+        try:
+            import win32print
+        except ImportError:
+            raise RuntimeError(
+                "Raw label printing needs the pywin32 package - install it on this "
+                "PC with 'pip install pywin32', then restart the agent."
+            )
+
+        printer = printer_name or win32print.GetDefaultPrinter()
+        handle = win32print.OpenPrinter(printer)
+        try:
+            job_id = win32print.StartDocPrinter(handle, 1, ("BNS Warehouse Label", None, "RAW"))
+            try:
+                win32print.StartPagePrinter(handle)
+                win32print.WritePrinter(handle, data)
+                win32print.EndPagePrinter(handle)
+            finally:
+                win32print.EndDocPrinter(handle)
+        finally:
+            win32print.ClosePrinter(handle)
 
     def log_message(self, format, *args):
         # Quieter than the default, which logs every request to stderr

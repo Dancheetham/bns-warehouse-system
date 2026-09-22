@@ -29,6 +29,7 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final CompanyService companyService;
     private final OrderReversalService orderReversalService;
+    private final ShopifyOrderAmendService shopifyOrderAmendService;
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -88,10 +89,20 @@ public class OrderService {
             throw new ConflictException(
                     "This was changed by someone else while you had it open - reload the page to see their changes, then try your edit again");
         }
+        // Snapshot taken before any field is touched, so the amend sync below
+        // is diffing genuine before/after state rather than something already
+        // overwritten by applyFields().
+        ShopifyOrderAmendService.Snapshot before = shopifyOrderAmendService.snapshot(order);
         applyFields(order, request);
         reconcileLines(order, request.lines());
         recomputePickingStatusIfMoreNeeded(order);
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        // Best-effort, never blocks or reverses the save above - see
+        // ShopifyOrderAmendService for why. Set directly on the entity being
+        // returned (not persisted - @Transient) purely so the caller/frontend
+        // can show the result of this one save.
+        saved.setShopifyAmendStatus(shopifyOrderAmendService.syncAmendments(saved, before));
+        return saved;
     }
 
     private void applyFields(Order order, OrderRequest request) {
@@ -129,7 +140,7 @@ public class OrderService {
      */
     @Transactional
     public Order releaseForDespatch(Long id, java.math.BigDecimal shippingCost, String courierMethod,
-                                     boolean overrideCreditHold, String overrideReason) {
+                                     String dpdNetworkKey, boolean overrideCreditHold, String overrideReason) {
         Order order = findById(id);
         if (order.getStatus() != uk.co.bns.warehouse_api.enums.OrderStatus.ON_HOLD) {
             throw new uk.co.bns.warehouse_api.exception.ValidationException(
@@ -154,6 +165,9 @@ public class OrderService {
         }
         if (courierMethod != null && !courierMethod.isBlank()) {
             order.setCourierMethod(courierMethod);
+        }
+        if (dpdNetworkKey != null && !dpdNetworkKey.isBlank()) {
+            order.setDpdNetworkKey(dpdNetworkKey);
         }
         order.setStatus(uk.co.bns.warehouse_api.enums.OrderStatus.AWAITING_DESPATCH);
         return orderRepository.save(order);

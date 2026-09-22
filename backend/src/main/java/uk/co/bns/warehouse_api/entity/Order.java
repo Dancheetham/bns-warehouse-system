@@ -103,6 +103,13 @@ public class Order {
     @Column(name = "courier_method")
     private String courierMethod;
 
+    // The DPD networkKey (e.g. "1^12") chosen from the live service dropdown
+    // on the order screen at release-for-despatch time. Despatch tries this
+    // exact service first (re-checked against DPD's live list, since
+    // availability can change), rather than re-resolving from scratch.
+    @Column(name = "dpd_network_key")
+    private String dpdNetworkKey;
+
     // Free-text, order-level (not per-line) - shown on the picking note below the
     // line items, separated by a rule, so the warehouse team sees it without it
     // getting lost among individual product notes.
@@ -152,6 +159,13 @@ public class Order {
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderLine> lines = new ArrayList<>();
+
+    // Not persisted - set only on the response to a save, to surface whether
+    // (and how) that save's changes were pushed back to the underlying
+    // Shopify order. Never read back from the database, so it's always null
+    // except immediately after OrderService.update() runs the sync.
+    @Transient
+    private String shopifyAmendStatus;
 
     @PrePersist
     void prePersist() {

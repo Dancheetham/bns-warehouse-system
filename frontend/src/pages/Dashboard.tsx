@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import { PurchaseOrder, Product, Order, OrderStatus } from "../types";
+import { InvoicedMonthValue, PurchaseOrder, Product, Order, OrderStatus } from "../types";
 import PieChart from "../components/PieChart";
+import MonthlyValueChart from "../components/MonthlyValueChart";
 
 const statusLabels: Record<OrderStatus, string> = {
   ON_HOLD: "On Hold",
@@ -36,6 +37,13 @@ export default function Dashboard() {
   const { data: orders } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => (await api.get<Order[]>("/orders")).data,
+  });
+
+  const currentYear = new Date().getFullYear();
+  const { data: invoicedValues } = useQuery({
+    queryKey: ["invoiced-values-by-month", currentYear],
+    queryFn: async () =>
+      (await api.get<InvoicedMonthValue[]>("/reports/invoiced-values-by-month", { params: { year: currentYear } })).data,
   });
 
   const awaitingStock = purchaseOrders?.filter(
@@ -84,6 +92,26 @@ export default function Dashboard() {
                 <span className="font-medium text-slate-800">{s.count}</span>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 mb-8">
+        <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between">
+          <h3 className="font-medium text-slate-700">Invoiced Values by Month - {currentYear}</h3>
+          <Link to="/reports/invoices" className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">
+            Invoice Reports →
+          </Link>
+        </div>
+        <div className="p-5">
+          <MonthlyValueChart data={invoicedValues ?? []} />
+          <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm inline-block bg-emerald-500" /> Invoiced
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm inline-block bg-rose-500" /> Credited
+            </span>
           </div>
         </div>
       </div>

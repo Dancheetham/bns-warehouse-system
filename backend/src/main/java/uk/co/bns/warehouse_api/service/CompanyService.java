@@ -67,13 +67,20 @@ public class CompanyService {
     }
 
     public BigDecimal orderTotal(Order order) {
-        BigDecimal total = order.getLines().stream()
+        return goodsTotal(order).add(deliveryTotal(order));
+    }
+
+    // Goods and delivery net split out separately (not just the combined
+    // orderTotal above) for the invoice reporting/chart, which mirrors the
+    // old OrderWise "Invoiced Values" report's own GoodsNet/DelNet columns.
+    public BigDecimal goodsTotal(Order order) {
+        return order.getLines().stream()
                 .map(this::lineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (order.getShippingCost() != null) {
-            total = total.add(order.getShippingCost());
-        }
-        return total;
+    }
+
+    public BigDecimal deliveryTotal(Order order) {
+        return order.getShippingCost() != null ? order.getShippingCost() : BigDecimal.ZERO;
     }
 
     private BigDecimal lineTotal(OrderLine line) {

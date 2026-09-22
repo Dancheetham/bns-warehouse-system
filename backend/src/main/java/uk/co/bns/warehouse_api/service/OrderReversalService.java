@@ -56,11 +56,23 @@ public class OrderReversalService {
             throw new ValidationException("Only a despatched order can be reversed to despatch");
         }
 
-        // TODO once DPD integration exists: void/cancel the real DPD shipment
-        // here too, not just our own records - a label will have already
-        // been generated and the parcel may be booked in for collection.
-        // Explicit, deliberate requirement (not an oversight) - noted here
-        // so it isn't lost when that integration is actually built.
+        // DPD's booking is genuinely undone here, on our side - clearing
+        // dpdShipmentId is what makes bookDpdShipment() at the next despatch
+        // confirmation treat this as a fresh booking again rather than its
+        // "already booked" guard silently skipping it and leaving the
+        // corrected order pointing at the stale shipment (wrong weight/
+        // parcel count/network, and whatever was printed off it) from
+        // before this reversal. DPD's own documented API has no cancel/void
+        // endpoint to call here (checked - only create shipment, fetch
+        // labels, and reference lookups exist), so the old shipment/labels
+        // still technically exist on DPD's side, uncancelled - if that
+        // matters (e.g. it was already scanned in for collection), it needs
+        // cancelling from DPD's own portal (myDPD), not from here.
+        order.setDpdShipmentId(null);
+        order.setDpdConsignmentNumber(null);
+        order.setDpdParcelNumbers(null);
+        order.setDpdShippedAt(null);
+        order.setDpdNetworkKey(null);
 
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
         for (StockItem item : items) {
@@ -127,6 +139,16 @@ public class OrderReversalService {
         order.setStatus(OrderStatus.ON_HOLD);
         order.setPickingStatus(PickingStatus.NOT_STARTED);
         order.setAcknowledgementSentAt(null);
+        // Same reasoning as reverseToDespatch() above - without this, an
+        // order cancelled and re-released would still carry its old DPD
+        // shipment reference, and bookDpdShipment()'s "already booked" guard
+        // would silently skip booking a real one for whatever it's used for
+        // next time round.
+        order.setDpdShipmentId(null);
+        order.setDpdConsignmentNumber(null);
+        order.setDpdParcelNumbers(null);
+        order.setDpdShippedAt(null);
+        order.setDpdNetworkKey(null);
         return orderRepository.save(order);
     }
 

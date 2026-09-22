@@ -1,7 +1,16 @@
 # BNS Print Agent
 
-Makes "Print Picking Note" genuinely silent - no new tab, no print dialog, no
-choosing a printer by hand. It sends straight to a named printer.
+Makes printing genuinely silent - no new tab, no print dialog, no choosing a
+printer by hand. It sends straight to a named printer. Handles two kinds of
+job:
+
+- **Picking notes and placeholder sample labels** - PDFs, printed via
+  SumatraPDF.
+- **DPD shipping labels** - raw ZPL (Zebra's label command language), sent
+  directly to the printer so it comes out at the label's real physical
+  size, rather than being scaled to a page the way a PDF or HTML label
+  would be. Needs a Zebra (or ZPL-compatible) label printer and the
+  pywin32 package - see step 3 below.
 
 ## Why this exists
 
@@ -30,7 +39,16 @@ printing system with no dialog.
    set SUMATRA_PATH=C:\wherever\you\put\it\SumatraPDF.exe
    ```
 
-3. **Run the agent:**
+3. **Install [pywin32](https://pypi.org/project/pywin32/)** if you'll be
+   printing DPD shipping labels (not needed for picking notes alone):
+   ```
+   pip install pywin32
+   ```
+   This is what lets the agent hand ZPL bytes straight to the printer with
+   no GDI/driver scaling in between - the actual fix for labels coming out
+   the wrong size.
+
+4. **Run the agent:**
    ```
    python agent.py
    ```
@@ -39,15 +57,21 @@ printing system with no dialog.
    BNS Print Agent listening on http://localhost:9191
    ```
 
-4. **Set the printer name** in the app itself: go to **Settings** in the
-   warehouse system and enter the exact Windows printer name (Settings →
-   Printers & Scanners on the PC will show you the exact name to copy). Leave
-   it blank to just use whatever the PC's default printer is.
+5. **Set the printer name** in the app itself: go to **Settings** in the
+   warehouse system, under DPD, and enter the exact Windows printer name for
+   "Shipping label printer" (Settings → Printers & Scanners on the PC will
+   show you the exact name to copy - for a USB-connected Zebra, this is
+   whatever name Windows gave it when the driver was installed). Leave it
+   blank to just use whatever the PC's default printer is. The same field
+   also sets the printer used for DPD shipping labels.
 
-5. **Test it**: open any order and click "Print Picking Note" - it should
-   print immediately with no dialog. If the agent isn't running, the app
-   falls back to opening the PDF in a new tab instead, so nothing is ever a
-   dead end.
+6. **Test it**: open any order and click "Print Picking Note" - it should
+   print immediately with no dialog. Then book a DPD shipment and print its
+   label - that one goes out as raw ZPL, so it should come out sized exactly
+   to the label, not scaled to a page. If the agent isn't running, picking
+   notes fall back to opening the PDF in a new tab instead, so that's never a
+   dead end - but a ZPL label needs the agent running, since a browser can't
+   render or print raw ZPL data itself.
 
 ## Running it automatically at Windows startup (optional)
 
@@ -61,9 +85,18 @@ shell:startup
 ## Troubleshooting
 
 - **"SumatraPDF not found"** - check the path in step 2 is correct.
+- **"Raw label printing needs the pywin32 package"** - run
+  `pip install pywin32` on the PC running the agent, then restart it.
 - **Nothing prints, no error** - check the printer name in Settings exactly
   matches what Windows calls it (case and spacing matter to some print
   drivers).
+- **DPD labels print but at the wrong size, or as garbled text/barcodes** -
+  this means the printer isn't a ZPL-compatible label printer, or its
+  Windows driver is intercepting and reprocessing the raw data instead of
+  passing it straight through. Check the printer's driver has a "raw"/pass-
+  through mode if one is offered, and confirm the DPI setting under Settings
+  → DPD matches the printer (203 vs 300 dpi) - a mismatch there can also
+  throw off barcode scaling.
 - **Browser can't reach the agent** - the agent only listens on `localhost`,
   so it must be running on the same PC as the browser tab that's printing.
   If your warehouse team uses a shared terminal, the agent needs to run on

@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Pushes despatch confirmation back to Shopify as a real Fulfillment record -
@@ -109,6 +110,17 @@ public class ShopifyFulfillmentService {
             JsonNode fulfillmentOrders = foResult.path("data").path("order").path("fulfillmentOrders").path("nodes");
             List<Map<String, Object>> lineItemsByFO = new ArrayList<>();
 
+            // Tracked purely so a failure can say *why* - "SKU not found at
+            // all on this Shopify order" is a different, more useful message
+            // than "SKU's on the order but Shopify has no remaining quantity
+            // left to fulfil" (the latter happens when an order was amended
+            // to a bigger quantity here after Shopify's own order - and an
+            // earlier despatch - already used up everything Shopify knows
+            // about; Shopify was never told about the extra units, so there's
+            // nothing left there to mark as fulfilled until its own order is
+            // edited to match).
+            Set<String> skusSeenOnShopify = new java.util.HashSet<>();
+
             for (JsonNode fo : fulfillmentOrders) {
                 String fulfillmentOrderId = fo.path("id").asText();
                 List<Map<String, Object>> matched = new ArrayList<>();
@@ -118,6 +130,7 @@ public class ShopifyFulfillmentService {
                     if (sku == null) continue;
                     Integer remainingToDespatch = despatchedQtyBySku.get(sku);
                     if (remainingToDespatch == null || remainingToDespatch <= 0) continue;
+                    skusSeenOnShopify.add(sku);
 
                     int remainingOnShopify = li.path("remainingQuantity").asInt(0);
                     int quantity = Math.min(remainingToDespatch, remainingOnShopify);
@@ -136,7 +149,27 @@ public class ShopifyFulfillmentService {
             }
 
             if (lineItemsByFO.isEmpty()) {
-                return "No matching Shopify fulfillment line items found (already fulfilled there, or SKUs don't match)";
+                List<String> notOnShopifyAtAll = new ArrayList<>();
+                List<String> exhaustedOnShopify = new ArrayList<>();
+                for (Map.Entry<String, Integer> entry : despatchedQtyBySku.entrySet()) {
+                    if (entry.getValue() <= 0) continue;
+                    (skusSeenOnShopify.contains(entry.getKey()) ? exhaustedOnShopify : notOnShopifyAtAll).add(entry.getKey());
+                }
+                if (!exhaustedOnShopify.isEmpty() && notOnShopifyAtAll.isEmpty()) {
+                    // The genuinely common case for an amended order: the SKU is
+                    // right there on the Shopify order, but Shopify shows nothing
+                    // left to fulfil - almost always because the order was
+                    // increased here (e.g. quantity bumped up after the first
+                    // despatch) without the underlying Shopify order being
+                    // amended to match, so Shopify has no record of the extra
+                    // units to mark as shipped.
+                    return "Shopify shows nothing left to fulfil for " + String.join(", ", exhaustedOnShopify)
+                            + " - likely because this order's quantity was increased here after Shopify's own order"
+                            + " (and an earlier despatch) already used up everything Shopify knew about. Edit the"
+                            + " quantity on the Shopify order itself to match, then this can be pushed";
+                }
+                return "No matching Shopify fulfillment line items found for " + String.join(", ", notOnShopifyAtAll.isEmpty() ? exhaustedOnShopify : notOnShopifyAtAll)
+                        + " (SKU not found on the Shopify order - check it matches exactly)";
             }
 
             Map<String, Object> fulfillmentInput = new LinkedHashMap<>();
