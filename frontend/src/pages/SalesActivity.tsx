@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { Order, OrderType } from "../types";
+import { Order, OrderStatus, OrderType } from "../types";
 import { formatDate } from "../utils/format";
-import { resolveStatusColors, statusLabel } from "../utils/statusColors";
+import { ORDER_STATUSES, resolveStatusColors, statusLabel } from "../utils/statusColors";
 
 const TYPE_STYLES: Record<OrderType, string> = {
   ORDER: "bg-slate-100 text-slate-600",
@@ -13,6 +13,18 @@ const TYPE_STYLES: Record<OrderType, string> = {
   CREDIT_REFUND: "bg-red-100 text-red-700",
   SCHEDULED: "bg-blue-100 text-blue-700",
 };
+
+// Same order they're already shown in via TYPE_STYLES above - reused here as
+// the full list of options for the Order Type filter dropdown.
+const ORDER_TYPES = Object.keys(TYPE_STYLES) as OrderType[];
+
+// Order ID and Order Date are the two columns worth sorting - both are
+// naturally-ordered values (a number, a date) where "first to last" has an
+// obvious meaning. The others are either free text (sorting them
+// alphabetically isn't particularly useful for this screen) or already
+// covered by their own filter dropdown instead.
+type SortField = "id" | "orderDate";
+type SortDirection = "asc" | "desc";
 
 const SEARCHABLE_FIELDS: (keyof Order)[] = [
   "orderNumber",
@@ -30,6 +42,27 @@ export default function SalesActivity() {
   const navigate = useNavigate();
   const [selected, setSelected] = useState<Order | null>(null);
   const [search, setSearch] = useState("");
+  // Defaults match the previous fixed behaviour (newest order date first) so
+  // nothing changes on screen until someone actually clicks a header or
+  // picks a filter.
+  const [sortField, setSortField] = useState<SortField>("orderDate");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
+  const [typeFilter, setTypeFilter] = useState<OrderType | "">("");
+
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  }
+
+  function sortIndicator(field: SortField) {
+    if (sortField !== field) return null;
+    return <span className="ml-1 text-slate-400">{sortDirection === "asc" ? "▲" : "▼"}</span>;
+  }
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ["orders"],
@@ -52,7 +85,7 @@ export default function SalesActivity() {
   const filtered = useMemo(() => {
     const list = orders ?? [];
     const term = search.trim().toLowerCase();
-    const matches = term
+    let matches = term
       ? list.filter(
           (order) =>
             SEARCHABLE_FIELDS.some((field) => {
@@ -61,8 +94,21 @@ export default function SalesActivity() {
             }) || (order.company?.name ?? "").toLowerCase().includes(term)
         )
       : list;
-    return [...matches].sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime());
-  }, [orders, search]);
+
+    if (statusFilter) {
+      matches = matches.filter((order) => order.status === statusFilter);
+    }
+    if (typeFilter) {
+      matches = matches.filter((order) => order.orderType === typeFilter);
+    }
+
+    const direction = sortDirection === "asc" ? 1 : -1;
+    return [...matches].sort((a, b) => {
+      const aValue = sortField === "id" ? a.id : new Date(a.orderDate).getTime();
+      const bValue = sortField === "id" ? b.id : new Date(b.orderDate).getTime();
+      return (aValue - bValue) * direction;
+    });
+  }, [orders, search, statusFilter, typeFilter, sortField, sortDirection]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -102,9 +148,19 @@ export default function SalesActivity() {
           </colgroup>
           <thead className="text-left text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
             <tr>
-              <th className="px-2 py-2">Order ID</th>
+              <th
+                className="px-2 py-2 cursor-pointer select-none hover:text-slate-700"
+                onClick={() => toggleSort("id")}
+              >
+                Order ID{sortIndicator("id")}
+              </th>
               <th className="px-2 py-2">Order Number</th>
-              <th className="px-2 py-2">Order Date</th>
+              <th
+                className="px-2 py-2 cursor-pointer select-none hover:text-slate-700"
+                onClick={() => toggleSort("orderDate")}
+              >
+                Order Date{sortIndicator("orderDate")}
+              </th>
               <th className="px-2 py-2">Company</th>
               <th className="px-2 py-2">PO Number</th>
               <th className="px-2 py-2">Ecommerce #</th>
@@ -115,6 +171,47 @@ export default function SalesActivity() {
               <th className="px-2 py-2">Country Code</th>
               <th className="px-2 py-2">Status</th>
               <th className="px-2 py-2">Order Type</th>
+            </tr>
+            <tr className="border-t border-slate-100 bg-white">
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2" />
+              <th className="px-2 pb-2">
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "")}
+                  className="w-full text-xs font-normal text-slate-600 border border-slate-300 rounded px-1 py-1 outline-none focus:border-emerald-500"
+                >
+                  <option value="">All statuses</option>
+                  {ORDER_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {statusLabel(status)}
+                    </option>
+                  ))}
+                </select>
+              </th>
+              <th className="px-2 pb-2">
+                <select
+                  value={typeFilter}
+                  onChange={(e) => setTypeFilter(e.target.value as OrderType | "")}
+                  className="w-full text-xs font-normal text-slate-600 border border-slate-300 rounded px-1 py-1 outline-none focus:border-emerald-500"
+                >
+                  <option value="">All types</option>
+                  {ORDER_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -128,7 +225,7 @@ export default function SalesActivity() {
             {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={13} className="px-2 py-4 text-slate-400">
-                  No orders match "{search}".
+                  {search ? `No orders match "${search}".` : "No orders match the current filters."}
                 </td>
               </tr>
             )}

@@ -5,6 +5,24 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.20] - 2026-09-22 (v0.085)
+
+### Added
+- Sales Activity's "Order ID" and "Order Date" column headers are now
+  clickable to sort - first click sorts ascending (oldest/lowest first),
+  clicking the same header again reverses it to descending, with a small
+  ▲/▼ arrow showing which column and direction is active. Default view is
+  unchanged (newest order date first) until someone actually clicks a
+  header. This also directly fixes the "Order IDs look out of order"
+  report - the list was always sorted by order date only, so the ID column
+  could look jumbled purely because a given order's date doesn't always
+  line up with the order it was created in; sorting by ID directly is now
+  one click away.
+- A filter dropdown under "Status" (all the same statuses used elsewhere in
+  the app) and another under "Order Type" - pick one to narrow the list to
+  just that status/type, or leave on "All" to show everything. Both filters
+  and the search box all combine together.
+
 ## [0.23.19] - 2026-09-22 (v0.084)
 
 ### Changed
