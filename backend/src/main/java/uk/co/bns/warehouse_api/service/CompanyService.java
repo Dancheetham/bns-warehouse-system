@@ -10,11 +10,14 @@ import uk.co.bns.warehouse_api.entity.Company;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Payment;
+import uk.co.bns.warehouse_api.entity.Ticket;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
+import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.CompanyRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.PaymentRepository;
+import uk.co.bns.warehouse_api.repository.TicketRepository;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -35,6 +38,7 @@ public class CompanyService {
     private final CompanyRepository companyRepository;
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
+    private final TicketRepository ticketRepository;
 
     public List<Company> findAll() {
         return companyRepository.findAll();
@@ -57,6 +61,28 @@ public class CompanyService {
         Company company = findById(id);
         apply(company, request);
         return companyRepository.save(company);
+    }
+
+    /**
+     * Checked up front (rather than just letting the FK constraint reject the
+     * delete) so the error names exactly what's still attached and how many -
+     * e.g. duplicate test/Shopify-imported companies with nothing real linked
+     * to them delete cleanly, but one with real order history is protected.
+     */
+    @Transactional
+    public void delete(Long id) {
+        Company company = findById(id);
+        List<Order> orders = orderRepository.findByCompany_Id(id);
+        if (!orders.isEmpty()) {
+            throw new ValidationException("Can't delete " + company.getName() + " - it still has "
+                    + orders.size() + " order(s) linked. Unlink or reassign those orders first.");
+        }
+        List<Ticket> tickets = ticketRepository.findByCompany_IdOrderByCreatedAtDesc(id);
+        if (!tickets.isEmpty()) {
+            throw new ValidationException("Can't delete " + company.getName() + " - it still has "
+                    + tickets.size() + " support ticket(s) linked. Unlink those tickets first.");
+        }
+        companyRepository.delete(company);
     }
 
     private void apply(Company company, CompanyRequest request) {

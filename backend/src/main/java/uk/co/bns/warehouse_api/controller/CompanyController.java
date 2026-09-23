@@ -37,4 +37,10 @@ public class CompanyController {
     public CompanyView update(@PathVariable Long id, @Valid @RequestBody CompanyRequest request) {
         return companyService.toView(companyService.update(id, request));
     }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) {
+        companyService.delete(id);
+    }
 }

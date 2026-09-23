@@ -41,6 +41,18 @@ function CompanyRow({ company }: { company: CompanyView }) {
     onError: (err: Error) => setError(err.message),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => api.delete(`/companies/${company.id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+      showToast("Deleted.");
+    },
+    // Shown as a page-level error rather than inline - the row itself is
+    // about to disappear on success, so there's nowhere inline left to put it
+    // once this fails and the row is still here.
+    onError: (err: Error) => setError(err.message),
+  });
+
   // Only fetched once expanded - a plain "how many tickets does this company
   // have" count for every row up front would mean one query per company on
   // every page load for no reason most of the time.
@@ -79,8 +91,25 @@ function CompanyRow({ company }: { company: CompanyView }) {
           >
             {editing ? "Cancel" : "Edit"}
           </button>
+          <button
+            onClick={() => {
+              if (
+                confirm(
+                  `Delete ${company.name}? This can't be undone. Blocked if it still has orders or support tickets linked.`
+                )
+              ) {
+                deleteMutation.mutate();
+              }
+            }}
+            disabled={deleteMutation.isPending}
+            className="text-xs text-red-500 hover:text-red-700 border border-red-200 rounded px-2 py-1 disabled:opacity-50"
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete"}
+          </button>
         </div>
       </div>
+
+      {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
 
       {showTickets && (
         <div className="mt-3 pt-3 border-t border-slate-100">
@@ -169,7 +198,6 @@ function CompanyRow({ company }: { company: CompanyView }) {
           >
             {updateMutation.isPending ? "Saving..." : "Save Changes"}
           </button>
-          {error && <p className="col-span-full text-sm text-red-600">{error}</p>}
         </form>
       )}
     </div>

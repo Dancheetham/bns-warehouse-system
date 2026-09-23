@@ -57,7 +57,9 @@ backend/       Spring Boot API (uk.co.bns.warehouse_api)
 frontend/      React + TypeScript + Tailwind - desktop app and the handheld PWA
 android-app/   Android Studio project - kiosk wrapper for the handheld PWA (source only, see android-app/README.md)
 print-agent/   Small local program for genuinely silent PDF printing (not part of the web app - browsers can't do this alone)
-docs/          BNS_Warehouse_Public_API.pdf - customer-facing API integration guide
+docs/          BNS_Warehouse_Public_API.pdf - customer-facing Stock API integration guide
+               BNS_Warehouse_Support_Tickets_API.pdf - Support Tickets API integration guide
+               BNS_Warehouse_User_Guide.pdf - internal end-to-end user guide
 docker-compose.yml
 ```
 

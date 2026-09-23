@@ -5,6 +5,24 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.28] - 2026-09-23 (v0.093)
+
+### Added
+- Support Tickets and RMAs are now grouped under a new **CRM** section in the
+  sidebar, separate from Sales.
+- Companies can now be **deleted** from the Companies page - blocked with a
+  clear message if the company still has orders or support tickets linked,
+  so a real account can't be removed by accident while duplicate/test
+  companies (e.g. an early manually-added "BNS Distribution" alongside one
+  Shopify created) delete cleanly.
+- `docs/BNS_Warehouse_Support_Tickets_API.pdf` - a standalone integration
+  guide for the Support Tickets public API, matching the style of the
+  existing Stock API document.
+- `docs/BNS_Warehouse_User_Guide.pdf` - a first-draft, in-depth end-to-end
+  user guide covering every screen in the system, with placeholder boxes
+  marking where real screenshots will go once there's browser access to
+  capture them.
+
 ## [0.23.27] - 2026-09-23 (v0.092)
 
 ### Added

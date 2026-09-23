@@ -1,5 +1,6 @@
 package uk.co.bns.warehouse_api.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -35,6 +36,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return build(HttpStatus.CONFLICT,
                 "This was changed by someone else while you had it open - reload the page to see their changes, then try your edit again");
+    }
+
+    // A last-resort safety net for a delete that gets past a service's own
+    // up-front checks (e.g. CompanyService.delete) but still hits a foreign
+    // key some other table holds - without this it would fall through to the
+    // generic 500 handler below and expose the raw DB/Hibernate error text.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        return build(HttpStatus.CONFLICT, "This can't be deleted because other records still reference it.");
     }
 
     @ExceptionHandler(ForbiddenException.class)
