@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { CompanyView, Order, TicketRequest, TicketStatus, TicketView } from "../types";
+import { CompanyView, ContactView, Order, TicketRequest, TicketStatus, TicketView } from "../types";
 import { useToast } from "../components/ToastContext";
 import { talkTimeLabel, TICKET_STATUSES, TICKET_STATUS_LABEL } from "./Tickets";
 
@@ -96,6 +96,8 @@ export default function TicketDetail() {
   const [companyName, setCompanyName] = useState<string | undefined>(undefined);
   const [orderId, setOrderId] = useState<number | undefined>(undefined);
   const [orderNumber, setOrderNumber] = useState<string | undefined>(undefined);
+  const [contactId, setContactId] = useState<number | undefined>(undefined);
+  const [contactName, setContactName] = useState<string | undefined>(undefined);
   const [newNote, setNewNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -113,6 +115,11 @@ export default function TicketDetail() {
   const { data: orders } = useQuery({
     queryKey: ["orders"],
     queryFn: async () => (await api.get<Order[]>("/orders")).data,
+  });
+
+  const { data: contacts } = useQuery({
+    queryKey: ["contacts"],
+    queryFn: async () => (await api.get<ContactView[]>("/contacts")).data,
   });
 
   useEffect(() => {
@@ -145,6 +152,8 @@ export default function TicketDetail() {
       setCompanyName(existingTicket.companyName);
       setOrderId(existingTicket.orderId);
       setOrderNumber(existingTicket.orderNumber);
+      setContactId(existingTicket.contactId);
+      setContactName(existingTicket.contactName);
     }
   }, [existingTicket]);
 
@@ -161,6 +170,7 @@ export default function TicketDetail() {
         talkTimeMinutes: totalTalkMinutes,
         companyId,
         orderId,
+        contactId,
       };
       if (isNew) {
         return api.post<TicketView>("/tickets", body);
@@ -240,6 +250,49 @@ export default function TicketDetail() {
             <input type="number" min={0} max={59} value={talkMinutes} onChange={(e) => setTalkMinutes(e.target.value)} className="input w-20" />
             <span className="text-sm text-slate-500">mins</span>
           </div>
+        </div>
+
+        <div>
+          {contactName ? (
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Contact</label>
+              <div className="flex items-center justify-between input bg-slate-50">
+                <span>{contactName}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContactId(undefined);
+                    setContactName(undefined);
+                  }}
+                  className="text-xs text-slate-400 hover:text-slate-700"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <LinkPicker
+              label="Link a contact"
+              items={contacts ?? []}
+              getLabel={(c) => c.name}
+              getSubLabel={(c) => c.companyName}
+              onSelect={(c: ContactView) => {
+                setContactId(c.id);
+                setContactName(c.name);
+                // Matches the backend default (TicketService.apply) -
+                // linking a contact fills in caller details and company too,
+                // unless already set.
+                if (!callerName) setCallerName(c.name);
+                if (!phone && c.phone) setPhone(c.phone);
+                if (!email && c.email) setEmail(c.email);
+                if (!companyId) {
+                  setCompanyId(c.companyId);
+                  setCompanyName(c.companyName);
+                }
+              }}
+              placeholder="Search contacts..."
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

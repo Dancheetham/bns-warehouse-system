@@ -11,6 +11,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     Optional<Ticket> findByTicketNumber(String ticketNumber);
     List<Ticket> findByCompany_IdOrderByCreatedAtDesc(Long companyId);
     List<Ticket> findByOrder_IdOrderByCreatedAtDesc(Long orderId);
+    List<Ticket> findByContact_IdOrderByCreatedAtDesc(Long contactId);
     List<Ticket> findAllByOrderByCreatedAtDesc();
 
     // Allocates the next ticket number atomically from the ticket_number_seq

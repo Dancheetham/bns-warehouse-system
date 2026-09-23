@@ -50,6 +50,14 @@ public class Ticket {
     @JsonIgnoreProperties({"lines", "company"})
     private Order order;
 
+    // Optional - the specific person who called, when known. Selecting a
+    // contact auto-fills caller name/phone/email/company client-side (see
+    // TicketDetail.tsx) but each of those stays independently editable.
+    @ManyToOne
+    @JoinColumn(name = "contact_id")
+    @JsonIgnoreProperties({"company"})
+    private Contact contact;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TicketStatus status = TicketStatus.IN_PROGRESS;

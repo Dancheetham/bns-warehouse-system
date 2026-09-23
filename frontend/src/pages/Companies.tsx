@@ -18,6 +18,11 @@ function CompanyRow({ company }: { company: CompanyView }) {
   const [notes, setNotes] = useState(company.notes ?? "");
   const [eoriNumber, setEoriNumber] = useState(company.eoriNumber ?? "");
   const [vatNumber, setVatNumber] = useState(company.vatNumber ?? "");
+  const [accountNumber, setAccountNumber] = useState(company.accountNumber ?? "");
+  const [onHold, setOnHold] = useState(company.onHold);
+  const [doNotUse, setDoNotUse] = useState(company.doNotUse);
+  const [gaps, setGaps] = useState(company.gaps);
+  const [gdms, setGdms] = useState(company.gdms);
   const [error, setError] = useState<string | null>(null);
 
   const updateMutation = useMutation({
@@ -29,6 +34,11 @@ function CompanyRow({ company }: { company: CompanyView }) {
         notes: notes || undefined,
         eoriNumber: eoriNumber || undefined,
         vatNumber: vatNumber || undefined,
+        accountNumber: accountNumber || undefined,
+        onHold,
+        doNotUse,
+        gaps,
+        gdms,
       };
       return api.put(`/companies/${company.id}`, body);
     },
@@ -66,7 +76,19 @@ function CompanyRow({ company }: { company: CompanyView }) {
     <div className="px-4 py-3 hover:bg-slate-50">
       <div className="flex justify-between items-center">
         <div>
-          <p className="font-medium text-slate-800">{company.name}</p>
+          <p className="font-medium text-slate-800">
+            {company.name}
+            {company.onHold && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">
+                On Hold
+              </span>
+            )}
+            {company.doNotUse && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full border bg-red-50 text-red-700 border-red-200">
+                Do Not Use
+              </span>
+            )}
+          </p>
           {company.creditLimit != null ? (
             <p className={`text-sm ${company.overLimit ? "text-red-600 font-medium" : "text-slate-500"}`}>
               {company.creditUsed?.toFixed(2)} used of {company.creditLimit.toFixed(2)} limit (
@@ -79,6 +101,12 @@ function CompanyRow({ company }: { company: CompanyView }) {
           {company.eoriNumber && <p className="text-xs text-slate-400">EORI: {company.eoriNumber}</p>}
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => navigate(`/contacts?companyId=${company.id}`)}
+            className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 rounded px-2 py-1"
+          >
+            Contacts
+          </button>
           <button
             onClick={() => setShowTickets((v) => !v)}
             className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 rounded px-2 py-1"
@@ -191,6 +219,33 @@ function CompanyRow({ company }: { company: CompanyView }) {
             <label className="block text-xs font-medium text-slate-500 mb-1">VAT Number</label>
             <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="input" />
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Account Number</label>
+            <input
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder="OrderWise account code"
+              className="input"
+            />
+          </div>
+          <div className="col-span-2 md:col-span-4 flex flex-wrap gap-4 pt-1">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={onHold} onChange={(e) => setOnHold(e.target.checked)} />
+              On Hold (credit hold - stop processing new orders)
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={doNotUse} onChange={(e) => setDoNotUse(e.target.checked)} />
+              Do Not Use
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={gaps} onChange={(e) => setGaps(e.target.checked)} />
+              GAPS
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={gdms} onChange={(e) => setGdms(e.target.checked)} />
+              GDMS
+            </label>
+          </div>
           <button
             type="submit"
             disabled={updateMutation.isPending}
@@ -211,11 +266,17 @@ export default function Companies() {
   const [name, setName] = useState("");
   const [creditLimit, setCreditLimit] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [onHoldFilter, setOnHoldFilter] = useState(false);
+  const [doNotUseFilter, setDoNotUseFilter] = useState(false);
 
   const { data: companies, isLoading } = useQuery({
     queryKey: ["companies"],
     queryFn: async () => (await api.get<CompanyView[]>("/companies")).data,
   });
+
+  const filteredCompanies = companies?.filter(
+    (c) => (!onHoldFilter || c.onHold) && (!doNotUseFilter || c.doNotUse)
+  );
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -282,12 +343,23 @@ export default function Companies() {
         </form>
       )}
 
+      <div className="flex gap-4 mb-4">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={onHoldFilter} onChange={(e) => setOnHoldFilter(e.target.checked)} />
+          On Hold only
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={doNotUseFilter} onChange={(e) => setDoNotUseFilter(e.target.checked)} />
+          Do Not Use only
+        </label>
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 divide-y divide-slate-100 overflow-hidden">
         {isLoading && <p className="px-4 py-4 text-slate-400 text-sm">Loading...</p>}
-        {!isLoading && companies?.length === 0 && (
-          <p className="px-4 py-4 text-slate-400 text-sm">No companies yet.</p>
+        {!isLoading && filteredCompanies?.length === 0 && (
+          <p className="px-4 py-4 text-slate-400 text-sm">No companies match.</p>
         )}
-        {companies?.map((c) => (
+        {filteredCompanies?.map((c) => (
           <CompanyRow key={c.id} company={c} />
         ))}
       </div>

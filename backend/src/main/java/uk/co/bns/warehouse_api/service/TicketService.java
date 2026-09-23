@@ -10,12 +10,14 @@ import uk.co.bns.warehouse_api.dto.TicketRequest;
 import uk.co.bns.warehouse_api.dto.TicketSummaryView;
 import uk.co.bns.warehouse_api.dto.TicketView;
 import uk.co.bns.warehouse_api.entity.Company;
+import uk.co.bns.warehouse_api.entity.Contact;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.Ticket;
 import uk.co.bns.warehouse_api.entity.TicketEntry;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.CompanyRepository;
+import uk.co.bns.warehouse_api.repository.ContactRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.TicketEntryRepository;
 import uk.co.bns.warehouse_api.repository.TicketRepository;
@@ -41,6 +43,7 @@ public class TicketService {
     private final TicketEntryRepository ticketEntryRepository;
     private final CompanyRepository companyRepository;
     private final OrderRepository orderRepository;
+    private final ContactRepository contactRepository;
 
     public List<Ticket> findAll() {
         return ticketRepository.findAllByOrderByCreatedAtDesc();
@@ -62,6 +65,10 @@ public class TicketService {
 
     public List<Ticket> findByOrder(Long orderId) {
         return ticketRepository.findByOrder_IdOrderByCreatedAtDesc(orderId);
+    }
+
+    public List<Ticket> findByContact(Long contactId) {
+        return ticketRepository.findByContact_IdOrderByCreatedAtDesc(contactId);
     }
 
     @Transactional
@@ -89,6 +96,22 @@ public class TicketService {
         }
         ticket.setTalkTimeMinutes(request.talkTimeMinutes() != null ? request.talkTimeMinutes() : ticket.getTalkTimeMinutes());
 
+        if (request.contactId() != null) {
+            Contact contact = contactRepository.findById(request.contactId())
+                    .orElseThrow(() -> new NotFoundException("Contact " + request.contactId() + " not found"));
+            ticket.setContact(contact);
+        } else {
+            ticket.setContact(null);
+        }
+
+        Long effectiveCompanyId = request.companyId();
+        if (effectiveCompanyId == null && request.contactId() != null && ticket.getContact() != null) {
+            // A ticket linked to a contact defaults to that contact's own
+            // company when no company was explicitly chosen - mirrors the
+            // order->company default below.
+            effectiveCompanyId = ticket.getContact().getCompany().getId();
+        }
+
         if (request.orderId() != null) {
             Order order = orderRepository.findById(request.orderId())
                     .orElseThrow(() -> new NotFoundException("Order " + request.orderId() + " not found"));
@@ -96,17 +119,16 @@ public class TicketService {
             // A ticket about a specific order defaults to that order's own
             // company when no company was explicitly chosen, rather than
             // leaving the ticket unlinked from the account it's actually about.
-            if (request.companyId() == null && order.getCompany() != null) {
-                ticket.setCompany(order.getCompany());
-                return;
+            if (effectiveCompanyId == null && order.getCompany() != null) {
+                effectiveCompanyId = order.getCompany().getId();
             }
         } else {
             ticket.setOrder(null);
         }
 
-        if (request.companyId() != null) {
-            Company company = companyRepository.findById(request.companyId())
-                    .orElseThrow(() -> new NotFoundException("Company " + request.companyId() + " not found"));
+        if (effectiveCompanyId != null) {
+            Company company = companyRepository.findById(effectiveCompanyId)
+                    .orElseThrow(() -> new NotFoundException("Company " + effectiveCompanyId + " not found"));
             ticket.setCompany(company);
         } else {
             ticket.setCompany(null);
@@ -182,6 +204,8 @@ public class TicketService {
                 ticket.getCompany() != null ? ticket.getCompany().getName() : null,
                 ticket.getOrder() != null ? ticket.getOrder().getId() : null,
                 ticket.getOrder() != null ? ticket.getOrder().getOrderNumber() : null,
+                ticket.getContact() != null ? ticket.getContact().getId() : null,
+                ticket.getContact() != null ? ticket.getContact().getName() : null,
                 ticket.getStatus(), ticket.getTalkTimeMinutes(), ticket.getCreatedAt(), ticket.getUpdatedAt());
     }
 
@@ -196,6 +220,8 @@ public class TicketService {
                 ticket.getCompany() != null ? ticket.getCompany().getName() : null,
                 ticket.getOrder() != null ? ticket.getOrder().getId() : null,
                 ticket.getOrder() != null ? ticket.getOrder().getOrderNumber() : null,
+                ticket.getContact() != null ? ticket.getContact().getId() : null,
+                ticket.getContact() != null ? ticket.getContact().getName() : null,
                 ticket.getStatus(), ticket.getTalkTimeMinutes(), ticket.getCreatedAt(), ticket.getUpdatedAt(), entries);
     }
 }

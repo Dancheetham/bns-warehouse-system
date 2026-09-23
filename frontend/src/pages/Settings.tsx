@@ -942,6 +942,20 @@ export default function Settings() {
         </Link>
       </div>
 
+      <div className="bg-white border border-amber-200 rounded-lg p-5 mt-8">
+        <h3 className="font-medium text-amber-700 mb-1">Company &amp; Contact Import</h3>
+        <p className="text-sm text-slate-500 mb-3">
+          Bulk create/update Companies and their Contacts from an OrderWise customer export - stays available for
+          re-runs as OrderWise data changes, not just a one-off go-live tool.
+        </p>
+        <Link
+          to="/settings/company-import"
+          className="inline-block bg-slate-800 text-white text-sm px-4 py-2 rounded-md hover:bg-slate-700"
+        >
+          Open Company Import
+        </Link>
+      </div>
+
       {testDataResetStatus?.enabled && (
         <div className="bg-white border border-red-200 rounded-lg p-5 mt-8">
           <h3 className="font-medium text-red-700 mb-1">Danger Zone - Reset Test Data</h3>

@@ -467,6 +467,14 @@ export interface CompanyView {
   // orders when shipping to a customs country (e.g. Ireland).
   eoriNumber?: string;
   vatNumber?: string;
+  // The OrderWise "Account number" code - used as the bulk import match key.
+  accountNumber?: string;
+  // Credit hold - stops processing any more of this company's orders until
+  // cleared. Distinct from the computed overLimit below.
+  onHold: boolean;
+  doNotUse: boolean;
+  gaps: boolean;
+  gdms: boolean;
   creditUsed?: number;
   creditAvailable?: number;
   overLimit: boolean;
@@ -479,6 +487,11 @@ export interface CompanyRequest {
   notes?: string;
   eoriNumber?: string;
   vatNumber?: string;
+  accountNumber?: string;
+  onHold?: boolean;
+  doNotUse?: boolean;
+  gaps?: boolean;
+  gdms?: boolean;
 }
 
 export interface InvoicedMonthValue {
@@ -650,6 +663,8 @@ export interface TicketSummaryView {
   companyName?: string;
   orderId?: number;
   orderNumber?: string;
+  contactId?: number;
+  contactName?: string;
   status: TicketStatus;
   talkTimeMinutes: number;
   createdAt: string;
@@ -667,6 +682,51 @@ export interface TicketRequest {
   email?: string;
   companyId?: number;
   orderId?: number;
+  contactId?: number;
   status?: TicketStatus;
   talkTimeMinutes?: number;
+}
+
+export interface ContactView {
+  id: number;
+  companyId: number;
+  companyName: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  position?: string;
+  mainContact: boolean;
+  active: boolean;
+}
+
+export interface ContactRequest {
+  companyId: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  position?: string;
+  mainContact?: boolean;
+  active?: boolean;
+}
+
+export interface CompanyImportPreview {
+  totalCompanyRows: number;
+  totalContactRows: number;
+  companiesToCreate: number;
+  companiesToUpdate: number;
+  contactsToCreate: number;
+  contactsToUpdate: number;
+  unmatchedContactCodes: string[];
+  edgeCaseNotes: string[];
+  errors: string[];
+}
+
+export interface CompanyImportResult {
+  success: boolean;
+  companiesCreated: number;
+  companiesUpdated: number;
+  contactsCreated: number;
+  contactsUpdated: number;
+  contactsSkipped: number;
+  errors: string[];
 }

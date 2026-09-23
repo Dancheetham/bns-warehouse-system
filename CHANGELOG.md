@@ -5,6 +5,37 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.29] - 2026-09-23 (v0.094)
+
+### Added
+- New **Contacts** feature under CRM - people at a company, kept permanently
+  (not just an import artifact) so they're searchable and linkable when
+  opening a support ticket. Each Contact belongs to a Company, and links back
+  to it just like Support Tickets already do.
+- Companies now have a **Contacts** button per row, taking you to the
+  Contacts list pre-filtered to that company. Contacts have the same link
+  back to their company, and a **Tickets** toggle of their own.
+- Support Tickets can now optionally link to a specific **Contact** as well
+  as/instead of a bare Company - selecting a contact auto-fills caller
+  name/phone/email and the linked company (all still independently
+  editable), the same way linking an order already auto-fills the company.
+- Companies now carry four new fields from the OrderWise export: **On
+  Hold** (a credit hold - stop processing new orders until cleared, distinct
+  from the existing over-credit-limit block), **Do Not Use**, and the
+  **GAPS**/**GDMS** tick-boxes (kept for a report to be built later). The
+  Companies page has new On Hold / Do Not Use filters - these accounts are
+  never excluded from anything, just filterable.
+- New **Company & Contact Import** (Settings > Company & Contact Import) -
+  bulk create/update of Companies and their Contacts from an OrderWise
+  customer export (two spreadsheets: customer list + customer contact
+  details), matched by Account number / CustomerCode. Same preview-then-
+  confirm pattern as Bulk Stock Import. A contact whose CustomerCode doesn't
+  match any company is skipped and reported, never guessed at.
+- Contact records carry two fields (Shopify customer ID, invited-to-Shopify
+  date) that aren't used yet - added now so a future Shopify B2B "Company
+  Contacts" sync and invitation-email feature won't need another schema
+  change.
+
 ## [0.23.28] - 2026-09-23 (v0.093)
 
 ### Added

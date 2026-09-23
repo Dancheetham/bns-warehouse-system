@@ -17,6 +17,7 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     heading: "CRM",
     items: [
       { to: "/tickets", label: "Support Tickets" },
+      { to: "/contacts", label: "Contacts" },
       { to: "/rmas", label: "RMAs" },
     ],
   },

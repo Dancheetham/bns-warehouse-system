@@ -64,4 +64,9 @@ public class TicketController {
     public List<TicketSummaryView> byOrder(@PathVariable Long orderId) {
         return ticketService.findByOrder(orderId).stream().map(ticketService::toSummaryView).toList();
     }
+
+    @GetMapping("/by-contact/{contactId}")
+    public List<TicketSummaryView> byContact(@PathVariable Long contactId) {
+        return ticketService.findByContact(contactId).stream().map(ticketService::toSummaryView).toList();
+    }
 }

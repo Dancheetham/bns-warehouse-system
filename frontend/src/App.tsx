@@ -37,6 +37,8 @@ import RmaInbox from "./pages/RmaInbox";
 import RmaDetail from "./pages/RmaDetail";
 import Tickets from "./pages/Tickets";
 import TicketDetail from "./pages/TicketDetail";
+import Contacts from "./pages/Contacts";
+import CompanyImport from "./pages/CompanyImport";
 
 export default function App() {
   return (
@@ -86,6 +88,7 @@ export default function App() {
             <Route path="/rmas/:id" element={<RmaDetail />} />
             <Route path="/tickets" element={<Tickets />} />
             <Route path="/tickets/:id" element={<TicketDetail />} />
+            <Route path="/contacts" element={<Contacts />} />
             <Route path="/stock-movement" element={<StockMovement />} />
             <Route path="/stock-overview" element={<StockOverview />} />
             <Route path="/trace" element={<StockTrace />} />
@@ -96,6 +99,7 @@ export default function App() {
             <Route path="/bug-reports" element={<BugReports />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/settings/stock-import" element={<StockImport />} />
+            <Route path="/settings/company-import" element={<CompanyImport />} />
             <Route path="/shopify-sync" element={<ShopifySync />} />
           </Route>
         </Route>

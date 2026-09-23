@@ -10,6 +10,11 @@ public record CompanyView(
         String notes,
         String eoriNumber,
         String vatNumber,
+        String accountNumber,
+        boolean onHold,
+        boolean doNotUse,
+        boolean gaps,
+        boolean gdms,
         // Only present when creditLimit is set - the running total of unpaid
         // order value, matching the OrderWise "amount owing" figure.
         BigDecimal creditUsed,

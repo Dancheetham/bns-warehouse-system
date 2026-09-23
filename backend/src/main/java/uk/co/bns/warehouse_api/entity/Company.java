@@ -41,6 +41,30 @@ public class Company {
     @Column(name = "vat_number")
     private String vatNumber;
 
+    // The OrderWise "Account number" code - kept as the match key for the
+    // bulk company/contact importer (and any later Shopify sync), not
+    // currently shown/edited anywhere else.
+    @Column(name = "account_number")
+    private String accountNumber;
+
+    // Credit hold - stops us processing any more of this company's orders
+    // until it's cleared. Distinct from the existing per-order
+    // over-credit-limit block: this is a manual OrderWise-sourced flag, not
+    // computed from the running balance.
+    @Column(name = "on_hold", nullable = false)
+    private boolean onHold = false;
+
+    @Column(name = "do_not_use", nullable = false)
+    private boolean doNotUse = false;
+
+    // Tick-box columns carried over verbatim from the OrderWise export,
+    // needed for a report to be built later.
+    @Column(nullable = false)
+    private boolean gaps = false;
+
+    @Column(nullable = false)
+    private boolean gdms = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

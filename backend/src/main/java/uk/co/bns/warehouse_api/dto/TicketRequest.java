@@ -10,6 +10,7 @@ public record TicketRequest(
         String email,
         Long companyId,
         Long orderId,
+        Long contactId,
         TicketStatus status,
         // Total minutes on the phone so far - null on create means "start at 0",
         // not "leave unset", since the column itself is non-nullable.

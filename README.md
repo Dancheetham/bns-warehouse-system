@@ -88,7 +88,16 @@ configurable return windows, and a cover sheet PDF.
 **B2B credit control** - Companies with an optional credit limit, a Payments
 ledger recorded against specific orders, a live credit-used calculation, and
 release-for-despatch blocking when a company is over its limit (with a
-required-reason override that's logged).
+required-reason override that's logged). Companies also carry an On Hold
+(credit hold) flag, a Do Not Use flag, and GAPS/GDMS tick-boxes imported
+from OrderWise, all filterable on the Companies page.
+
+**CRM** - Support Tickets (sequential ticket numbers, company/order/contact
+linking, a dated timeline, and a public API for a call-transcription/CRM
+import integration - `docs/BNS_Warehouse_Support_Tickets_API.pdf`), RMAs, and
+a permanent **Contacts** list (people at a company, searchable and linkable
+when opening a ticket), plus a Company & Contact bulk importer from an
+OrderWise customer export.
 
 **User accounts** - session-based login, a dedicated login page with a
 "remembered accounts" quick-switcher for shared devices (names only, never

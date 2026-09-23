@@ -16,6 +16,8 @@ public record TicketView(
         String companyName,
         Long orderId,
         String orderNumber,
+        Long contactId,
+        String contactName,
         TicketStatus status,
         Integer talkTimeMinutes,
         LocalDateTime createdAt,

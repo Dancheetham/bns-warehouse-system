@@ -92,6 +92,21 @@ public class CompanyService {
         company.setNotes(request.notes());
         company.setEoriNumber(request.eoriNumber());
         company.setVatNumber(request.vatNumber());
+        if (request.accountNumber() != null) {
+            company.setAccountNumber(request.accountNumber());
+        }
+        if (request.onHold() != null) {
+            company.setOnHold(request.onHold());
+        }
+        if (request.doNotUse() != null) {
+            company.setDoNotUse(request.doNotUse());
+        }
+        if (request.gaps() != null) {
+            company.setGaps(request.gaps());
+        }
+        if (request.gdms() != null) {
+            company.setGdms(request.gdms());
+        }
     }
 
     public BigDecimal orderTotal(Order order) {
@@ -144,14 +159,17 @@ public class CompanyService {
         if (company.getCreditLimit() == null) {
             return new CompanyView(company.getId(), company.getName(), null,
                     company.getShopifyCompanyId(), company.getNotes(),
-                    company.getEoriNumber(), company.getVatNumber(), null, null, false);
+                    company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
+                    company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
+                    null, null, false);
         }
         BigDecimal used = creditUsed(company.getId());
         BigDecimal available = company.getCreditLimit().subtract(used);
         return new CompanyView(company.getId(), company.getName(), company.getCreditLimit(),
                 company.getShopifyCompanyId(), company.getNotes(),
-                company.getEoriNumber(), company.getVatNumber(), used, available,
-                available.compareTo(BigDecimal.ZERO) < 0);
+                company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
+                company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
+                used, available, available.compareTo(BigDecimal.ZERO) < 0);
     }
 
     /** The banner shown whenever a linked order is opened. */

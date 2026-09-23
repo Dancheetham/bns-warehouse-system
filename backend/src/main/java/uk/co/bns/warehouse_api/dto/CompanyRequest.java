@@ -14,5 +14,12 @@ public record CompanyRequest(
         // company's orders ship to a customs country (e.g. Ireland) - see
         // Company.java.
         String eoriNumber,
-        String vatNumber
+        String vatNumber,
+        // The OrderWise "Account number" code - see Company.java.
+        String accountNumber,
+        // Credit hold - see Company.onHold.
+        Boolean onHold,
+        Boolean doNotUse,
+        Boolean gaps,
+        Boolean gdms
 ) {}
