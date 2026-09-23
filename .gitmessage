@@ -1,16 +1,18 @@
-v0.088: DPD customs - send DAP incoterms and Company EORI/VAT as importer details
+v0.089: fix DPD exporter/importer/collection address nesting, add full sender address fields, collapsible Settings
 
-- invoice.termsOfDelivery now sent as DAP on every Irish/customs DPD shipment,
-  confirmed against DPD's own live API schema (browsed developers.api.dpd.co.uk,
-  not guessable from generic Incoterms docs).
-- Company gains EORI/VAT number fields (Companies page), sent as
-  invoice.importerDetails.eoriNumber/vatNumber for orders linked to that
-  company - BNS is the exporter, the linked company is the importer of
-  record, confirmed against a real DPD commercial invoice example.
-- Booking a customs shipment for an order linked to a company with no EORI
-  set now stops with a clear message instead of DPD silently missing it.
-- Updated the project's dpd-api-findings.md with the confirmed schema.
+- DPD's party blocks (collectionDetails, deliveryDetails, exporterDetails,
+  importerDetails) all nest address/contactDetails objects; we were sending
+  exporter, importer and collection fields flat. That is what produced
+  "Exporter address is mandatory" despite Settings being fully populated,
+  and meant the collection address was silently ignored in favour of the
+  DPD account default. Rebuilt against DPD's published schema.
+- Phone numbers stripped to digits (keeping a leading +) and trimmed to 15
+  chars, matching DPD's telephone pattern - spaces/brackets were liable to
+  get a whole shipment rejected.
+- Settings > DPD gains address lines 2 and 4 (locality/county) and a sender
+  VAT number; the sender email field is removed as DPD has no such field.
+- Settings page: collapsible sections, full page width, floating Save.
 
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
 

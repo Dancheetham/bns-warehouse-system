@@ -286,8 +286,8 @@ public class DpdShippingService {
             // validation was added alongside for the fuller reasoning.
             List<String> missingSenderFields = new java.util.ArrayList<>();
             if (settingsService.get("dpd_sender_organisation", "").isBlank()) missingSenderFields.add("organisation");
-            if (settingsService.get("dpd_sender_street", "").isBlank()) missingSenderFields.add("street");
-            if (settingsService.get("dpd_sender_town", "").isBlank()) missingSenderFields.add("town");
+            if (settingsService.get("dpd_sender_street", "").isBlank()) missingSenderFields.add("address line 1");
+            if (settingsService.get("dpd_sender_town", "").isBlank()) missingSenderFields.add("address line 3 (town)");
             if (settingsService.get("dpd_sender_postcode", "").isBlank()) missingSenderFields.add("postcode");
             if (settingsService.get("dpd_sender_contact_name", "").isBlank()) missingSenderFields.add("contact name");
             if (settingsService.get("dpd_sender_contact_phone", "").isBlank()) missingSenderFields.add("contact phone");
@@ -336,28 +336,34 @@ public class DpdShippingService {
 
         String senderOrganisation = settingsService.get("dpd_sender_organisation", "");
         String senderStreet = settingsService.get("dpd_sender_street", "");
+        String senderLocality = settingsService.get("dpd_sender_locality", "");
         String senderTown = settingsService.get("dpd_sender_town", "");
+        String senderCounty = settingsService.get("dpd_sender_county", "");
         String senderPostcode = settingsService.get("dpd_sender_postcode", "");
         String senderCountryCode = settingsService.get("dpd_sender_country_code", "GB");
         String senderContactName = settingsService.get("dpd_sender_contact_name", "");
         String senderContactPhone = settingsService.get("dpd_sender_contact_phone", "");
-        String senderContactEmail = settingsService.get("dpd_sender_contact_email", "");
 
         ObjectNode consignment = root.putObject("outboundConsignment");
 
+        // DPD nests the address and contact under collectionDetails rather
+        // than taking them flat - sending them flat (as this used to) means
+        // DPD silently ignores them entirely and falls back to whatever
+        // collection address is set on the account, which is why UK
+        // shipments still worked despite this being wrong. Same nesting
+        // applies to deliveryDetails (already correct below) and to the
+        // customs invoice's exporter/importer blocks further down.
         ObjectNode collectionDetails = consignment.putObject("collectionDetails");
-        collectionDetails.put("organisation", senderOrganisation);
-        collectionDetails.put("street", senderStreet);
-        collectionDetails.put("town", senderTown);
-        collectionDetails.put("postcode", senderPostcode);
-        collectionDetails.put("countryCode", senderCountryCode);
-        collectionDetails.put("contactName", senderContactName);
-        collectionDetails.put("telephone", senderContactPhone);
+        putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
+                senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
+        ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
+        collectionContact.put("contactName", senderContactName);
+        collectionContact.put("telephone", dpdPhone(senderContactPhone));
 
         ObjectNode deliveryDetails = consignment.putObject("deliveryDetails");
         ObjectNode deliveryContact = deliveryDetails.putObject("contactDetails");
         deliveryContact.put("contactName", order.getDeliveryName());
-        deliveryContact.put("telephone", order.getDeliveryPhone() != null ? order.getDeliveryPhone() : "");
+        deliveryContact.put("telephone", dpdPhone(order.getDeliveryPhone()));
 
         ObjectNode deliveryAddress = deliveryDetails.putObject("address");
         deliveryAddress.put("organisation", order.getDeliveryName() != null ? order.getDeliveryName() : "");
@@ -436,24 +442,37 @@ public class DpdShippingService {
             // done for us.
             invoice.put("termsOfDelivery", "DAP");
 
+            // Both of these need their address and contact nested in their
+            // own objects, exactly like collectionDetails/deliveryDetails
+            // above. Sending them flat is what produced DPD's "Exporter
+            // address is mandatory" rejection even with every Settings >
+            // DPD field filled in - DPD was reading an exporterDetails with
+            // no address object in it at all.
             ObjectNode exporterDetails = invoice.putObject("exporterDetails");
-            exporterDetails.put("organisation", senderOrganisation);
-            exporterDetails.put("street", senderStreet);
-            exporterDetails.put("town", senderTown);
-            exporterDetails.put("postcode", senderPostcode);
-            exporterDetails.put("countryCode", senderCountryCode);
-            exporterDetails.put("contactName", senderContactName);
-            exporterDetails.put("telephone", senderContactPhone);
-            exporterDetails.put("email", senderContactEmail);
+            putSenderAddress(exporterDetails.putObject("address"), senderOrganisation, senderStreet,
+                    senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
+            ObjectNode exporterContact = exporterDetails.putObject("contactDetails");
+            exporterContact.put("contactName", senderContactName);
+            exporterContact.put("telephone", dpdPhone(senderContactPhone));
             exporterDetails.put("eoriNumber", settingsService.get("dpd_eori_number", ""));
+            String senderVatNumber = settingsService.get("dpd_sender_vat_number", "");
+            if (!senderVatNumber.isBlank()) {
+                exporterDetails.put("vatNumber", senderVatNumber);
+            }
 
             ObjectNode importerDetails = invoice.putObject("importerDetails");
-            importerDetails.put("organisation", order.getDeliveryName() != null ? order.getDeliveryName() : "");
-            importerDetails.put("street", order.getDeliveryAddressLine1());
-            importerDetails.put("town", order.getDeliveryTown() != null ? order.getDeliveryTown() : "");
-            importerDetails.put("postcode", order.getDeliveryPostcode());
-            importerDetails.put("countryCode", order.getDeliveryCountryCode().toUpperCase());
-            importerDetails.put("telephone", order.getDeliveryPhone() != null ? order.getDeliveryPhone() : "");
+            ObjectNode importerAddress = importerDetails.putObject("address");
+            importerAddress.put("organisation", order.getDeliveryName() != null ? order.getDeliveryName() : "");
+            importerAddress.put("street", order.getDeliveryAddressLine1());
+            if (order.getDeliveryAddressLine2() != null && !order.getDeliveryAddressLine2().isBlank()) {
+                importerAddress.put("locality", order.getDeliveryAddressLine2());
+            }
+            importerAddress.put("town", order.getDeliveryTown() != null ? order.getDeliveryTown() : "");
+            importerAddress.put("postcode", order.getDeliveryPostcode());
+            importerAddress.put("countryCode", order.getDeliveryCountryCode().toUpperCase());
+            ObjectNode importerContact = importerDetails.putObject("contactDetails");
+            importerContact.put("contactName", order.getDeliveryName() != null ? order.getDeliveryName() : "");
+            importerContact.put("telephone", dpdPhone(order.getDeliveryPhone()));
 
             // Unlike exporterDetails (always BNS's own GB EORI from
             // Settings), the importer of record for customs purposes is
@@ -474,6 +493,65 @@ public class DpdShippingService {
         }
 
         return root;
+    }
+
+    /**
+     * BNS's own address, in DPD's address shape. Used in three places in one
+     * request (the collection address, and the customs invoice's exporter
+     * address) so it's worth keeping in one place - they must agree, and DPD
+     * rejects the shipment if the exporter address is incomplete.
+     *
+     * DPD's four address lines are named street / locality / town / county
+     * rather than "address line 1-4", and only street, town and countryCode
+     * are mandatory. The optional ones are left out entirely when blank
+     * rather than sent as empty strings, since DPD length-validates whatever
+     * it's given.
+     */
+    private void putSenderAddress(ObjectNode address, String organisation, String street, String locality,
+                                  String town, String county, String postcode, String countryCode) {
+        if (organisation != null && !organisation.isBlank()) {
+            address.put("organisation", organisation);
+        }
+        address.put("street", street);
+        if (locality != null && !locality.isBlank()) {
+            address.put("locality", locality);
+        }
+        address.put("town", town);
+        if (county != null && !county.isBlank()) {
+            address.put("county", county);
+        }
+        if (postcode != null && !postcode.isBlank()) {
+            address.put("postcode", postcode);
+        }
+        address.put("countryCode", countryCode != null && !countryCode.isBlank()
+                ? countryCode.toUpperCase() : "GB");
+    }
+
+    /**
+     * DPD's telephone fields are validated against ^([+]\d{1,14}|\d{0,15})$ -
+     * digits only, optionally with a leading "+", and nothing else. A number
+     * typed the way people actually write them ("0121 500 2500",
+     * "+353 (0)1 234 5678") fails that outright, so strip it down to what
+     * DPD will accept rather than having the whole shipment rejected over
+     * punctuation. Anything past the 15-character limit is trimmed too.
+     */
+    private String dpdPhone(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String trimmed = raw.trim();
+        boolean international = trimmed.startsWith("+");
+        String digits = trimmed.replaceAll("[^0-9]", "");
+        if (digits.isEmpty()) {
+            return "";
+        }
+        if (international) {
+            if (digits.length() > 14) {
+                digits = digits.substring(0, 14);
+            }
+            return "+" + digits;
+        }
+        return digits.length() > 15 ? digits.substring(0, 15) : digits;
     }
 
     /** A product's quantity and per-unit price within one parcel's customs declaration. */

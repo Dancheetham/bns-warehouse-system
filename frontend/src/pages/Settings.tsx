@@ -12,12 +12,42 @@ interface UserView {
   name: string;
 }
 
-function SettingsSection({ title, description, children }: { title: string; description?: React.ReactNode; children: React.ReactNode }) {
+/**
+ * One collapsible block of settings. Everything starts collapsed so the page
+ * opens as a short list of headings you can scan, rather than a very long
+ * scroll - open just the area you came here to change. Collapsed state is
+ * per-section and deliberately not remembered between visits: the useful
+ * default is always "show me the list", not "show me whatever I left open
+ * last time".
+ */
+function SettingsSection({
+  title,
+  description,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  description?: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
-      <h3 className="font-medium text-slate-800 mb-1">{title}</h3>
-      {description && <p className="text-sm text-slate-500 mb-4">{description}</p>}
-      <div className="space-y-4">{children}</div>
+    <div className="bg-white border border-slate-200 rounded-lg mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-slate-50 rounded-lg"
+      >
+        <span className="font-medium text-slate-800">{title}</span>
+        <span className={`text-slate-400 text-xs transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+      </button>
+      {open && (
+        <div className="px-5 pb-5">
+          {description && <p className="text-sm text-slate-500 mb-4">{description}</p>}
+          <div className="space-y-4">{children}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -39,13 +69,15 @@ export default function Settings() {
   const [dpdMaxLookupWeightKg, setDpdMaxLookupWeightKg] = useState("");
   const [dpdSenderOrganisation, setDpdSenderOrganisation] = useState("");
   const [dpdSenderStreet, setDpdSenderStreet] = useState("");
+  const [dpdSenderLocality, setDpdSenderLocality] = useState("");
   const [dpdSenderTown, setDpdSenderTown] = useState("");
+  const [dpdSenderCounty, setDpdSenderCounty] = useState("");
   const [dpdSenderPostcode, setDpdSenderPostcode] = useState("");
   const [dpdSenderCountryCode, setDpdSenderCountryCode] = useState("GB");
   const [dpdSenderContactName, setDpdSenderContactName] = useState("");
   const [dpdSenderContactPhone, setDpdSenderContactPhone] = useState("");
-  const [dpdSenderContactEmail, setDpdSenderContactEmail] = useState("");
   const [dpdEoriNumber, setDpdEoriNumber] = useState("");
+  const [dpdSenderVatNumber, setDpdSenderVatNumber] = useState("");
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -109,13 +141,15 @@ export default function Settings() {
     setDpdMaxLookupWeightKg(settings["dpd_max_lookup_weight_kg"] ?? "");
     setDpdSenderOrganisation(settings["dpd_sender_organisation"] ?? "");
     setDpdSenderStreet(settings["dpd_sender_street"] ?? "");
+    setDpdSenderLocality(settings["dpd_sender_locality"] ?? "");
     setDpdSenderTown(settings["dpd_sender_town"] ?? "");
+    setDpdSenderCounty(settings["dpd_sender_county"] ?? "");
     setDpdSenderPostcode(settings["dpd_sender_postcode"] ?? "");
     setDpdSenderCountryCode(settings["dpd_sender_country_code"] ?? "GB");
     setDpdSenderContactName(settings["dpd_sender_contact_name"] ?? "");
     setDpdSenderContactPhone(settings["dpd_sender_contact_phone"] ?? "");
-    setDpdSenderContactEmail(settings["dpd_sender_contact_email"] ?? "");
     setDpdEoriNumber(settings["dpd_eori_number"] ?? "");
+    setDpdSenderVatNumber(settings["dpd_sender_vat_number"] ?? "");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -157,13 +191,15 @@ export default function Settings() {
         dpd_max_lookup_weight_kg: dpdMaxLookupWeightKg,
         dpd_sender_organisation: dpdSenderOrganisation,
         dpd_sender_street: dpdSenderStreet,
+        dpd_sender_locality: dpdSenderLocality,
         dpd_sender_town: dpdSenderTown,
+        dpd_sender_county: dpdSenderCounty,
         dpd_sender_postcode: dpdSenderPostcode,
         dpd_sender_country_code: dpdSenderCountryCode,
         dpd_sender_contact_name: dpdSenderContactName,
         dpd_sender_contact_phone: dpdSenderContactPhone,
-        dpd_sender_contact_email: dpdSenderContactEmail,
         dpd_eori_number: dpdEoriNumber,
+        dpd_sender_vat_number: dpdSenderVatNumber,
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -257,9 +293,14 @@ export default function Settings() {
   });
 
   return (
-    <div className="max-w-xl">
+    // Uses the full page width rather than a narrow left-hand column, so the
+    // two-column field grids inside each section have room to breathe, and
+    // leaves space at the bottom for the floating Save button to sit over.
+    <div className="max-w-5xl pb-24">
       <h2 className="text-2xl font-semibold text-slate-800 mb-2">Settings</h2>
-      <p className="text-slate-500 mb-6">Grouped by area - printing, despatch, returns, and admin.</p>
+      <p className="text-slate-500 mb-6">
+        Grouped by area - printing, despatch, returns, and admin. Click a heading to open it.
+      </p>
 
       <SettingsSection
         title="Printing"
@@ -441,7 +482,7 @@ export default function Settings() {
           Used as both the collection address and the exporter details on any customs declaration (e.g. for
           shipments to Ireland).
         </p>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Organisation</label>
             <input
@@ -455,17 +496,33 @@ export default function Settings() {
             <label className="block text-xs font-medium text-slate-500 mb-1">Contact name</label>
             <input value={dpdSenderContactName} onChange={(e) => setDpdSenderContactName(e.target.value)} className="input" />
           </div>
-          <div className="col-span-2">
-            <label className="block text-xs font-medium text-slate-500 mb-1">Street</label>
-            <input value={dpdSenderStreet} onChange={(e) => setDpdSenderStreet(e.target.value)} className="input" />
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Address line 1 <span className="text-slate-400">(street - required)</span>
+            </label>
+            <input value={dpdSenderStreet} onChange={(e) => setDpdSenderStreet(e.target.value)} maxLength={35} className="input" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Town</label>
-            <input value={dpdSenderTown} onChange={(e) => setDpdSenderTown(e.target.value)} className="input" />
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Address line 2 <span className="text-slate-400">(optional)</span>
+            </label>
+            <input value={dpdSenderLocality} onChange={(e) => setDpdSenderLocality(e.target.value)} maxLength={35} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Address line 3 <span className="text-slate-400">(town - required)</span>
+            </label>
+            <input value={dpdSenderTown} onChange={(e) => setDpdSenderTown(e.target.value)} maxLength={35} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Address line 4 <span className="text-slate-400">(county - optional)</span>
+            </label>
+            <input value={dpdSenderCounty} onChange={(e) => setDpdSenderCounty(e.target.value)} maxLength={35} className="input" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Postcode</label>
-            <input value={dpdSenderPostcode} onChange={(e) => setDpdSenderPostcode(e.target.value)} className="input" />
+            <input value={dpdSenderPostcode} onChange={(e) => setDpdSenderPostcode(e.target.value)} maxLength={8} className="input" />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Country code</label>
@@ -481,10 +538,6 @@ export default function Settings() {
             <input value={dpdSenderContactPhone} onChange={(e) => setDpdSenderContactPhone(e.target.value)} className="input" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Contact email</label>
-            <input value={dpdSenderContactEmail} onChange={(e) => setDpdSenderContactEmail(e.target.value)} className="input" />
-          </div>
-          <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
               EORI number <span className="text-slate-400">(required for Ireland)</span>
             </label>
@@ -492,10 +545,28 @@ export default function Settings() {
               value={dpdEoriNumber}
               onChange={(e) => setDpdEoriNumber(e.target.value.toUpperCase())}
               placeholder="GB123456789000"
+              maxLength={14}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              VAT number <span className="text-slate-400">(optional)</span>
+            </label>
+            <input
+              value={dpdSenderVatNumber}
+              onChange={(e) => setDpdSenderVatNumber(e.target.value.toUpperCase())}
+              placeholder="GB123456789"
               className="input"
             />
           </div>
         </div>
+        <p className="text-xs text-slate-400">
+          DPD's address lines map to street / locality / town / county - only lines 1 and 3 and the country code are
+          mandatory. Phone numbers are sent to DPD as digits only (spaces and brackets are stripped automatically),
+          since DPD rejects anything else. There's no sender email field because DPD's shipment API doesn't accept
+          one.
+        </p>
         <p className="text-xs text-slate-400">
           A white-label/no-return-address label is a DPD account-level template setting, not something this
           integration can control - ask your DPD account manager to configure it if you need one.
@@ -778,14 +849,28 @@ export default function Settings() {
         </div>
       </SettingsSection>
 
-      <button
-        onClick={() => saveMutation.mutate()}
-        disabled={saveMutation.isPending}
-        className="bg-emerald-600 text-white text-sm px-5 py-2.5 rounded-md hover:bg-emerald-500 disabled:opacity-50"
-      >
-        {saveMutation.isPending ? "Saving..." : "Save Settings"}
-      </button>
-      {saved && <span className="ml-3 text-sm text-emerald-600">Saved.</span>}
+      {/*
+        Floating rather than sitting at the bottom of the page, matching the
+        order screen - with every section collapsible you can be anywhere in
+        the page when you finish editing, and having to scroll to the end to
+        find Save is exactly the annoyance this removes. Note this saves the
+        shared/global settings only; the "My Email" and "Customisation"
+        sections have their own Save buttons because they're per-user.
+      */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        {saved && (
+          <span className="text-sm text-emerald-700 bg-white border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
+            Saved.
+          </span>
+        )}
+        <button
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+          className="bg-emerald-600 text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {saveMutation.isPending ? "Saving..." : "Save Settings"}
+        </button>
+      </div>
 
       <div className="bg-white border border-amber-200 rounded-lg p-5 mt-8">
         <h3 className="font-medium text-amber-700 mb-1">Bulk Stock Import</h3>

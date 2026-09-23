@@ -5,6 +5,55 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.24] - 2026-09-23 (v0.089)
+
+### Fixed
+- **DPD rejecting Irish shipments with "Exporter address is mandatory" even
+  with every Settings > DPD field filled in.** This was our bug, not a
+  missing setting. DPD's schema nests the address and contact inside their
+  own objects (`exporterDetails.address.street`, `.contactDetails.telephone`
+  and so on) and we were sending those fields flat on `exporterDetails`
+  itself - so DPD read an exporter block with no address in it at all.
+  Rebuilt against DPD's own published schema.
+- The same flat-vs-nested mistake was in `importerDetails` (so yesterday's
+  Company EORI work would not have landed correctly either) and in
+  `collectionDetails`. The collection one had been silently ignored since
+  the integration was first written - DPD was quietly falling back to the
+  collection address configured on the DPD account, which is why UK
+  shipments carried on working and nothing ever looked wrong.
+- Phone numbers are now stripped to digits (keeping a leading `+`) before
+  being sent to DPD, and trimmed to DPD's 15-character limit. DPD validates
+  telephone fields against a digits-only pattern, so a number stored the way
+  people actually write them - `0121 500 2500`, `+353 (0)1 234 5678` - would
+  have had the whole shipment rejected over the spaces and brackets.
+
+### Added
+- Settings > DPD now has the full set of address fields DPD accepts:
+  **address line 1 (street)**, **line 2 (locality)**, **line 3 (town)**,
+  **line 4 (county)**, postcode and country code. Only lines 1 and 3 and the
+  country code are mandatory; blank optional ones are left out of the
+  request entirely rather than sent as empty strings.
+- A **sender VAT number** field in Settings > DPD, sent as the exporter's VAT
+  number on customs declarations when filled in.
+
+### Changed
+- The Settings page is now **collapsible by section** - it opens as a short
+  scannable list of headings, and you open just the area you came to change
+  instead of scrolling through everything.
+- The Settings page now uses the full page width instead of a narrow
+  left-hand column, so the field grids have room (the DPD address fields go
+  three-across on a wide screen).
+- **Save Settings now floats** in the bottom-right corner, the same as the
+  order screen - with sections collapsible you can finish editing anywhere
+  on the page, so having to scroll to the bottom to find Save made no sense.
+  The "My Email" and "Customisation" sections keep their own Save buttons,
+  since those are per-user rather than shared settings.
+
+### Removed
+- The **sender contact email** field in Settings > DPD. DPD's shipment API
+  has no field for it, so it was only ever being stored and never sent
+  anywhere - keeping it implied it did something.
+
 ## [0.23.23] - 2026-09-22 (v0.088)
 
 ### Added
