@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { CompanyRequest, CompanyView } from "../types";
+import { CompanyRequest, CompanyView, TicketSummaryView } from "../types";
 import { useToast } from "../components/ToastContext";
+import { talkTimeLabel, TICKET_STATUS_LABEL, TICKET_STATUS_STYLE } from "./Tickets";
 
 function CompanyRow({ company }: { company: CompanyView }) {
   const { showToast } = useToast();
+  const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
+  const [showTickets, setShowTickets] = useState(false);
   const queryClient = useQueryClient();
   const [name, setName] = useState(company.name);
   const [creditLimit, setCreditLimit] = useState(company.creditLimit != null ? String(company.creditLimit) : "");
@@ -37,6 +41,15 @@ function CompanyRow({ company }: { company: CompanyView }) {
     onError: (err: Error) => setError(err.message),
   });
 
+  // Only fetched once expanded - a plain "how many tickets does this company
+  // have" count for every row up front would mean one query per company on
+  // every page load for no reason most of the time.
+  const { data: tickets, isLoading: ticketsLoading } = useQuery({
+    queryKey: ["tickets-by-company", company.id],
+    queryFn: async () => (await api.get<TicketSummaryView[]>(`/tickets/by-company/${company.id}`)).data,
+    enabled: showTickets,
+  });
+
   return (
     <div className="px-4 py-3 hover:bg-slate-50">
       <div className="flex justify-between items-center">
@@ -53,13 +66,56 @@ function CompanyRow({ company }: { company: CompanyView }) {
           )}
           {company.eoriNumber && <p className="text-xs text-slate-400">EORI: {company.eoriNumber}</p>}
         </div>
-        <button
-          onClick={() => setEditing((v) => !v)}
-          className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 rounded px-2 py-1"
-        >
-          {editing ? "Cancel" : "Edit"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowTickets((v) => !v)}
+            className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 rounded px-2 py-1"
+          >
+            {showTickets ? "Hide Tickets" : "Tickets"}
+          </button>
+          <button
+            onClick={() => setEditing((v) => !v)}
+            className="text-xs text-slate-500 hover:text-slate-800 border border-slate-300 rounded px-2 py-1"
+          >
+            {editing ? "Cancel" : "Edit"}
+          </button>
+        </div>
       </div>
+
+      {showTickets && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          {ticketsLoading && <p className="text-sm text-slate-400">Loading tickets...</p>}
+          {!ticketsLoading && tickets?.length === 0 && <p className="text-sm text-slate-400">No tickets for this company.</p>}
+          {!ticketsLoading && tickets && tickets.length > 0 && (
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500">
+                <tr>
+                  <th className="py-1 pr-4">Ticket #</th>
+                  <th className="py-1 pr-4">Title</th>
+                  <th className="py-1 pr-4">Order</th>
+                  <th className="py-1 pr-4">Status</th>
+                  <th className="py-1 pr-4">Talk time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {tickets.map((t) => (
+                  <tr key={t.id} onClick={() => navigate(`/tickets/${t.id}`)} className="cursor-pointer hover:bg-slate-50">
+                    <td className="py-1.5 pr-4 font-medium text-slate-800">{t.ticketNumber}</td>
+                    <td className="py-1.5 pr-4">{t.title}</td>
+                    <td className="py-1.5 pr-4">{t.orderNumber ?? "-"}</td>
+                    <td className="py-1.5 pr-4">
+                      <span className={`text-xs px-2 py-0.5 rounded-full border ${TICKET_STATUS_STYLE[t.status]}`}>
+                        {TICKET_STATUS_LABEL[t.status]}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-4">{talkTimeLabel(t.talkTimeMinutes)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {editing && (
         <form

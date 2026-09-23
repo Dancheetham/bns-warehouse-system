@@ -621,3 +621,52 @@ export interface StockImportResult {
   productsSkipped: number;
   errors: string[];
 }
+
+export type TicketStatus = "IN_PROGRESS" | "ON_HOLD" | "CLOSED" | "COMPLETE";
+
+export interface TicketEntryView {
+  id: number;
+  author: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface TicketEntryRequest {
+  note: string;
+  author?: string;
+}
+
+// Used for ticket lists (all tickets, a company's tickets, an order's linked
+// ticket) - leaves out the timeline, which only TicketView (a single ticket)
+// carries.
+export interface TicketSummaryView {
+  id: number;
+  ticketNumber: string;
+  title: string;
+  callerName?: string;
+  phone?: string;
+  email?: string;
+  companyId?: number;
+  companyName?: string;
+  orderId?: number;
+  orderNumber?: string;
+  status: TicketStatus;
+  talkTimeMinutes: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface TicketView extends TicketSummaryView {
+  entries: TicketEntryView[];
+}
+
+export interface TicketRequest {
+  title: string;
+  callerName?: string;
+  phone?: string;
+  email?: string;
+  companyId?: number;
+  orderId?: number;
+  status?: TicketStatus;
+  talkTimeMinutes?: number;
+}

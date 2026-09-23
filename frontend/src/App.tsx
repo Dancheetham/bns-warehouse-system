@@ -35,6 +35,8 @@ import GoodsInScan from "./handheld/GoodsInScan";
 import RmaRequestForm from "./public/RmaRequestForm";
 import RmaInbox from "./pages/RmaInbox";
 import RmaDetail from "./pages/RmaDetail";
+import Tickets from "./pages/Tickets";
+import TicketDetail from "./pages/TicketDetail";
 
 export default function App() {
   return (
@@ -82,6 +84,8 @@ export default function App() {
             <Route path="/rmas" element={<RmaInbox />} />
             <Route path="/companies" element={<Companies />} />
             <Route path="/rmas/:id" element={<RmaDetail />} />
+            <Route path="/tickets" element={<Tickets />} />
+            <Route path="/tickets/:id" element={<TicketDetail />} />
             <Route path="/stock-movement" element={<StockMovement />} />
             <Route path="/stock-overview" element={<StockOverview />} />
             <Route path="/trace" element={<StockTrace />} />

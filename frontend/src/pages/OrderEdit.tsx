@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product } from "../types";
+import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product, TicketSummaryView } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
 import { useToast } from "../components/ToastContext";
 
@@ -96,6 +96,16 @@ export default function OrderEdit() {
   const { data: payments, refetch: refetchPayments } = useQuery({
     queryKey: ["order-payments", id],
     queryFn: async () => (await api.get<PaymentView[]>(`/orders/${id}/payments`)).data,
+    enabled: !isNew,
+  });
+
+  // Support Tickets links to an order the other way round too - a ticket
+  // that was opened about a specific order, e.g. "SO-10019 hasn't turned up".
+  // A single order isn't expected to have more than one open ticket at once,
+  // but this stays a list rather than assuming that.
+  const { data: linkedTickets } = useQuery({
+    queryKey: ["tickets-by-order", id],
+    queryFn: async () => (await api.get<TicketSummaryView[]>(`/tickets/by-order/${id}`)).data,
     enabled: !isNew,
   });
 
@@ -417,6 +427,31 @@ export default function OrderEdit() {
           ← Back to Sales Activity
         </button>
       </div>
+
+      {!isNew && (
+        <div className="mb-6">
+          {linkedTickets && linkedTickets.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {linkedTickets.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => navigate(`/tickets/${t.id}`)}
+                  className="text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100"
+                >
+                  Linked ticket: {t.ticketNumber} - {t.title} →
+                </button>
+              ))}
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate(`/tickets/new?orderId=${id}`)}
+              className="text-sm text-slate-500 hover:text-slate-800"
+            >
+              + Open a support ticket for this order
+            </button>
+          )}
+        </div>
+      )}
 
       {creditStatus && (
         <div

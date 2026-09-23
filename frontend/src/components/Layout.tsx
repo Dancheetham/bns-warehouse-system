@@ -10,6 +10,7 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     heading: "Sales",
     items: [
       { to: "/sales-activity", label: "Sales Activity" },
+      { to: "/tickets", label: "Support Tickets" },
       { to: "/rmas", label: "RMAs" },
       { to: "/companies", label: "Companies" },
     ],

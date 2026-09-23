@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.27] - 2026-09-23 (v0.092)
+
+### Added
+- **Support Tickets** - a new section for logging phone/email enquiries,
+  separate from Sales Activity. Each ticket has a sequential ticket number
+  (`TKT-10001` onward, allocated from a real Postgres sequence so two tickets
+  opened in the same second by two different people never collide), caller
+  name, phone, email, status (In Progress / On Hold / Closed / Complete),
+  talk time (editable as hours + minutes), a title, and a dated,
+  user-attributed timeline of notes rather than one free-text box.
+- A ticket can be linked to a **Company** and/or a specific **Order** (e.g.
+  "SO-10019 hasn't turned up") via a type-to-search picker; linking an order
+  auto-fills its company unless one's already set. The order screen now
+  shows a link to any ticket raised about it (or an "Open a support ticket
+  for this order" link when there isn't one yet), and each company's row on
+  the Companies page has a "Tickets" toggle listing every ticket linked to
+  that account.
+- A public API (`/api/public/tickets`, same `X-API-Key` auth as the existing
+  stock API) so a third-party call-transcription/CRM-import service can open
+  a ticket - or add a timeline entry to one it already opened - straight
+  from a finished call, without anyone typing it in by hand.
+
 ## [0.23.26] - 2026-09-23 (v0.091)
 
 ### Fixed

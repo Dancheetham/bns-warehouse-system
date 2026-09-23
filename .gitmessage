@@ -1,15 +1,4 @@
-v0.091: send DPD delivery notification email/mobile and add extended liability toggle
-
-Fixes "Delivery notification email or mobile is mandatory" rejection by
-populating outboundConsignment.deliveryDetails.notificationDetails - a
-field separate from contactDetails.telephone (the courier-facing contact
-number), used by DPD to text/email the recipient about their delivery.
-Since the system only ever captures one phone number and one email per
-order, both are reused for the notification fields.
-
-Adds an "extended liability" checkbox to Settings > DPD, off by default,
-since it's a chargeable DPD insurance option. When enabled, sends the
-order's own goods value (capped at DPD's £5,000 maximum) as liabilityValue.
+v0.092: add Support Tickets
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
