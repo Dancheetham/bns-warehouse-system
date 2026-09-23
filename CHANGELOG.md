@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.26] - 2026-09-23 (v0.091)
+
+### Fixed
+- **DPD rejecting shipments with "Delivery notification email or mobile is
+  mandatory".** This is a separate field from the delivery contact phone
+  number already sent (`outboundConsignment.deliveryDetails.notificationDetails`,
+  used to text/email the recipient about their delivery - distinct from
+  `contactDetails.telephone`, the courier-facing contact number). Since the
+  system only ever captures one phone number per order, that same number is
+  now sent as the notification mobile too, and the order's email (from
+  Shopify) is sent as the notification email when present.
+
+### Added
+- **Extended liability** toggle in Settings > DPD ("Request DPD's extended
+  liability cover on every shipment"), off by default. DPD's extended
+  liability is a chargeable insurance option, so this is opt-in rather than
+  ever turned on automatically - worth checking with DPD whether your
+  account terms already cover this before switching it on. When enabled,
+  the insured value sent is the order's own goods value (the same figure
+  used for `customsValue` on customs shipments), capped at DPD's £5,000
+  maximum per shipment.
+
 ## [0.23.25] - 2026-09-23 (v0.090)
 
 ### Fixed

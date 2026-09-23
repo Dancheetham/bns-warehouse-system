@@ -1,18 +1,16 @@
-v0.090: send DPD deliveryDescription, customsValue and currency for customs shipments
+v0.091: send DPD delivery notification email/mobile and add extended liability toggle
 
-- outboundConsignment.deliveryDescription is mandatory for every non-UK
-  destination and describes the consignment's contents as a whole, separate
-  from the per-product descriptions inside parcels[].products[]. Sourced
-  from a new editable Settings > DPD goods description (max 45 chars),
-  since DPD warn vague descriptions get parcels delayed or returned.
-- customsValue now sent, computed from the order lines (goods only, ex-VAT
-  and ex-shipping). DPD return parcels when it is zero, so booking is now
-  blocked with a clear message if the lines carry no prices.
-- currency now declared explicitly (Settings, defaults GBP) rather than
-  relying on the myDPD account default.
-- Extended liability deliberately left off - it is a chargeable insurance
-  option, not something to enable silently.
+Fixes "Delivery notification email or mobile is mandatory" rejection by
+populating outboundConsignment.deliveryDetails.notificationDetails - a
+field separate from contactDetails.telephone (the courier-facing contact
+number), used by DPD to text/email the recipient about their delivery.
+Since the system only ever captures one phone number and one email per
+order, both are reused for the notification fields.
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Adds an "extended liability" checkbox to Settings > DPD, off by default,
+since it's a chargeable DPD insurance option. When enabled, sends the
+order's own goods value (capped at DPD's £5,000 maximum) as liabilityValue.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
 

@@ -385,6 +385,23 @@ public class DpdShippingService {
         deliveryContact.put("contactName", order.getDeliveryName());
         deliveryContact.put("telephone", dpdPhone(order.getDeliveryPhone()));
 
+        // DPD reject the shipment unless at least one of these is present
+        // ("Delivery notification email or mobile is mandatory") - it's used
+        // to text/email the recipient about their delivery, not the same
+        // field as contactDetails.telephone above even though it's often the
+        // same number. The order only ever captures one phone number
+        // (there's no separate landline/mobile split in this system), so
+        // that single number is reused here rather than left blank; the
+        // email comes from whatever Shopify gave us for the order.
+        ObjectNode deliveryNotification = deliveryDetails.putObject("notificationDetails");
+        String notificationMobile = dpdPhone(order.getDeliveryPhone());
+        if (!notificationMobile.isBlank()) {
+            deliveryNotification.put("mobile", notificationMobile);
+        }
+        if (order.getCustomerEmail() != null && !order.getCustomerEmail().isBlank()) {
+            deliveryNotification.put("email", order.getCustomerEmail());
+        }
+
         ObjectNode deliveryAddress = deliveryDetails.putObject("address");
         deliveryAddress.put("organisation", order.getDeliveryName() != null ? order.getDeliveryName() : "");
         deliveryAddress.put("street", order.getDeliveryAddressLine1());
@@ -455,6 +472,24 @@ public class DpdShippingService {
         // out, but they "highly recommend" declaring it explicitly so customs
         // declarations can't end up denominated in the wrong currency.
         consignment.put("currency", settingsService.get("dpd_currency", "GBP"));
+
+        // Extended liability is a chargeable DPD insurance option - opt-in
+        // via Settings rather than ever turned on automatically. When it's
+        // on, the insured value is simply the goods value already being
+        // declared (customsValue on a customs shipment, or the order's line
+        // total otherwise) rather than a separately-maintained figure, since
+        // DPD only accept a single liabilityValue per shipment anyway.
+        if ("true".equals(settingsService.get("dpd_extended_liability", "false"))) {
+            // The same "goods only, ex-VAT, ex-shipping" total customsValue
+            // uses - there's only ever one order-line total to insure,
+            // customs declaration or not.
+            BigDecimal insuredValue = customsValue(order);
+            if (insuredValue.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal cappedValue = insuredValue.min(BigDecimal.valueOf(5000));
+                consignment.put("liability", true);
+                consignment.put("liabilityValue", cappedValue.doubleValue());
+            }
+        }
 
         if (requiresCustoms) {
             // DPD require a description of the whole consignment's contents
@@ -612,6 +647,7 @@ public class DpdShippingService {
         }
         return total;
     }
+
 
     /** A product's quantity and per-unit price within one parcel's customs declaration. */
     private record ProductQty(int quantity, BigDecimal unitPrice) {}

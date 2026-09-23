@@ -80,6 +80,7 @@ export default function Settings() {
   const [dpdSenderVatNumber, setDpdSenderVatNumber] = useState("");
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
+  const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -154,6 +155,7 @@ export default function Settings() {
     setDpdSenderVatNumber(settings["dpd_sender_vat_number"] ?? "");
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
+    setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -206,6 +208,7 @@ export default function Settings() {
         dpd_sender_vat_number: dpdSenderVatNumber,
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
+        dpd_extended_liability: String(dpdExtendedLiability),
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -607,6 +610,19 @@ export default function Settings() {
             </p>
           </div>
         </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700 pt-2 border-t border-slate-100">
+          <input
+            type="checkbox"
+            checked={dpdExtendedLiability}
+            onChange={(e) => setDpdExtendedLiability(e.target.checked)}
+          />
+          Request DPD's extended liability cover on every shipment
+        </label>
+        <p className="text-xs text-slate-400 -mt-2 ml-6">
+          A chargeable DPD insurance option - check with DPD whether this is already covered by your account terms
+          before turning it on, since it isn't something to enable without knowing that. When on, the insured value
+          sent is the order's goods value (capped at DPD's £5,000 maximum), not a separately maintained figure.
+        </p>
         <p className="text-xs text-slate-400">
           A white-label/no-return-address label is a DPD account-level template setting, not something this
           integration can control - ask your DPD account manager to configure it if you need one.
