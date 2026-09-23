@@ -98,6 +98,7 @@ export default function TicketDetail() {
   const [orderNumber, setOrderNumber] = useState<string | undefined>(undefined);
   const [contactId, setContactId] = useState<number | undefined>(undefined);
   const [contactName, setContactName] = useState<string | undefined>(undefined);
+  const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -121,6 +122,16 @@ export default function TicketDetail() {
     queryKey: ["contacts"],
     queryFn: async () => (await api.get<ContactView[]>("/contacts")).data,
   });
+
+  // Suggestions for the Caller name field's search-as-you-type - only while
+  // unlinked, since once a contact is linked the field just shows its name.
+  const contactMatches = useMemo(() => {
+    if (!callerName.trim() || contactId || !contacts) return [];
+    const term = callerName.toLowerCase();
+    return contacts
+      .filter((c) => c.name.toLowerCase().includes(term) || c.companyName?.toLowerCase().includes(term))
+      .slice(0, 8);
+  }, [callerName, contacts, contactId]);
 
   useEffect(() => {
     if (prefillOrderId && orders && !orderId) {
@@ -218,9 +229,71 @@ export default function TicketDetail() {
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
+          <div className="relative">
             <label className="block text-xs text-slate-400 mb-1">Caller name</label>
-            <input value={callerName} onChange={(e) => setCallerName(e.target.value)} className="input" />
+            <input
+              value={callerName}
+              onChange={(e) => {
+                const value = e.target.value;
+                setCallerName(value);
+                // Editing the name away from the linked contact's own name
+                // unlinks it - the field is always free text, a contact link
+                // is just a convenience for filling it in.
+                if (contactId && value !== contactName) {
+                  setContactId(undefined);
+                  setContactName(undefined);
+                }
+                setContactDropdownOpen(true);
+              }}
+              onFocus={() => setContactDropdownOpen(true)}
+              onBlur={() => setTimeout(() => setContactDropdownOpen(false), 150)}
+              placeholder="Type a name, or search an existing contact..."
+              className="input"
+            />
+            {contactId && contactName && (
+              <p className="text-xs text-slate-400 mt-1">
+                Linked to contact ·{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContactId(undefined);
+                    setContactName(undefined);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 underline"
+                >
+                  Unlink
+                </button>
+              </p>
+            )}
+            {contactDropdownOpen && contactMatches.length > 0 && (
+              <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-56 overflow-y-auto">
+                {contactMatches.map((c) => (
+                  <button
+                    type="button"
+                    key={c.id}
+                    onMouseDown={() => {
+                      setCallerName(c.name);
+                      setContactId(c.id);
+                      setContactName(c.name);
+                      // Auto-fills whatever this contact has on file - still
+                      // freely editable afterwards, and no contact link is
+                      // required at all if the caller isn't a saved contact.
+                      if (c.phone) setPhone(c.phone);
+                      if (c.email) setEmail(c.email);
+                      if (c.companyId) {
+                        setCompanyId(c.companyId);
+                        setCompanyName(c.companyName);
+                      }
+                      setContactDropdownOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 border-b border-slate-50 last:border-0"
+                  >
+                    <span className="font-medium text-slate-700">{c.name}</span>
+                    {c.companyName && <span className="text-slate-400 ml-2">{c.companyName}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Status</label>
@@ -250,49 +323,6 @@ export default function TicketDetail() {
             <input type="number" min={0} max={59} value={talkMinutes} onChange={(e) => setTalkMinutes(e.target.value)} className="input w-20" />
             <span className="text-sm text-slate-500">mins</span>
           </div>
-        </div>
-
-        <div>
-          {contactName ? (
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Contact</label>
-              <div className="flex items-center justify-between input bg-slate-50">
-                <span>{contactName}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setContactId(undefined);
-                    setContactName(undefined);
-                  }}
-                  className="text-xs text-slate-400 hover:text-slate-700"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ) : (
-            <LinkPicker
-              label="Link a contact"
-              items={contacts ?? []}
-              getLabel={(c) => c.name}
-              getSubLabel={(c) => c.companyName}
-              onSelect={(c: ContactView) => {
-                setContactId(c.id);
-                setContactName(c.name);
-                // Matches the backend default (TicketService.apply) -
-                // linking a contact fills in caller details and company too,
-                // unless already set.
-                if (!callerName) setCallerName(c.name);
-                if (!phone && c.phone) setPhone(c.phone);
-                if (!email && c.email) setEmail(c.email);
-                if (!companyId) {
-                  setCompanyId(c.companyId);
-                  setCompanyName(c.companyName);
-                }
-              }}
-              placeholder="Search contacts..."
-            />
-          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

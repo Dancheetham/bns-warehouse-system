@@ -5,6 +5,20 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.30] - 2026-09-23 (v0.095)
+
+### Added
+- Companies page now has a **search box** (name, account number, EORI/VAT),
+  alongside the existing On Hold / Do Not Use filters.
+- A ticket's **Caller name** field is now search-as-you-type against
+  existing Contacts - pick a match and it auto-fills phone, email and
+  company from that contact's record (whichever of those it actually has).
+  No contact link is required at all - typing a plain name works exactly as
+  before, and every auto-filled field stays independently editable
+  afterwards. Editing the name away from a linked contact's own name quietly
+  unlinks it (the field is always free text; the link is just a shortcut for
+  filling it in). This replaces the previous separate "Link a contact" box.
+
 ## [0.23.29] - 2026-09-23 (v0.094)
 
 ### Added

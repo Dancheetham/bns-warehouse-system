@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
@@ -268,15 +268,25 @@ export default function Companies() {
   const [error, setError] = useState<string | null>(null);
   const [onHoldFilter, setOnHoldFilter] = useState(false);
   const [doNotUseFilter, setDoNotUseFilter] = useState(false);
+  const [search, setSearch] = useState("");
 
   const { data: companies, isLoading } = useQuery({
     queryKey: ["companies"],
     queryFn: async () => (await api.get<CompanyView[]>("/companies")).data,
   });
 
-  const filteredCompanies = companies?.filter(
-    (c) => (!onHoldFilter || c.onHold) && (!doNotUseFilter || c.doNotUse)
-  );
+  const filteredCompanies = useMemo(() => {
+    if (!companies) return companies;
+    const term = search.trim().toLowerCase();
+    return companies.filter((c) => {
+      if (onHoldFilter && !c.onHold) return false;
+      if (doNotUseFilter && !c.doNotUse) return false;
+      if (!term) return true;
+      return [c.name, c.accountNumber, c.shopifyCompanyId, c.eoriNumber, c.vatNumber]
+        .filter(Boolean)
+        .some((v) => v!.toLowerCase().includes(term));
+    });
+  }, [companies, search, onHoldFilter, doNotUseFilter]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -343,7 +353,13 @@ export default function Companies() {
         </form>
       )}
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex gap-4 mb-4 flex-wrap items-center">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, account number, EORI/VAT..."
+          className="input flex-1 min-w-[240px]"
+        />
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={onHoldFilter} onChange={(e) => setOnHoldFilter(e.target.checked)} />
           On Hold only
