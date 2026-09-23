@@ -64,6 +64,8 @@ public class CompanyService {
         company.setCreditLimit(request.creditLimit());
         company.setShopifyCompanyId(request.shopifyCompanyId());
         company.setNotes(request.notes());
+        company.setEoriNumber(request.eoriNumber());
+        company.setVatNumber(request.vatNumber());
     }
 
     public BigDecimal orderTotal(Order order) {
@@ -115,12 +117,14 @@ public class CompanyService {
     public CompanyView toView(Company company) {
         if (company.getCreditLimit() == null) {
             return new CompanyView(company.getId(), company.getName(), null,
-                    company.getShopifyCompanyId(), company.getNotes(), null, null, false);
+                    company.getShopifyCompanyId(), company.getNotes(),
+                    company.getEoriNumber(), company.getVatNumber(), null, null, false);
         }
         BigDecimal used = creditUsed(company.getId());
         BigDecimal available = company.getCreditLimit().subtract(used);
         return new CompanyView(company.getId(), company.getName(), company.getCreditLimit(),
-                company.getShopifyCompanyId(), company.getNotes(), used, available,
+                company.getShopifyCompanyId(), company.getNotes(),
+                company.getEoriNumber(), company.getVatNumber(), used, available,
                 available.compareTo(BigDecimal.ZERO) < 0);
     }
 

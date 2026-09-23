@@ -31,6 +31,16 @@ public class Company {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    // Used as the DPD customs "importer of record" (invoice.importerDetails)
+    // when shipping to a customs country on this company's behalf - BNS is
+    // the exporter/sender, but the receiving company is the importer, so its
+    // own EORI/VAT belong here rather than in Settings alongside BNS's own.
+    @Column(name = "eori_number")
+    private String eoriNumber;
+
+    @Column(name = "vat_number")
+    private String vatNumber;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

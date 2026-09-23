@@ -9,5 +9,10 @@ public record CompanyRequest(
         // Null = no credit account for this company.
         BigDecimal creditLimit,
         String shopifyCompanyId,
-        String notes
+        String notes,
+        // Sent as the DPD customs importer's EORI/VAT number when this
+        // company's orders ship to a customs country (e.g. Ireland) - see
+        // Company.java.
+        String eoriNumber,
+        String vatNumber
 ) {}

@@ -5,6 +5,60 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.23] - 2026-09-22 (v0.088)
+
+### Added
+- DPD Irish (customs) shipments now send the two additional fields DPD's
+  own commercial invoice output confirmed are required, checked directly
+  against DPD's own API schema (their developer portal's "Create domestic
+  shipment" reference):
+  - `invoice.termsOfDelivery` is now sent as `"DAP"` on every customs
+    shipment - the receiver settles any duty/tax directly with DPD, rather
+    than BNS being invoiced for it (that's the separate `DT1` arrangement,
+    which needs its own account setup DPD hasn't done for us).
+  - Companies can now have an **EORI Number** and **VAT Number** set
+    (Companies page - Edit). When an order linked to a company ships to a
+    customs country, its company's EORI/VAT are now sent as
+    `invoice.importerDetails.eoriNumber`/`vatNumber` - previously these
+    were never sent at all, which is not what a real DPD invoice for one
+    of our Irish orders showed. This is deliberately the **Company's**
+    EORI, not BNS's own (BNS's own GB EORI, used for `exporterDetails`,
+    stays under Settings > DPD as before) - BNS is the exporter/sender,
+    but the receiving company is the importer of record for customs
+    purposes.
+  - Booking a DPD shipment to a customs country for an order linked to a
+    Company with no EORI number set now stops with a clear message
+    pointing at the Companies page, instead of DPD silently not getting an
+    EORI it needed.
+  - Orders with no linked Company (e.g. a direct consumer sale) are
+    unaffected - EORI/VAT are simply left out, which is correct for a B2C
+    customs declaration.
+
+## [0.23.22] - 2026-09-22 (v0.087)
+
+### Added
+- Clearer pre-flight validation before a DPD shipment is booked, instead of
+  only finding out from DPD's own raw rejection text after the fact:
+  - Every shipment now checks the order has a delivery phone number set -
+    DPD rejects any domestic shipment without one ("Delivery contact
+    telephone number (outbound) is mandatory"), not just customs ones.
+  - Shipping to a customs country (Ireland) now checks BNS's own sender
+    address is filled in under Settings > DPD (organisation, street, town,
+    postcode, contact name, contact phone) before attempting to book,
+    naming exactly which field(s) are missing rather than DPD's generic
+    "Exporter address is mandatory".
+
+### Not changed (see reasoning)
+- Confirmed the customs "exporterDetails" block is correctly BNS's own
+  address/contact/EORI from Settings > DPD, not the order's Company -
+  DPD's EORI rule for this field is GB-only, tied to whoever holds the DPD
+  account and physically hands the parcel to DPD (BNS), regardless of
+  which customer the order is for. Company-specific EORI/VAT numbers would
+  belong on "importerDetails" (the receiving business) instead, which DPD
+  supports as optional fields - not currently wired up, since nothing's
+  asked for it yet, but a natural next step if BNS wants faster customs
+  clearance for regular Irish B2B customers.
+
 ## [0.23.21] - 2026-09-22 (v0.086)
 
 ### Added

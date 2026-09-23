@@ -463,6 +463,10 @@ export interface CompanyView {
   creditLimit?: number;
   shopifyCompanyId?: string;
   notes?: string;
+  // Sent as the DPD customs importer's EORI/VAT number for this company's
+  // orders when shipping to a customs country (e.g. Ireland).
+  eoriNumber?: string;
+  vatNumber?: string;
   creditUsed?: number;
   creditAvailable?: number;
   overLimit: boolean;
@@ -473,6 +477,8 @@ export interface CompanyRequest {
   creditLimit?: number;
   shopifyCompanyId?: string;
   notes?: string;
+  eoriNumber?: string;
+  vatNumber?: string;
 }
 
 export interface InvoicedMonthValue {

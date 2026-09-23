@@ -12,6 +12,7 @@ import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.CartonLine;
+import uk.co.bns.warehouse_api.entity.Company;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
@@ -262,10 +263,39 @@ public class DpdShippingService {
         if (order.getDeliveryCountryCode() == null || order.getDeliveryCountryCode().isBlank()) {
             throw new ValidationException("Order " + order.getOrderNumber() + " has no delivery country code set");
         }
+        // DPD rejects every domestic shipment - not just customs ones - with
+        // "Delivery contact telephone number (outbound) is mandatory" if
+        // this is blank. Catching it here means a missing phone number on
+        // the order shows up as a clear, specific message rather than DPD's
+        // raw rejection text.
+        if (order.getDeliveryPhone() == null || order.getDeliveryPhone().isBlank()) {
+            throw new ValidationException("Order " + order.getOrderNumber() + " has no delivery phone number set - DPD requires one on every shipment");
+        }
         if (requiresCustomsData(order) && (settingsService.get("dpd_eori_number", "").isBlank())) {
             throw new ValidationException("An EORI number must be set under Settings > DPD before shipping to " + order.getDeliveryCountryCode());
         }
         if (requiresCustomsData(order)) {
+            // The customs "exporterDetails" block is deliberately BNS's own
+            // address, contact and (GB-only) EORI - not the order's Company.
+            // DPD's own EORI rule ("must be a GB EORI, no EU EORIs accepted")
+            // ties the customs declaration to whoever holds the DPD account
+            // and is physically handing the parcel to DPD, which is BNS,
+            // regardless of which customer the order is for or who it's
+            // being distributed on behalf of. That's why this reads from
+            // Settings > DPD rather than from Company - see the reply this
+            // validation was added alongside for the fuller reasoning.
+            List<String> missingSenderFields = new java.util.ArrayList<>();
+            if (settingsService.get("dpd_sender_organisation", "").isBlank()) missingSenderFields.add("organisation");
+            if (settingsService.get("dpd_sender_street", "").isBlank()) missingSenderFields.add("street");
+            if (settingsService.get("dpd_sender_town", "").isBlank()) missingSenderFields.add("town");
+            if (settingsService.get("dpd_sender_postcode", "").isBlank()) missingSenderFields.add("postcode");
+            if (settingsService.get("dpd_sender_contact_name", "").isBlank()) missingSenderFields.add("contact name");
+            if (settingsService.get("dpd_sender_contact_phone", "").isBlank()) missingSenderFields.add("contact phone");
+            if (!missingSenderFields.isEmpty()) {
+                throw new ValidationException("Your own sender address is needed for the customs declaration before shipping to "
+                        + order.getDeliveryCountryCode() + " - fill in " + String.join(", ", missingSenderFields)
+                        + " under Settings > DPD");
+            }
             List<String> missingCommodityCodes = order.getLines().stream()
                     .filter(l -> l.getProduct().getCommodityCode() == null || l.getProduct().getCommodityCode().isBlank())
                     .map(l -> l.getProduct().getSku())
@@ -273,6 +303,17 @@ public class DpdShippingService {
             if (!missingCommodityCodes.isEmpty()) {
                 throw new ValidationException("These products need a commodity code before shipping to "
                         + order.getDeliveryCountryCode() + ": " + String.join(", ", missingCommodityCodes));
+            }
+            // The importer's EORI is DPD's requirement for B2B customs
+            // clearance, not BNS's - so this only applies when the order is
+            // actually linked to a Company (a direct consumer sale has no
+            // "business" on the receiving end for DPD to ask for). A company
+            // with no EORI on file gets a clear pointer to where to add it,
+            // rather than a raw DPD customs rejection at booking time.
+            if (order.getCompany() != null
+                    && (order.getCompany().getEoriNumber() == null || order.getCompany().getEoriNumber().isBlank())) {
+                throw new ValidationException("An EORI number is needed for " + order.getCompany().getName()
+                        + " before shipping to " + order.getDeliveryCountryCode() + " - add one on the Companies page");
             }
         }
     }
@@ -389,6 +430,11 @@ public class DpdShippingService {
             ObjectNode invoice = root.putObject("invoice");
             invoice.put("invoiceType", 2); // Commercial
             invoice.put("exportReason", "01"); // Sale
+            // BNS always ships duties/taxes-unpaid (the receiver settles any
+            // import charges directly with DPD) rather than the prepaid DT1
+            // arrangement, which needs separate account setup DPD has not
+            // done for us.
+            invoice.put("termsOfDelivery", "DAP");
 
             ObjectNode exporterDetails = invoice.putObject("exporterDetails");
             exporterDetails.put("organisation", senderOrganisation);
@@ -408,6 +454,23 @@ public class DpdShippingService {
             importerDetails.put("postcode", order.getDeliveryPostcode());
             importerDetails.put("countryCode", order.getDeliveryCountryCode().toUpperCase());
             importerDetails.put("telephone", order.getDeliveryPhone() != null ? order.getDeliveryPhone() : "");
+
+            // Unlike exporterDetails (always BNS's own GB EORI from
+            // Settings), the importer of record for customs purposes is
+            // whichever company BNS is distributing on behalf of for this
+            // order - so its EORI/VAT come from the order's linked Company,
+            // not Settings or the order itself. DPD only requires these for
+            // B2B (business) deliveries; when the order has no linked
+            // company (e.g. a direct consumer sale) they're simply omitted,
+            // which is fine for a B2C shipment.
+            Company company = order.getCompany();
+            if (company != null && company.getEoriNumber() != null && !company.getEoriNumber().isBlank()) {
+                importerDetails.put("eoriNumber", company.getEoriNumber());
+                importerDetails.put("isBusiness", true);
+            }
+            if (company != null && company.getVatNumber() != null && !company.getVatNumber().isBlank()) {
+                importerDetails.put("vatNumber", company.getVatNumber());
+            }
         }
 
         return root;

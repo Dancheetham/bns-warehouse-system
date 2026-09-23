@@ -1,12 +1,15 @@
-v0.086: floating Save button on order edit, fix stale DPD services/order data after save
+v0.088: DPD customs - send DAP incoterms and Company EORI/VAT as importer details
 
-- Save button on the order edit page is now fixed to the bottom-right of
-  the viewport instead of at the end of the form, reachable from any
-  scroll position.
-- Saving an order now invalidates that order's own cached data and its
-  DPD available-services lookup, not just the Sales Activity list - fixes
-  courier options not updating after changing the delivery country (or any
-  other order field) until leaving and re-entering the page.
+- invoice.termsOfDelivery now sent as DAP on every Irish/customs DPD shipment,
+  confirmed against DPD's own live API schema (browsed developers.api.dpd.co.uk,
+  not guessable from generic Incoterms docs).
+- Company gains EORI/VAT number fields (Companies page), sent as
+  invoice.importerDetails.eoriNumber/vatNumber for orders linked to that
+  company - BNS is the exporter, the linked company is the importer of
+  record, confirmed against a real DPD commercial invoice example.
+- Booking a customs shipment for an order linked to a company with no EORI
+  set now stops with a clear message instead of DPD silently missing it.
+- Updated the project's dpd-api-findings.md with the confirmed schema.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

@@ -12,6 +12,8 @@ function CompanyRow({ company }: { company: CompanyView }) {
   const [creditLimit, setCreditLimit] = useState(company.creditLimit != null ? String(company.creditLimit) : "");
   const [shopifyCompanyId, setShopifyCompanyId] = useState(company.shopifyCompanyId ?? "");
   const [notes, setNotes] = useState(company.notes ?? "");
+  const [eoriNumber, setEoriNumber] = useState(company.eoriNumber ?? "");
+  const [vatNumber, setVatNumber] = useState(company.vatNumber ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const updateMutation = useMutation({
@@ -21,6 +23,8 @@ function CompanyRow({ company }: { company: CompanyView }) {
         creditLimit: creditLimit ? Number(creditLimit) : undefined,
         shopifyCompanyId: shopifyCompanyId || undefined,
         notes: notes || undefined,
+        eoriNumber: eoriNumber || undefined,
+        vatNumber: vatNumber || undefined,
       };
       return api.put(`/companies/${company.id}`, body);
     },
@@ -47,6 +51,7 @@ function CompanyRow({ company }: { company: CompanyView }) {
           ) : (
             <p className="text-sm text-slate-400">No credit account</p>
           )}
+          {company.eoriNumber && <p className="text-xs text-slate-400">EORI: {company.eoriNumber}</p>}
         </div>
         <button
           onClick={() => setEditing((v) => !v)}
@@ -87,6 +92,19 @@ function CompanyRow({ company }: { company: CompanyView }) {
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Notes</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">EORI Number</label>
+            <input
+              value={eoriNumber}
+              onChange={(e) => setEoriNumber(e.target.value)}
+              placeholder="e.g. IE1234567A"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">VAT Number</label>
+            <input value={vatNumber} onChange={(e) => setVatNumber(e.target.value)} className="input" />
           </div>
           <button
             type="submit"

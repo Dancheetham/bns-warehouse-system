@@ -8,6 +8,8 @@ public record CompanyView(
         BigDecimal creditLimit,
         String shopifyCompanyId,
         String notes,
+        String eoriNumber,
+        String vatNumber,
         // Only present when creditLimit is set - the running total of unpaid
         // order value, matching the OrderWise "amount owing" figure.
         BigDecimal creditUsed,
