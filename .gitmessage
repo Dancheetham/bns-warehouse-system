@@ -1,17 +1,17 @@
-v0.089: fix DPD exporter/importer/collection address nesting, add full sender address fields, collapsible Settings
+v0.090: send DPD deliveryDescription, customsValue and currency for customs shipments
 
-- DPD's party blocks (collectionDetails, deliveryDetails, exporterDetails,
-  importerDetails) all nest address/contactDetails objects; we were sending
-  exporter, importer and collection fields flat. That is what produced
-  "Exporter address is mandatory" despite Settings being fully populated,
-  and meant the collection address was silently ignored in favour of the
-  DPD account default. Rebuilt against DPD's published schema.
-- Phone numbers stripped to digits (keeping a leading +) and trimmed to 15
-  chars, matching DPD's telephone pattern - spaces/brackets were liable to
-  get a whole shipment rejected.
-- Settings > DPD gains address lines 2 and 4 (locality/county) and a sender
-  VAT number; the sender email field is removed as DPD has no such field.
-- Settings page: collapsible sections, full page width, floating Save.
+- outboundConsignment.deliveryDescription is mandatory for every non-UK
+  destination and describes the consignment's contents as a whole, separate
+  from the per-product descriptions inside parcels[].products[]. Sourced
+  from a new editable Settings > DPD goods description (max 45 chars),
+  since DPD warn vague descriptions get parcels delayed or returned.
+- customsValue now sent, computed from the order lines (goods only, ex-VAT
+  and ex-shipping). DPD return parcels when it is zero, so booking is now
+  blocked with a clear message if the lines carry no prices.
+- currency now declared explicitly (Settings, defaults GBP) rather than
+  relying on the myDPD account default.
+- Extended liability deliberately left off - it is a chargeable insurance
+  option, not something to enable silently.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

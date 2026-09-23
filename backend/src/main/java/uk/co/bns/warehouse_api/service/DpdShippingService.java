@@ -58,6 +58,12 @@ public class DpdShippingService {
     // customs declaration despite being a domestic-network movement.
     private static final Set<String> REQUIRES_CUSTOMS_DATA = Set.of("IE");
 
+    // Only a starting point for Settings > DPD, never a silent default worth
+    // relying on - DPD warn that generic contents descriptions ("tools",
+    // "clothing") get parcels delayed or returned at customs, so this is
+    // meant to be edited to whatever genuinely describes what BNS ships.
+    static final String DEFAULT_GOODS_DESCRIPTION = "Telecoms and networking equipment";
+
     private final DpdAuthService dpdAuthService;
     private final SettingsService settingsService;
     private final OrderRepository orderRepository;
@@ -315,6 +321,20 @@ public class DpdShippingService {
                 throw new ValidationException("An EORI number is needed for " + order.getCompany().getName()
                         + " before shipping to " + order.getDeliveryCountryCode() + " - add one on the Companies page");
             }
+            // DPD's "Delivery Description" - the contents of the consignment
+            // as a whole. Blank means DPD rejects the shipment outright.
+            if (settingsService.get("dpd_goods_description", DEFAULT_GOODS_DESCRIPTION).isBlank()) {
+                throw new ValidationException("A goods description is needed for the customs declaration before shipping to "
+                        + order.getDeliveryCountryCode() + " - set one under Settings > DPD");
+            }
+            // DPD return parcels to the sender when the declared customs
+            // value is zero, so an order with no prices on its lines must
+            // not be booked at all.
+            if (customsValue(order).compareTo(BigDecimal.ZERO) <= 0) {
+                throw new ValidationException("Order " + order.getOrderNumber()
+                        + " has no value on its lines - DPD needs a customs value above zero for "
+                        + order.getDeliveryCountryCode() + ", so add unit prices before booking");
+            }
         }
     }
 
@@ -430,6 +450,30 @@ public class DpdShippingService {
             consignment.put("numberOfParcels", 1);
         }
         consignment.put("totalWeight", totalWeight.doubleValue());
+
+        // DPD defaults this to whatever is configured in myDPD if it's left
+        // out, but they "highly recommend" declaring it explicitly so customs
+        // declarations can't end up denominated in the wrong currency.
+        consignment.put("currency", settingsService.get("dpd_currency", "GBP"));
+
+        if (requiresCustoms) {
+            // DPD require a description of the whole consignment's contents
+            // ("Delivery Description is mandatory" otherwise) for every
+            // non-UK destination, separate from the per-product descriptions
+            // inside parcels[].products[]. They explicitly warn that vague
+            // descriptions cause customs delays or the parcel being returned,
+            // which is why this is an editable setting rather than something
+            // generic hardcoded here. Capped at DPD's 45-character limit.
+            String goodsDescription = settingsService.get("dpd_goods_description", DEFAULT_GOODS_DESCRIPTION);
+            consignment.put("deliveryDescription",
+                    goodsDescription.length() > 45 ? goodsDescription.substring(0, 45) : goodsDescription);
+
+            // The "intrinsic" value of the goods: ex-VAT and excluding
+            // shipping, which is exactly what the order lines hold. DPD
+            // return parcels to the sender if this is zero, so validateOrder
+            // refuses to book rather than letting that happen.
+            consignment.put("customsValue", customsValue(order).doubleValue());
+        }
 
         if (requiresCustoms) {
             root.put("generateCustomsData", true);
@@ -552,6 +596,21 @@ public class DpdShippingService {
             return "+" + digits;
         }
         return digits.length() > 15 ? digits.substring(0, 15) : digits;
+    }
+
+    /**
+     * The consignment's "intrinsic" customs value: goods only, ex-VAT and
+     * excluding shipping, which is what the order lines already hold. DPD
+     * are explicit that a zero value gets the parcel returned to sender, so
+     * validateOrder blocks booking rather than sending one.
+     */
+    private BigDecimal customsValue(Order order) {
+        BigDecimal total = BigDecimal.ZERO;
+        for (OrderLine line : order.getLines()) {
+            if (line.getUnitPrice() == null) continue;
+            total = total.add(line.getUnitPrice().multiply(BigDecimal.valueOf(line.getQuantityOrdered())));
+        }
+        return total;
     }
 
     /** A product's quantity and per-unit price within one parcel's customs declaration. */

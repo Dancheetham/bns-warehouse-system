@@ -78,6 +78,8 @@ export default function Settings() {
   const [dpdSenderContactPhone, setDpdSenderContactPhone] = useState("");
   const [dpdEoriNumber, setDpdEoriNumber] = useState("");
   const [dpdSenderVatNumber, setDpdSenderVatNumber] = useState("");
+  const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
+  const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -150,6 +152,8 @@ export default function Settings() {
     setDpdSenderContactPhone(settings["dpd_sender_contact_phone"] ?? "");
     setDpdEoriNumber(settings["dpd_eori_number"] ?? "");
     setDpdSenderVatNumber(settings["dpd_sender_vat_number"] ?? "");
+    setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
+    setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -200,6 +204,8 @@ export default function Settings() {
         dpd_sender_contact_phone: dpdSenderContactPhone,
         dpd_eori_number: dpdEoriNumber,
         dpd_sender_vat_number: dpdSenderVatNumber,
+        dpd_goods_description: dpdGoodsDescription,
+        dpd_currency: dpdCurrency,
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -567,6 +573,40 @@ export default function Settings() {
           since DPD rejects anything else. There's no sender email field because DPD's shipment API doesn't accept
           one.
         </p>
+        <h4 className="text-sm font-medium text-slate-700 pt-2">Customs declaration</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          Used on shipments that need a customs declaration (currently Ireland).
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <label className="block text-xs font-medium text-slate-500 mb-1">Goods description</label>
+            <input
+              value={dpdGoodsDescription}
+              onChange={(e) => setDpdGoodsDescription(e.target.value)}
+              maxLength={45}
+              placeholder="e.g. IP telephones and network switches"
+              className="input"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Describes the contents of the whole consignment, not individual products - DPD require it on every
+              shipment outside mainland UK and reject the booking without it. Keep it specific: DPD warn that vague
+              descriptions get parcels delayed or returned at customs (their own example is "women's cotton dresses"
+              rather than just "clothing"). Max 45 characters.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Currency</label>
+            <select value={dpdCurrency} onChange={(e) => setDpdCurrency(e.target.value)} className="input w-32">
+              <option value="GBP">GBP</option>
+              <option value="EUR">EUR</option>
+              <option value="USD">USD</option>
+            </select>
+            <p className="text-xs text-slate-400 mt-1">
+              The currency the declared values are in. The customs value itself is worked out from the order lines
+              (goods only, excluding VAT and shipping).
+            </p>
+          </div>
+        </div>
         <p className="text-xs text-slate-400">
           A white-label/no-return-address label is a DPD account-level template setting, not something this
           integration can control - ask your DPD account manager to configure it if you need one.

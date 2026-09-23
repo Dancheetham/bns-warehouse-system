@@ -5,6 +5,40 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.25] - 2026-09-23 (v0.090)
+
+### Fixed
+- **DPD rejecting Irish shipments with "Delivery Description is mandatory".**
+  DPD want a description of the consignment's contents as a whole
+  (`outboundConsignment.deliveryDescription`), which is a different thing
+  from the per-product descriptions already sent inside each parcel - adding
+  a description to a product doesn't satisfy it. Now sent on every shipment
+  that needs a customs declaration.
+
+### Added
+- **Goods description** in Settings > DPD (max 45 characters, starts as
+  "Telecoms and networking equipment"). It's an editable setting rather than
+  something hardcoded because DPD explicitly warn that vague contents
+  descriptions get parcels delayed or returned at customs - their own
+  guidance is to write "women's cotton dresses" rather than "clothing", so
+  something like "IP telephones and network switches" is safer than a
+  catch-all. Booking stops with a clear message if it's ever left blank.
+- **Customs value** is now sent (`customsValue`), worked out from the order
+  lines - goods only, excluding VAT and shipping, which is the "intrinsic
+  value" DPD ask for. DPD return parcels to the sender when this is zero, so
+  an order whose lines have no prices is now stopped before booking with a
+  message saying so, rather than being sent and bounced back.
+- **Currency** in Settings > DPD (GBP/EUR/USD, defaults to GBP). DPD fall
+  back to the myDPD account default when it isn't declared but recommend
+  sending it explicitly so declarations can't end up in the wrong currency.
+
+### Not changed (see reasoning)
+- DPD's `liability`/`liabilityValue` (extended liability) are documented as
+  needed for international destinations, but enabling extended liability is
+  a chargeable insurance option on the DPD account - not something to switch
+  on silently. Left off; if a liability-related rejection appears, it can be
+  added as an explicit Settings toggle.
+
 ## [0.23.24] - 2026-09-23 (v0.089)
 
 ### Fixed
