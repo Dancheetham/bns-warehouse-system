@@ -127,8 +127,9 @@ public class TicketService {
         }
 
         if (effectiveCompanyId != null) {
-            Company company = companyRepository.findById(effectiveCompanyId)
-                    .orElseThrow(() -> new NotFoundException("Company " + effectiveCompanyId + " not found"));
+            Long companyId = effectiveCompanyId;
+            Company company = companyRepository.findById(companyId)
+                    .orElseThrow(() -> new NotFoundException("Company " + companyId + " not found"));
             ticket.setCompany(company);
         } else {
             ticket.setCompany(null);

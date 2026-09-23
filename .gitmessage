@@ -1,4 +1,4 @@
-v0.094: add Contacts, company On Hold/Do Not Use/GAPS/GDMS flags, and Company & Contact bulk import
+fix: effectively-final lambda capture in TicketService.apply
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
