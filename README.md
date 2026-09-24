@@ -60,6 +60,8 @@ print-agent/   Small local program for genuinely silent PDF printing (not part o
 docs/          BNS_Warehouse_Public_API.pdf - customer-facing Stock API integration guide
                BNS_Warehouse_Support_Tickets_API.pdf - Support Tickets API integration guide
                BNS_Warehouse_User_Guide.pdf - internal end-to-end user guide
+               BNS_Warehouse_Setup_Guide.pdf - go-live/setup runbook: install, Settings walkthrough,
+               Shopify/DPD/email/printing setup, bulk import file formats
 docker-compose.yml
 ```
 

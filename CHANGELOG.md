@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.31] - 2026-09-24 (v0.096)
+
+### Added
+- Print Agent now runs as a **system tray app** with its own icon (a printer
+  with a little person behind it) instead of a bare console window.
+  Right-click it for **Settings** (set the SumatraPDF.exe location from a
+  proper window with a Browse... button - no more editing files or
+  environment variables) and **Exit**. The setting is saved to
+  `%APPDATA%\BNSPrintAgent\config.json` and takes effect on the next print
+  with no restart needed.
+- Added `print-agent/build_exe.bat` + `requirements.txt` to build a
+  standalone `BNSPrintAgent.exe` (via PyInstaller) - a single file with the
+  tray icon and Settings window built in, no Python install needed on the
+  PC that runs it. Running `python agent.py` directly still works exactly
+  as before too, tray icon included, as long as `pystray`/`Pillow` are
+  installed; without them it falls back to the original plain console mode.
+- Added the **Setup Guide PDF** (`docs/BNS_Warehouse_Setup_Guide.pdf`) - a
+  go-live runbook covering prerequisites, first-run steps, every Settings
+  field, and full Shopify/DPD/email/Print Agent setup plus both bulk-import
+  file formats. Previously delivered standalone; now folded into `docs/`
+  alongside the other three PDFs as planned.
+
 ## [0.23.30] - 2026-09-23 (v0.095)
 
 ### Added

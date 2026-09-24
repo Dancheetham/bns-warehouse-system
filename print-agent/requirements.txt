@@ -1,0 +1,15 @@
+# Core print agent - no dependencies beyond the Python standard library.
+#
+# System tray + Settings GUI (recommended - this is what gives you the tray
+# icon, right-click menu, and the Settings window for setting the SumatraPDF
+# path without editing files):
+pystray>=0.19
+Pillow>=10.0
+
+# Only needed if this PC prints DPD shipping labels (raw ZPL) rather than
+# just picking notes:
+pywin32>=306; sys_platform == "win32"
+
+# Only needed to build the standalone BNSPrintAgent.exe via build_exe.bat -
+# not needed to just run "python agent.py":
+pyinstaller>=6.0
