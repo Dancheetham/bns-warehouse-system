@@ -32,13 +32,13 @@ packages). Once it's up:
 - **API:** http://localhost:8080/api
 
 Flyway runs automatically on API startup and creates the full schema. The very
-first startup also seeds one login - **Dan Cheetham**, password
+first startup also seeds one login - **admin**, password
 `ChangeMe123!` - meant to be changed immediately from Settings > Users. **A
 login is required for everything except the public RMA form.**
 
 ## Trying out the core workflow
 
-1. Log in as Dan Cheetham (see above).
+1. Log in as admin (see above).
 2. Go to **Purchase Orders** → New Purchase Order, add a line for a product.
 3. Open the PO and **import a shipment spreadsheet** - header row with
    columns `SKU`, `MAC`, `SERIAL`, `BATCH` (optionally `WIFI_MAC`), `.xlsx`/
@@ -49,6 +49,26 @@ login is required for everything except the public RMA form.**
    writes movement history.
 6. Go to **Stock Trace** and search one of the MACs you imported to see its
    full timeline.
+
+## Backup & Restore
+
+The database lives in a Docker-managed volume (`bns_postgres_data`), not in this
+project folder - copying the folder to another machine does **not** bring the
+data with it. Settings → **Backup & Restore** (in the app) downloads a single
+`.zip` with the full database *and* the connection secrets that only ever live
+in `.env` (Postgres/SMTP/Shopify credentials - never in the database). To stand
+up a new machine from one:
+
+```
+# on the new machine, with a fresh copy of this project and no .env yet:
+./restore.sh bns-warehouse-backup-2026-09-24.zip
+```
+
+That writes `.env` from the backup, imports the database, and brings the whole
+stack up - same data, same settings, same secrets, ready to go. `backup.sh` is
+the command-line equivalent of the in-app button (handy for cron). See
+`docs/BNS_Warehouse_Setup_Guide.pdf` (Section 10) for the full walkthrough,
+including restoring into an already-running system instead of a fresh one.
 
 ## Project structure
 
@@ -61,7 +81,9 @@ docs/          BNS_Warehouse_Public_API.pdf - customer-facing Stock API integrat
                BNS_Warehouse_Support_Tickets_API.pdf - Support Tickets API integration guide
                BNS_Warehouse_User_Guide.pdf - internal end-to-end user guide
                BNS_Warehouse_Setup_Guide.pdf - go-live/setup runbook: install, Settings walkthrough,
-               Shopify/DPD/email/printing setup, bulk import file formats
+               Shopify/DPD/email/printing setup, bulk import file formats, Backup & Restore
+backup.sh      Command-line backup (see Backup & Restore below) - same output as the in-app button
+restore.sh     Stands up a new machine from a backup.sh/in-app backup - data AND secrets
 docker-compose.yml
 ```
 
@@ -161,8 +183,10 @@ login page once built (see `android-app/README.md`).
   form has no rate limiting. None of this is hard to fix, but it's a
   focused piece of work that needs doing together with picking a real host -
   not something to forget once a domain is pointed at it
-- **Backups** - hasn't come up once this whole build; needs a real strategy
-  before this holds real business data anywhere it isn't already
+- **Backups** - Settings → Backup & Restore (plus `backup.sh`/`restore.sh`)
+  covers taking and restoring one manually; there's no automatic schedule
+  yet, so someone still needs to actually run it regularly and keep the
+  file somewhere safe
 - **Android release build** - only a debug APK has been built and installed
   so far; a signed release build, and optionally Device Owner kiosk mode for
   a fully locked-down dedicated scanner, are still manual one-time steps

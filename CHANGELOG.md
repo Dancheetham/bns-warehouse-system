@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.33] - 2026-09-24 (v0.098)
+
+### Added
+- **Backup & Restore** (Settings) - one file with everything needed to stand
+  the system back up elsewhere: a full database dump (every order, product,
+  stock item, ticket, company and Settings field) plus the connection
+  secrets that only ever live in `.env` and never touch the database
+  (Postgres credentials, the SMTP account, the Shopify app's Client
+  ID/Secret). "Download Full Backup" downloads it from the browser;
+  "Restore into THIS system" replaces the current database from an
+  uploaded backup (type RESTORE to confirm - cannot be undone).
+- `restore.sh` (repo root) - stands a brand new machine up from a backup
+  in one command: writes `.env` from the backup's secrets, imports the
+  database, and starts the full stack. `backup.sh` is the command-line
+  equivalent of the in-app download (handy for cron), running `pg_dump`
+  inside the postgres container itself so it's always version-matched.
+- `backend/Dockerfile` now installs postgres client tools (`pg_dump`/`psql`)
+  so the in-app Backup & Restore buttons work - rebuild with
+  `docker compose up --build` to pick this up.
+- The seeded first-login username is now **admin** (was "Dan Cheetham") -
+  same temporary password, `ChangeMe123!`.
+
 ## [0.23.32] - 2026-09-24 (v0.097)
 
 ### Fixed

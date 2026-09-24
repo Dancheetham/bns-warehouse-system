@@ -12,6 +12,13 @@ interface UserView {
   name: string;
 }
 
+interface RestoreResult {
+  success: boolean;
+  backedUpAt: string | null;
+  backedUpFromDatabase: string | null;
+  secretKeysInBackup: string[];
+}
+
 /**
  * One collapsible block of settings. Everything starts collapsed so the page
  * opens as a short list of headings you can scan, rather than a very long
@@ -273,6 +280,50 @@ export default function Settings() {
       queryClient.invalidateQueries();
     },
   });
+
+  const [backupDownloading, setBackupDownloading] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restoreConfirmText, setRestoreConfirmText] = useState("");
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      if (!restoreFile) throw new Error("Choose a backup .zip file first.");
+      const formData = new FormData();
+      formData.append("file", restoreFile);
+      return (await api.post<RestoreResult>("/admin/backup/restore", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })).data;
+    },
+    onSuccess: (result) => {
+      setRestoreResult(result);
+      setRestoreConfirmText("");
+      setRestoreFile(null);
+      // A restore replaces literally everything in the database, so every
+      // screen's cached data is stale now - not just one query key.
+      queryClient.invalidateQueries();
+    },
+  });
+
+  const downloadBackup = async () => {
+    setBackupError(null);
+    setBackupDownloading(true);
+    try {
+      const res = await api.get("/admin/backup", { responseType: "blob" });
+      const url = window.URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `bns-warehouse-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setBackupError((err as Error).message);
+    } finally {
+      setBackupDownloading(false);
+    }
+  };
 
   const [newUserName, setNewUserName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
@@ -954,6 +1005,87 @@ export default function Settings() {
         >
           Open Company Import
         </Link>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-lg p-5 mt-8">
+        <h3 className="font-medium text-slate-800 mb-1">Backup &amp; Restore</h3>
+        <p className="text-sm text-slate-500 mb-4">
+          One file with everything needed to stand this system back up elsewhere: the full database (every order,
+          product, stock item, ticket, company and setting) plus the connection secrets that live only in this
+          server's environment and never touch the database - Postgres credentials, the SMTP account, and the
+          Shopify app's Client ID/Secret.
+        </p>
+
+        <div className="mb-6">
+          <button
+            onClick={downloadBackup}
+            disabled={backupDownloading}
+            className="bg-slate-800 text-white text-sm font-medium px-4 py-2 rounded-md hover:bg-slate-700 disabled:opacity-50"
+          >
+            {backupDownloading ? "Building backup..." : "Download Full Backup"}
+          </button>
+          {backupError && <p className="text-sm text-red-600 mt-2">{backupError}</p>}
+          <p className="text-xs text-slate-400 mt-2">
+            To bring up a brand new machine from this file, copy this project onto it and run{" "}
+            <code className="bg-slate-100 px-1 rounded">./restore.sh</code> with the downloaded .zip - it writes the
+            secrets into a fresh <code className="bg-slate-100 px-1 rounded">.env</code>, brings up the database,
+            and imports everything before starting the rest of the system. See{" "}
+            <code className="bg-slate-100 px-1 rounded">docs/BNS_Warehouse_Setup_Guide.pdf</code>.
+          </p>
+        </div>
+
+        <div className="border-t border-slate-100 pt-5">
+          <h4 className="font-medium text-red-700 mb-1">Restore into THIS system</h4>
+          <p className="text-sm text-slate-500 mb-3">
+            Replaces every product, order, stock item, ticket, company and setting currently in this system's
+            database with whatever is in the backup file - this cannot be undone. Only the database is restored
+            this way; the backup's connection secrets are never applied automatically to an already-running
+            container (Docker only reads <code className="bg-slate-100 px-1 rounded">.env</code> when a container
+            starts) - copy them into this machine's own <code className="bg-slate-100 px-1 rounded">.env</code> by
+            hand afterwards and run <code className="bg-slate-100 px-1 rounded">docker compose up --build</code> if
+            this system also needs those.
+          </p>
+          <input
+            type="file"
+            accept=".zip"
+            onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
+            className="block text-sm mb-3"
+          />
+          <label className="block text-xs font-medium text-slate-500 mb-1">Type RESTORE to confirm</label>
+          <div className="flex gap-3 items-center">
+            <input
+              value={restoreConfirmText}
+              onChange={(e) => setRestoreConfirmText(e.target.value)}
+              placeholder="RESTORE"
+              className="border border-slate-300 rounded px-3 py-2 text-sm w-40"
+            />
+            <button
+              onClick={() => restoreMutation.mutate()}
+              disabled={restoreConfirmText !== "RESTORE" || !restoreFile || restoreMutation.isPending}
+              className="bg-red-600 text-white text-sm px-4 py-2 rounded-md hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {restoreMutation.isPending ? "Restoring..." : "Restore from Backup"}
+            </button>
+          </div>
+          {restoreMutation.isError && (
+            <p className="text-sm text-red-600 mt-2">{(restoreMutation.error as Error).message}</p>
+          )}
+          {restoreResult && (
+            <div className="text-sm text-emerald-700 mt-3 bg-emerald-50 border border-emerald-200 rounded-md p-3">
+              <p>
+                Restored{restoreResult.backedUpAt ? ` a backup taken ${new Date(restoreResult.backedUpAt).toLocaleString()}` : ""}
+                {restoreResult.backedUpFromDatabase ? ` (database "${restoreResult.backedUpFromDatabase}")` : ""}.
+              </p>
+              {restoreResult.secretKeysInBackup.length > 0 && (
+                <p className="mt-1 text-emerald-800">
+                  This backup also contains: {restoreResult.secretKeysInBackup.join(", ")} - copy those into this
+                  machine's <code className="bg-emerald-100 px-1 rounded">.env</code> and restart if this system
+                  needs them too (see above).
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {testDataResetStatus?.enabled && (

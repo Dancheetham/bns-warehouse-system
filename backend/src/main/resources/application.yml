@@ -43,8 +43,11 @@ spring:
 
   servlet:
     multipart:
-      max-file-size: 20MB
-      max-request-size: 20MB
+      # 200MB, not 20 - this also covers restoring a Backup & Restore zip
+      # (BackupService/BackupController), and a full database dump can
+      # outgrow a stock-import spreadsheet as the warehouse's own data grows.
+      max-file-size: 200MB
+      max-request-size: 200MB
 
 logging:
   level:
