@@ -6,7 +6,7 @@ import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, Orde
 import { printPdf, printRaw } from "../utils/printAgent";
 import { useToast } from "../components/ToastContext";
 
-const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "AWAITING_CONVERSION"];
+const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "INVOICE_PENDING", "AWAITING_CONVERSION"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
 // Only DPD is wired up today - this is a real dropdown (not hardcoded into the
 // service picker) so another courier can be added here later without

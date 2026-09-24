@@ -116,7 +116,21 @@ public class DespatchService {
             line.setQuantityDespatched(line.getQuantityPicked());
         }
 
-        order.setStatus(anyShort ? OrderStatus.PARTIALLY_DESPATCHED : OrderStatus.COMPLETED);
+        // A fully-despatched order with a Company (credit account) goes to
+        // Generate Invoices (INVOICE_PENDING) rather than straight to
+        // COMPLETED - it's only really "done" once it's been invoiced too.
+        // An order with no Company (already paid at checkout, e.g. Shopify)
+        // has nothing left to invoice after the fact, so it goes straight to
+        // COMPLETED exactly as before - see InvoiceService/OrderStatus.
+        OrderStatus newStatus;
+        if (anyShort) {
+            newStatus = OrderStatus.PARTIALLY_DESPATCHED;
+        } else if (order.getCompany() != null) {
+            newStatus = OrderStatus.INVOICE_PENDING;
+        } else {
+            newStatus = OrderStatus.COMPLETED;
+        }
+        order.setStatus(newStatus);
         order = orderRepository.save(order);
 
         // All three of these are best-effort, deliberately after the order is

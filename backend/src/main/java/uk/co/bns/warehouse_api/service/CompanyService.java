@@ -107,6 +107,11 @@ public class CompanyService {
         if (request.gdms() != null) {
             company.setGdms(request.gdms());
         }
+        company.setInvoiceEmail(request.invoiceEmail());
+        company.setVatRate(request.vatRate());
+        if (request.invoiceGrouping() != null) {
+            company.setInvoiceGrouping(request.invoiceGrouping());
+        }
     }
 
     public BigDecimal orderTotal(Order order) {
@@ -161,7 +166,8 @@ public class CompanyService {
                     company.getShopifyCompanyId(), company.getNotes(),
                     company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                     company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
-                    null, null, false);
+                    null, null, false,
+                    company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping());
         }
         BigDecimal used = creditUsed(company.getId());
         BigDecimal available = company.getCreditLimit().subtract(used);
@@ -169,7 +175,8 @@ public class CompanyService {
                 company.getShopifyCompanyId(), company.getNotes(),
                 company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                 company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
-                used, available, available.compareTo(BigDecimal.ZERO) < 0);
+                used, available, available.compareTo(BigDecimal.ZERO) < 0,
+                company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping());
     }
 
     /** The banner shown whenever a linked order is opened. */

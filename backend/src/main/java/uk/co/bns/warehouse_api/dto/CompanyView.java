@@ -1,5 +1,7 @@
 package uk.co.bns.warehouse_api.dto;
 
+import uk.co.bns.warehouse_api.enums.InvoiceGrouping;
+
 import java.math.BigDecimal;
 
 public record CompanyView(
@@ -19,5 +21,9 @@ public record CompanyView(
         // order value, matching the OrderWise "amount owing" figure.
         BigDecimal creditUsed,
         BigDecimal creditAvailable,
-        boolean overLimit
+        boolean overLimit,
+        // Generate Invoices - see Company.java.
+        String invoiceEmail,
+        BigDecimal vatRate,
+        InvoiceGrouping invoiceGrouping
 ) {}

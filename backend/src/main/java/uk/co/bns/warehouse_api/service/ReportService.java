@@ -214,8 +214,11 @@ public class ReportService {
             int[] widths = {4000, 5200, 7000, 4000, 4800, 4000, 6000, 4000, 4000, 5000, 3200, 2800};
             setColumnWidths(sheet, widths);
 
+            // INVOICE_PENDING is excluded here too, same as COMPLETED - the goods
+            // have already shipped, it's just sitting on Generate Invoices now.
             List<Order> orders = orderRepository.findAll().stream()
-                    .filter(o -> o.getStatus() != OrderStatus.COMPLETED && o.getStatus() != OrderStatus.CANCELLED)
+                    .filter(o -> o.getStatus() != OrderStatus.COMPLETED && o.getStatus() != OrderStatus.CANCELLED
+                            && o.getStatus() != OrderStatus.INVOICE_PENDING)
                     .sorted(Comparator.comparing(Order::getOrderDate))
                     .toList();
 

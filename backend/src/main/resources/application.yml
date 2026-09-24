@@ -68,6 +68,11 @@ app:
   # know whether the original request was actually HTTPS. Leave blank for a
   # plain LAN deployment with nothing in front of it.
   public-url: ${APP_PUBLIC_URL:}
+  # Where InvoiceService saves a local copy of every generated invoice/credit
+  # note PDF (Dan's "it also saves that PDF locally so we have a copy") -
+  # mounted onto a named Docker volume (see docker-compose.yml) so it
+  # survives a rebuild, the same way bns_postgres_data does for the database.
+  invoices-dir: ${INVOICES_DIR:/app/invoices}
 
 # Optional - product sync only pulls from Shopify (read_products scope), never
 # writes back. Leave shop-domain blank to disable entirely - no scheduled polling

@@ -1,6 +1,8 @@
 package uk.co.bns.warehouse_api.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import uk.co.bns.warehouse_api.enums.InvoiceGrouping;
 
 import java.math.BigDecimal;
 
@@ -21,5 +23,9 @@ public record CompanyRequest(
         Boolean onHold,
         Boolean doNotUse,
         Boolean gaps,
-        Boolean gdms
+        Boolean gdms,
+        // Generate Invoices - see Company.java.
+        @Email(message = "That doesn't look like a valid email address") String invoiceEmail,
+        BigDecimal vatRate,
+        InvoiceGrouping invoiceGrouping
 ) {}

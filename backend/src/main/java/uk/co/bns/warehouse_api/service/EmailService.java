@@ -1,9 +1,12 @@
 package uk.co.bns.warehouse_api.service;
 
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -65,25 +68,14 @@ public class EmailService {
                     "SMTP is not configured (Settings > Email) - email was not actually sent, but here's what would have gone out");
         }
 
-        Map<String, String> userOverrides = (triggeringUserName == null)
-                ? Map.of()
-                : userSettingsService.getForUser(triggeringUserName);
+        Map<String, String> userOverrides = userOverridesFor(triggeringUserName);
 
         try {
-            JavaMailSenderImpl sender = new JavaMailSenderImpl();
-            sender.setHost(host);
-            sender.setPort(Integer.parseInt(settingsService.get("smtp_port", envPort)));
-            sender.setUsername(overrideOr(userOverrides, "email_username", settingsService.get("smtp_username", envUsername)));
-            sender.setPassword(overrideOr(userOverrides, "email_password", settingsService.get("smtp_password", envPassword)));
-
-            Properties props = sender.getJavaMailProperties();
-            props.put("mail.transport.protocol", "smtp");
-            props.put("mail.smtp.auth", "true");
-            props.put("mail.smtp.starttls.enable", "true");
+            JavaMailSenderImpl sender = buildSender(host, userOverrides);
 
             SimpleMailMessage message = new SimpleMailMessage();
             message.setTo(to);
-            message.setFrom(overrideOr(userOverrides, "email_from_address", settingsService.get("mail_from_address", envFromAddress)));
+            message.setFrom(fromAddress(userOverrides));
             String cc = userOverrides.get("email_cc_address");
             if (cc != null && !cc.isBlank()) {
                 message.setCc(cc);
@@ -96,6 +88,62 @@ public class EmailService {
         } catch (Exception e) {
             return new SendResult(false, "Failed to send: " + e.getMessage());
         }
+    }
+
+    /**
+     * Same as send(), plus one file attachment - used by InvoiceService to
+     * send the generated invoice/credit note PDF. Always goes out through
+     * the shared account (no triggeringUserName) since Dan asked for
+     * invoices to come "from the shared email address set on the system",
+     * not whoever happened to click Generate.
+     */
+    public SendResult sendWithAttachment(String to, String subject, String body,
+                                          String attachmentFilename, byte[] attachmentBytes, String attachmentContentType) {
+        String host = host();
+        if (host.isBlank()) {
+            return new SendResult(false,
+                    "SMTP is not configured (Settings > Email) - email was not actually sent");
+        }
+
+        try {
+            JavaMailSenderImpl sender = buildSender(host, Map.of());
+            MimeMessage mimeMessage = sender.createMimeMessage();
+            // multipart=true is what actually enables attachments - a plain
+            // MimeMessageHelper defaults to a single-part message otherwise.
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+            helper.setTo(to);
+            helper.setFrom(fromAddress(Map.of()));
+            helper.setSubject(subject);
+            helper.setText(body);
+            helper.addAttachment(attachmentFilename, new ByteArrayResource(attachmentBytes), attachmentContentType);
+            sender.send(mimeMessage);
+
+            return new SendResult(true, "Sent");
+        } catch (Exception e) {
+            return new SendResult(false, "Failed to send: " + e.getMessage());
+        }
+    }
+
+    private JavaMailSenderImpl buildSender(String host, Map<String, String> userOverrides) {
+        JavaMailSenderImpl sender = new JavaMailSenderImpl();
+        sender.setHost(host);
+        sender.setPort(Integer.parseInt(settingsService.get("smtp_port", envPort)));
+        sender.setUsername(overrideOr(userOverrides, "email_username", settingsService.get("smtp_username", envUsername)));
+        sender.setPassword(overrideOr(userOverrides, "email_password", settingsService.get("smtp_password", envPassword)));
+
+        Properties props = sender.getJavaMailProperties();
+        props.put("mail.transport.protocol", "smtp");
+        props.put("mail.smtp.auth", "true");
+        props.put("mail.smtp.starttls.enable", "true");
+        return sender;
+    }
+
+    private Map<String, String> userOverridesFor(String triggeringUserName) {
+        return (triggeringUserName == null) ? Map.of() : userSettingsService.getForUser(triggeringUserName);
+    }
+
+    private String fromAddress(Map<String, String> userOverrides) {
+        return overrideOr(userOverrides, "email_from_address", settingsService.get("mail_from_address", envFromAddress));
     }
 
     private String overrideOr(Map<String, String> userOverrides, String key, String fallback) {

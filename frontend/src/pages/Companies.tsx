@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { CompanyRequest, CompanyView, TicketSummaryView } from "../types";
+import { CompanyRequest, CompanyView, InvoiceGrouping, TicketSummaryView } from "../types";
 import { useToast } from "../components/ToastContext";
 import { talkTimeLabel, TICKET_STATUS_LABEL, TICKET_STATUS_STYLE } from "./Tickets";
 
@@ -23,6 +23,9 @@ function CompanyRow({ company }: { company: CompanyView }) {
   const [doNotUse, setDoNotUse] = useState(company.doNotUse);
   const [gaps, setGaps] = useState(company.gaps);
   const [gdms, setGdms] = useState(company.gdms);
+  const [invoiceEmail, setInvoiceEmail] = useState(company.invoiceEmail ?? "");
+  const [companyVatRate, setCompanyVatRate] = useState(company.vatRate != null ? String(company.vatRate) : "");
+  const [invoiceGrouping, setInvoiceGrouping] = useState<InvoiceGrouping>(company.invoiceGrouping);
   const [error, setError] = useState<string | null>(null);
 
   const updateMutation = useMutation({
@@ -39,6 +42,9 @@ function CompanyRow({ company }: { company: CompanyView }) {
         doNotUse,
         gaps,
         gdms,
+        invoiceEmail: invoiceEmail || undefined,
+        vatRate: companyVatRate ? Number(companyVatRate) : undefined,
+        invoiceGrouping,
       };
       return api.put(`/companies/${company.id}`, body);
     },
@@ -99,6 +105,10 @@ function CompanyRow({ company }: { company: CompanyView }) {
             <p className="text-sm text-slate-400">No credit account</p>
           )}
           {company.eoriNumber && <p className="text-xs text-slate-400">EORI: {company.eoriNumber}</p>}
+          <p className="text-xs text-slate-400">
+            {company.invoiceEmail ? `Invoices to: ${company.invoiceEmail}` : "No invoice email set"}
+            {company.invoiceGrouping === "CONSOLIDATED" && " · Consolidated invoicing"}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
@@ -227,6 +237,39 @@ function CompanyRow({ company }: { company: CompanyView }) {
               placeholder="OrderWise account code"
               className="input"
             />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Invoice Email</label>
+            <input
+              type="email"
+              value={invoiceEmail}
+              onChange={(e) => setInvoiceEmail(e.target.value)}
+              placeholder="Where generated invoices are sent"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">VAT Rate Override (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={companyVatRate}
+              onChange={(e) => setCompanyVatRate(e.target.value)}
+              placeholder="Uses global default if blank"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Invoice Grouping</label>
+            <select
+              value={invoiceGrouping}
+              onChange={(e) => setInvoiceGrouping(e.target.value as InvoiceGrouping)}
+              className="input"
+            >
+              <option value="PER_ORDER">One invoice per order</option>
+              <option value="CONSOLIDATED">Consolidate same-day orders</option>
+            </select>
           </div>
           <div className="col-span-2 md:col-span-4 flex flex-wrap gap-4 pt-1">
             <label className="flex items-center gap-2 text-sm text-slate-600">

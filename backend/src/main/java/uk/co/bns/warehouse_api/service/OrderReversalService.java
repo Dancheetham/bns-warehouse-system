@@ -52,8 +52,19 @@ public class OrderReversalService {
     public Order reverseToDespatch(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
-        if (order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.PARTIALLY_DESPATCHED) {
+        if (order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.PARTIALLY_DESPATCHED
+                && order.getStatus() != OrderStatus.INVOICE_PENDING) {
             throw new ValidationException("Only a despatched order can be reversed to despatch");
+        }
+        // Once any part of this order has actually gone out on a generated
+        // invoice/credit note, the stock and the invoice would fall out of
+        // sync if reversed - a real invoice was already issued for it.
+        // Raise a credit note (RMA) to correct an invoiced order instead.
+        boolean anyInvoiced = order.getLines().stream().anyMatch(l -> l.getQuantityInvoiced() > 0);
+        if (anyInvoiced) {
+            throw new ValidationException(
+                    "This order has already been invoiced (in full or in part) - reversing shipped stock isn't "
+                            + "supported once invoiced. Raise a credit note through RMA instead.");
         }
 
         // DPD's booking is genuinely undone here, on our side - clearing

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import uk.co.bns.warehouse_api.enums.InvoiceGrouping;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -64,6 +65,25 @@ public class Company {
 
     @Column(nullable = false)
     private boolean gdms = false;
+
+    // Where Generate Invoices emails the PDF (InvoiceService) - separate from
+    // any Contact's email since it's specifically who in the customer's
+    // finance/AP team should receive invoices, which isn't always the same
+    // person as the ordering contact. Null means Generate Invoices skips
+    // this company (reported back, not silently dropped) until it's set.
+    @Column(name = "invoice_email")
+    private String invoiceEmail;
+
+    // Overrides the global default VAT rate (Settings > Invoicing) for every
+    // invoice/credit note raised against this company - e.g. 0 for a company
+    // that's zero-rated (Irish B2B, reverse charge, etc). Null = use the
+    // global default.
+    @Column(name = "vat_rate", precision = 5, scale = 2)
+    private BigDecimal vatRate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "invoice_grouping", nullable = false)
+    private InvoiceGrouping invoiceGrouping = InvoiceGrouping.PER_ORDER;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

@@ -34,6 +34,10 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     ],
   },
   {
+    heading: "Invoicing",
+    items: [{ to: "/invoicing/generate", label: "Generate Invoices" }],
+  },
+  {
     heading: "Reports",
     items: [
       { to: "/reports/orders", label: "Order Reports" },

@@ -52,6 +52,11 @@ services:
       SHOPIFY_CLIENT_SECRET: ${SHOPIFY_CLIENT_SECRET}
     ports:
       - "8080:8080"
+    volumes:
+      # Local copy of every generated invoice/credit note PDF (InvoiceService) -
+      # a named volume, same reasoning as bns_postgres_data, so it survives a
+      # rebuild rather than living in the container's own throwaway filesystem.
+      - bns_invoices_data:/app/invoices
 
   frontend:
     build:
@@ -71,3 +76,4 @@ services:
 
 volumes:
   bns_postgres_data:
+  bns_invoices_data:

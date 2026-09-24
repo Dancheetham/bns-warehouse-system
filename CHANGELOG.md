@@ -5,6 +5,48 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.35] - 2026-09-24 (v0.100)
+
+### Added
+- **Generate Invoices** - a new Invoicing section with a "Generate Invoices"
+  page. Once an order on a company (credit) account has fully despatched, it
+  now moves to a new "Invoice Pending" status instead of straight to
+  Complete, and sits on this page until invoiced. Pick a Generation Date and
+  Invoice or Credit, tick the lines to include (or "Select all") and hit
+  Generate - selection is per order LINE, not per whole order, so a customer
+  who wants phones invoiced separately from routers on the same order can
+  have that. For each generated invoice/credit note, the system:
+  - Allocates the next invoice number (continuing from OrderWise's own
+    numbering - see Settings > Invoicing below) and builds a PDF in the same
+    layout as the current OrderWise invoices.
+  - Emails it to the company's Invoice Email (Companies > edit a company)
+    with the wording agreed for the Supplier Invoice process, and saves a
+    local copy.
+  - Marks the order Complete once every line on it has been invoiced.
+  - Credit notes (from RMAs) go through the same page and process, under the
+    Credit radio button.
+  New Settings > Invoicing section: default VAT rate (20% unless overridden
+  per company - e.g. 0% for an Irish account, set on the company itself),
+  the next invoice/credit note number (editable, for realigning with
+  OrderWise's last number), payment terms, company registration number and
+  email, and optional bank details (only shown on the PDF if filled in -
+  never invented). Each company also gets an Invoice Grouping setting - one
+  invoice per order (default) or all of that day's selected lines
+  consolidated onto one invoice.
+- **Login throttling** - repeated failed logins for the same IP or the same
+  username now face a growing delay (starting after a few free mistakes,
+  doubling up to a 30s cap) rather than being retried instantly - closes the
+  open item from v0.099. Deliberately not a hard lockout, so mistyping your
+  own password a few times can never be used to lock you out of your own
+  account.
+
+### Known gaps
+- `backup.sh`/`restore.sh` don't yet include the new local invoice-PDF
+  storage volume (`bns_invoices_data`) - the database records of every
+  invoice are backed up as normal, but the saved PDF copies on disk aren't
+  yet part of the backup. Flagging this rather than including it
+  unannounced; can be added on request.
+
 ## [0.23.34] - 2026-09-24 (v0.099)
 
 ### Added

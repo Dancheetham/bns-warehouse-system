@@ -39,6 +39,16 @@ public class OrderLine {
     @Column(name = "quantity_picked", nullable = false)
     private Integer quantityPicked = 0;
 
+    // How much of this line has actually gone out on a generated invoice/
+    // credit note so far (InvoiceService) - a line can be invoiced across
+    // more than one Generate Invoices run if only part of it was ticked each
+    // time, so this accumulates rather than being a boolean. Compared
+    // against quantityDespatched (or, for a CREDIT_REFUND order,
+    // quantityOrdered) to decide what's still owed and when the order as a
+    // whole can move to COMPLETED.
+    @Column(name = "quantity_invoiced", nullable = false)
+    private Integer quantityInvoiced = 0;
+
     @Column(name = "unit_price", precision = 12, scale = 2)
     private BigDecimal unitPrice;
 

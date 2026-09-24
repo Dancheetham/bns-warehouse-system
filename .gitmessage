@@ -1,37 +1,46 @@
-v0.099: password reset (forgot password / reset via email)
+Add Generate Invoices (payment capturing) and login throttling (v0.100)
 
-Logins can now have an optional email address:
-- Settings > Users lets you add one when creating a new login, or add/edit
-  the email on an existing one (email is unique across logins, enforced in
-  application code so the error message can stay friendly).
-- "Forgot password?" on the sign-in page sends a one-time reset link to
-  that address, through the shared Settings > Email account. The link is
-  valid for one hour and single-use - resetting the password also retires
-  any other still-live link for the same login.
-- Deliberately silent about whether a given name/email actually matched
-  anything, so this can't be used to enumerate valid logins. The endpoint
-  is rate limited (SimpleRateLimiter, 5 attempts / 15 min per client IP) as
-  basic abuse protection now that this app is internet-facing - it's the
-  first genuinely public, unauthenticated write endpoint this system has
-  had.
-- New "Public URL" setting under Settings > Email, for deployments behind
-  a reverse proxy or tunnel where the backend can't otherwise tell it's
-  being reached over HTTPS (request.getScheme() sees "http" through
-  Cloudflare Tunnel/nginx here) - keeps reset links from coming out with
-  the wrong scheme.
+Generate Invoices:
+- New INVOICE_PENDING order status: a fully-despatched order on a company
+  (credit) account now lands here instead of going straight to Complete,
+  and sits on a new Invoicing > Generate Invoices page until picked up.
+  An order with no company (already paid at checkout) still goes straight
+  to Complete as before.
+- Generate Invoices page: pick a Generation Date and Invoice/Credit, tick
+  the order lines to include (or Select all), Generate. Selection is per
+  order LINE rather than per order, so one order's lines can be split
+  across separate invoices (e.g. phones vs routers) per the customer's
+  own preference.
+- Generating builds a PDF matching the current OrderWise invoice layout,
+  allocates the next invoice/credit note number (one shared sequence,
+  continuing from OrderWise's own numbering and editable from Settings),
+  emails it to the company's Invoice Email with a saved local copy, and
+  marks the order Complete once every line on it has been invoiced.
+- Credit notes (from processed RMAs) flow through the same page and the
+  same INVOICE_PENDING mechanism, under the Credit radio button.
+- New per-company settings (Companies): Invoice Email, a VAT rate override
+  (e.g. 0% for a zero-rated Irish account), and Invoice Grouping (one
+  invoice per order, or all of a day's selected lines consolidated onto
+  one invoice for that company).
+- New Settings > Invoicing section: default VAT rate, next invoice number,
+  payment terms, company registration number/email, and optional bank
+  details - the bank details box is left off the PDF entirely unless
+  actually filled in, never fabricated.
+- Local PDF backup: generated invoices/credit notes are saved to a new
+  bns_invoices_data Docker volume (not yet covered by backup.sh/restore.sh
+  - flagged as a known gap in the changelog).
 
-Backend: V45 migration (users.email, password_reset_tokens), User/
-UserRepository, PasswordResetToken(+Repository), PasswordResetService
-(SHA-256 token hashing, same pattern as ApiKeyService), SimpleRateLimiter,
-AuthController's new /forgot-password and /reset-password endpoints,
-SecurityConfig permitAll additions, UserController's new PUT .../email
-endpoint and CreateUserRequest.email.
+Login throttling:
+- Repeated failed logins for the same IP or the same username now face a
+  growing delay (a few free attempts, then doubling up to a 30s cap)
+  instead of being retried instantly. Deliberately not a hard lockout -
+  mistyping a password can never lock a genuine user out of their own
+  account.
 
-Frontend: Login.tsx forgot-password flow, new /reset-password page, and
-Settings.tsx Users section email UI (add on create, add/edit on existing).
+Also updates the Setup Guide PDF, README and CHANGELOG for both features.
 
-Also updated docs/BNS_Warehouse_Setup_Guide.pdf (Users, and a new
-Section 6.3) and README.
+Note: this environment's Maven Central/npm registry access is blocked, so
+none of this has been compiled or type-checked - only manually reviewed.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

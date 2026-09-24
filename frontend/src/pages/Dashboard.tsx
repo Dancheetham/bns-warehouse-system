@@ -12,6 +12,7 @@ const statusLabels: Record<OrderStatus, string> = {
   COMPLETED: "Completed",
   PARTIALLY_DESPATCHED: "Partially Despatched",
   AWAITING_CONVERSION: "Awaiting Conversion",
+  INVOICE_PENDING: "Invoice Pending",
 };
 
 const statusColors: Record<OrderStatus, string> = {
@@ -21,6 +22,7 @@ const statusColors: Record<OrderStatus, string> = {
   COMPLETED: "#10b981",
   PARTIALLY_DESPATCHED: "#a855f7",
   AWAITING_CONVERSION: "#f97316",
+  INVOICE_PENDING: "#eab308",
 };
 
 export default function Dashboard() {

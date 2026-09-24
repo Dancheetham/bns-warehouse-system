@@ -437,7 +437,19 @@ export interface BugReport {
   context?: string;
 }
 
-export type OrderStatus = "ON_HOLD" | "AWAITING_DESPATCH" | "CANCELLED" | "COMPLETED" | "PARTIALLY_DESPATCHED" | "AWAITING_CONVERSION";
+export type OrderStatus =
+  | "ON_HOLD"
+  | "AWAITING_DESPATCH"
+  | "CANCELLED"
+  | "COMPLETED"
+  | "PARTIALLY_DESPATCHED"
+  | "AWAITING_CONVERSION"
+  // Fully despatched (or, for a CREDIT_REFUND order, fully processed) on a
+  // company/credit account, but not yet invoiced - sits on the Generate
+  // Invoices page until picked up there, then moves to COMPLETED. An order
+  // with no linked Company (e.g. a Shopify order paid at checkout) skips
+  // this and goes straight to COMPLETED, same as before.
+  | "INVOICE_PENDING";
 export type OrderType = "ORDER" | "PAUSED" | "QUOTE" | "CREDIT_REFUND" | "SCHEDULED";
 
 export interface OrderLine {
@@ -456,6 +468,8 @@ export interface CompanyRef {
   shopifyCompanyId?: string;
   notes?: string;
 }
+
+export type InvoiceGrouping = "PER_ORDER" | "CONSOLIDATED";
 
 export interface CompanyView {
   id: number;
@@ -478,6 +492,10 @@ export interface CompanyView {
   creditUsed?: number;
   creditAvailable?: number;
   overLimit: boolean;
+  // Generate Invoices - see below.
+  invoiceEmail?: string;
+  vatRate?: number;
+  invoiceGrouping: InvoiceGrouping;
 }
 
 export interface CompanyRequest {
@@ -492,12 +510,58 @@ export interface CompanyRequest {
   doNotUse?: boolean;
   gaps?: boolean;
   gdms?: boolean;
+  // Where Generate Invoices emails the PDF - separate from any Contact.
+  invoiceEmail?: string;
+  // Overrides the default VAT rate (Settings > Invoicing) for this company
+  // only - e.g. 0 for a zero-rated/Irish account. Leave unset to use the
+  // default.
+  vatRate?: number;
+  // Whether a Generate Invoices run bundles this company's ticked lines
+  // into one invoice per order (default) or one invoice per company.
+  invoiceGrouping?: InvoiceGrouping;
 }
 
 export interface InvoicedMonthValue {
   month: number; // 1-12
   invoiceTotal: number;
   creditTotal: number;
+}
+
+// Generate Invoices - see InvoiceController/InvoiceService on the backend.
+export type InvoiceType = "INVOICE" | "CREDIT_NOTE";
+
+export interface PendingInvoiceLineView {
+  orderLineId: number;
+  orderId: number;
+  orderNumber: string;
+  orderDate: string;
+  companyId: number;
+  companyName: string;
+  sku: string;
+  description?: string;
+  quantityPending: number;
+  unitPrice: number;
+  netAmount: number;
+}
+
+export interface GenerateInvoicesRequest {
+  invoiceType: InvoiceType;
+  generationDate: string;
+  orderLineIds: number[];
+}
+
+export interface GeneratedInvoiceSummary {
+  invoiceId: number;
+  invoiceNumber: number;
+  companyName: string;
+  grandTotal: number;
+  emailed: boolean;
+  emailError?: string;
+}
+
+export interface GenerateInvoicesResult {
+  invoices: GeneratedInvoiceSummary[];
+  warnings: string[];
 }
 
 export interface OrderCreditStatus {

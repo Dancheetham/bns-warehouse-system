@@ -40,6 +40,7 @@ import Tickets from "./pages/Tickets";
 import TicketDetail from "./pages/TicketDetail";
 import Contacts from "./pages/Contacts";
 import CompanyImport from "./pages/CompanyImport";
+import GenerateInvoices from "./pages/GenerateInvoices";
 
 export default function App() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
             <Route path="/stock-overview" element={<StockOverview />} />
             <Route path="/trace" element={<StockTrace />} />
             <Route path="/api-access" element={<ApiAccess />} />
+            <Route path="/invoicing/generate" element={<GenerateInvoices />} />
             <Route path="/reports/orders" element={<ReportsOrders />} />
             <Route path="/reports/stock" element={<ReportsStock />} />
             <Route path="/reports/invoices" element={<ReportsInvoices />} />

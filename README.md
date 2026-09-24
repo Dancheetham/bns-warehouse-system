@@ -123,6 +123,20 @@ required-reason override that's logged). Companies also carry an On Hold
 (credit hold) flag, a Do Not Use flag, and GAPS/GDMS tick-boxes imported
 from OrderWise, all filterable on the Companies page.
 
+**Generate Invoices** - a fully despatched order on a company account moves
+to Invoice Pending rather than straight to Complete, and sits on the
+Invoicing > Generate Invoices page until picked up there. Selection is
+per order line (not per whole order), so one order can be split across
+multiple invoices when a customer wants that; generating produces a PDF
+matching the OrderWise layout, emails it to the company's invoice contact
+with a saved local copy, and marks the order Complete once every line is
+invoiced. Invoice numbering continues from OrderWise's own sequence and is
+editable from Settings > Invoicing, which also holds the default VAT rate
+(overridable per company), payment terms, and optional bank details for the
+PDF. Credit notes (from RMAs) go through the same page under the Credit
+radio button. Each company also has its own Invoice Grouping setting - one
+invoice per order, or all of a day's selected lines consolidated onto one.
+
 **CRM** - Support Tickets (sequential ticket numbers, company/order/contact
 linking, a dated timeline, and a public API for a call-transcription/CRM
 import integration - `docs/BNS_Warehouse_Support_Tickets_API.pdf`), RMAs, and
@@ -133,8 +147,10 @@ OrderWise customer export.
 **User accounts** - session-based login, a dedicated login page with a
 "remembered accounts" quick-switcher for shared devices (names only, never
 passwords, stored locally), a separate handheld login matching its own dark
-UI, new logins manageable from Settings > Users, and per-user settings
-(currently just status colour customisation) alongside the app-wide ones.
+UI, new logins manageable from Settings > Users, per-user settings
+(currently just status colour customisation) alongside the app-wide ones,
+and increasing-delay login throttling per IP/username against repeated
+failed attempts.
 
 **Handheld app** - a separate PWA (not the desktop app shrunk down) for
 Picking, Goods In, and Stock Movement, scan-first throughout (barcode fields

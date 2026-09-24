@@ -96,6 +96,16 @@ export default function Settings() {
   const [packingMode, setPackingMode] = useState<"SPLIT" | "SERIAL">("SPLIT");
   const [nonFaultyReturnDays, setNonFaultyReturnDays] = useState("28");
   const [faultyWarrantyDays, setFaultyWarrantyDays] = useState("365");
+  const [vatRate, setVatRate] = useState("20");
+  const [nextInvoiceNumber, setNextInvoiceNumber] = useState("");
+  const [invoiceTerms, setInvoiceTerms] = useState("30 days from invoice date");
+  const [invoiceCompanyRegNumber, setInvoiceCompanyRegNumber] = useState("");
+  const [invoiceCompanyEmail, setInvoiceCompanyEmail] = useState("");
+  const [invoiceBankAccountName, setInvoiceBankAccountName] = useState("");
+  const [invoiceBankAccountNumber, setInvoiceBankAccountNumber] = useState("");
+  const [invoiceBankSortCode, setInvoiceBankSortCode] = useState("");
+  const [invoiceBankIban, setInvoiceBankIban] = useState("");
+  const [invoiceBankSwiftBic, setInvoiceBankSwiftBic] = useState("");
   const [statusColors, setStatusColors] = useState<Record<OrderStatus, string>>(DEFAULT_STATUS_COLORS);
   const [saved, setSaved] = useState(false);
   const [colorsSaved, setColorsSaved] = useState(false);
@@ -172,6 +182,16 @@ export default function Settings() {
     setPackingMode((settings["packing_mode"] as "SPLIT" | "SERIAL") ?? "SPLIT");
     setNonFaultyReturnDays(settings["rma_non_faulty_return_days"] ?? "28");
     setFaultyWarrantyDays(settings["rma_faulty_warranty_days"] ?? "365");
+    setVatRate(settings["vat_rate"] ?? "20");
+    setNextInvoiceNumber(settings["next_invoice_number"] ?? "");
+    setInvoiceTerms(settings["invoice_terms"] ?? "30 days from invoice date");
+    setInvoiceCompanyRegNumber(settings["invoice_company_reg_number"] ?? "");
+    setInvoiceCompanyEmail(settings["invoice_company_email"] ?? "");
+    setInvoiceBankAccountName(settings["invoice_bank_account_name"] ?? "");
+    setInvoiceBankAccountNumber(settings["invoice_bank_account_number"] ?? "");
+    setInvoiceBankSortCode(settings["invoice_bank_sort_code"] ?? "");
+    setInvoiceBankIban(settings["invoice_bank_iban"] ?? "");
+    setInvoiceBankSwiftBic(settings["invoice_bank_swift_bic"] ?? "");
   }, [settings]);
 
   useEffect(() => {
@@ -226,6 +246,16 @@ export default function Settings() {
         packing_mode: packingMode,
         rma_non_faulty_return_days: nonFaultyReturnDays,
         rma_faulty_warranty_days: faultyWarrantyDays,
+        vat_rate: vatRate,
+        next_invoice_number: nextInvoiceNumber,
+        invoice_terms: invoiceTerms,
+        invoice_company_reg_number: invoiceCompanyRegNumber,
+        invoice_company_email: invoiceCompanyEmail,
+        invoice_bank_account_name: invoiceBankAccountName,
+        invoice_bank_account_number: invoiceBankAccountNumber,
+        invoice_bank_sort_code: invoiceBankSortCode,
+        invoice_bank_iban: invoiceBankIban,
+        invoice_bank_swift_bic: invoiceBankSwiftBic,
       }),
     onSuccess: () => {
       setSaved(true);
@@ -819,6 +849,113 @@ export default function Settings() {
             Used when an RMA item is marked faulty. Default 365 (1 year). This is BNS's own return-to-base
             warranty - Grandstream's own warranty is separate and still needs checking by hand on their portal.
           </p>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Invoicing"
+        description="Drives Generate Invoices - VAT, invoice numbering, and what appears on the generated PDF. A company's own VAT rate (Companies) overrides the default rate below for that company only."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Default VAT rate (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={vatRate}
+              onChange={(e) => setVatRate(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Next invoice/credit note number</label>
+            <input
+              type="number"
+              min={1}
+              value={nextInvoiceNumber}
+              onChange={(e) => setNextInvoiceNumber(e.target.value)}
+              className="input"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              One shared sequence for both invoices and credit notes, matching OrderWise. Advances by itself every
+              time Generate Invoices runs - only change this by hand to realign with OrderWise's own numbering.
+            </p>
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Payment terms (shown on the PDF)</label>
+          <input value={invoiceTerms} onChange={(e) => setInvoiceTerms(e.target.value)} className="input" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Company registration number</label>
+            <input
+              value={invoiceCompanyRegNumber}
+              onChange={(e) => setInvoiceCompanyRegNumber(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Company email (shown on the PDF)</label>
+            <input
+              type="email"
+              value={invoiceCompanyEmail}
+              onChange={(e) => setInvoiceCompanyEmail(e.target.value)}
+              className="input"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-slate-400">
+          The rest of the letterhead (business name/address/phone/VAT number) is already set under Settings &rarr;
+          DPD &rarr; sender details, and is reused here rather than duplicated.
+        </p>
+
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">Bank details (optional)</h4>
+          <p className="text-xs text-slate-400 mb-3">
+            Only shown on the PDF if a bank name is set below - leave blank to omit this box entirely rather than
+            print something incomplete or wrong.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Bank / account name</label>
+              <input
+                value={invoiceBankAccountName}
+                onChange={(e) => setInvoiceBankAccountName(e.target.value)}
+                placeholder="e.g. Revolut Ltd"
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Account number</label>
+              <input
+                value={invoiceBankAccountNumber}
+                onChange={(e) => setInvoiceBankAccountNumber(e.target.value)}
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Sort code</label>
+              <input
+                value={invoiceBankSortCode}
+                onChange={(e) => setInvoiceBankSortCode(e.target.value)}
+                className="input"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Swift/BIC</label>
+              <input
+                value={invoiceBankSwiftBic}
+                onChange={(e) => setInvoiceBankSwiftBic(e.target.value)}
+                className="input"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-slate-500 mb-1">IBAN</label>
+              <input value={invoiceBankIban} onChange={(e) => setInvoiceBankIban(e.target.value)} className="input" />
+            </div>
+          </div>
         </div>
       </SettingsSection>
 

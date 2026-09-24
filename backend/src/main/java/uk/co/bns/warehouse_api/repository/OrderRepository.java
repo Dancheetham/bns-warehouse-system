@@ -19,4 +19,11 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     java.util.List<Order> findByStatusAndPickingStatusInOrderByOrderDateAsc(
             uk.co.bns.warehouse_api.enums.OrderStatus status,
             java.util.List<uk.co.bns.warehouse_api.enums.PickingStatus> pickingStatuses);
+
+    // Generate Invoices (InvoiceService) - orders currently sitting in
+    // INVOICE_PENDING, split by ORDER vs CREDIT_REFUND per the Invoice/
+    // Credit radio on that page.
+    java.util.List<Order> findByStatusAndOrderTypeOrderByOrderDateAsc(
+            uk.co.bns.warehouse_api.enums.OrderStatus status,
+            uk.co.bns.warehouse_api.enums.OrderType orderType);
 }

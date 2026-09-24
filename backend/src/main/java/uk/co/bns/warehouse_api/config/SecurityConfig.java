@@ -18,6 +18,7 @@ import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import uk.co.bns.warehouse_api.service.LoginThrottleService;
 
 import java.util.Map;
 
@@ -46,6 +47,7 @@ import java.util.Map;
 public class SecurityConfig {
 
     private final ObjectMapper objectMapper;
+    private final LoginThrottleService loginThrottle;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -69,7 +71,7 @@ public class SecurityConfig {
         // for the next request to find.
         SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
-        JsonLoginFilter loginFilter = new JsonLoginFilter(objectMapper);
+        JsonLoginFilter loginFilter = new JsonLoginFilter(objectMapper, loginThrottle);
         loginFilter.setAuthenticationManager(authenticationManager);
         loginFilter.setSecurityContextRepository(securityContextRepository);
         loginFilter.setAuthenticationSuccessHandler((request, response, authentication) -> {
@@ -78,9 +80,17 @@ public class SecurityConfig {
             objectMapper.writeValue(response.getWriter(), Map.of("name", authentication.getName()));
         });
         loginFilter.setAuthenticationFailureHandler((request, response, exception) -> {
+            // A throttled attempt gets its own (still deliberately vague about
+            // *why*, but honest about *how long*) message; anything else stays
+            // the same generic "Incorrect name or password" as before, so a
+            // failed login never distinguishes a bad password from a wrong
+            // username to an outside caller.
+            String message = exception instanceof LoginThrottledException
+                    ? exception.getMessage()
+                    : "Incorrect name or password";
             response.setStatus(HttpStatus.UNAUTHORIZED.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            objectMapper.writeValue(response.getWriter(), Map.of("error", "Incorrect name or password"));
+            objectMapper.writeValue(response.getWriter(), Map.of("error", message));
         });
 
         http

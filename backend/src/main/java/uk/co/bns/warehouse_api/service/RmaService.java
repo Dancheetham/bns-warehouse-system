@@ -191,7 +191,13 @@ public class RmaService {
         creditOrder.setCustomerName(rma.getCustomerName());
         creditOrder.setCustomerEmail(rma.getContactEmail());
         creditOrder.setOrderReference(rma.getRmaNumber());
-        creditOrder.setStatus(OrderStatus.COMPLETED);
+        // Company carried over from the original order (when matched) so this
+        // credit shows up on Generate Invoices for the right account - see
+        // below for why it only goes to INVOICE_PENDING when there's a
+        // Company to invoice it against at all.
+        Company creditCompany = rma.getOriginalOrder() != null ? rma.getOriginalOrder().getCompany() : null;
+        creditOrder.setCompany(creditCompany);
+        creditOrder.setStatus(creditCompany != null ? OrderStatus.INVOICE_PENDING : OrderStatus.COMPLETED);
         creditOrder.setOrderType(OrderType.CREDIT_REFUND);
 
         for (RmaItem item : rma.getItems()) {
