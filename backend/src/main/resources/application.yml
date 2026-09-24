@@ -62,6 +62,12 @@ app:
     # button can never appear (or be called) unless someone has turned it on for this
     # specific environment. See docker-compose.yml.
     enabled: ${ALLOW_TEST_DATA_RESET:false}
+  # Fallback base URL for password-reset email links (PasswordResetService) -
+  # Settings -> Email -> "Public URL" (app_public_url) always wins when set,
+  # since request.getScheme() can't see past a reverse proxy or tunnel to
+  # know whether the original request was actually HTTPS. Leave blank for a
+  # plain LAN deployment with nothing in front of it.
+  public-url: ${APP_PUBLIC_URL:}
 
 # Optional - product sync only pulls from Shopify (read_products scope), never
 # writes back. Leave shop-domain blank to disable entirely - no scheduled polling

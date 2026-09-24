@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { api } from "../api/client";
 
 const REMEMBERED_ACCOUNTS_KEY = "bns_remembered_accounts";
 const MAX_REMEMBERED = 6;
@@ -35,10 +36,32 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [rememberedAccounts, setRememberedAccounts] = useState<string[]>([]);
   const [pickedAccount, setPickedAccount] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotValue, setForgotValue] = useState("");
+  const [forgotSubmitting, setForgotSubmitting] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   useEffect(() => {
     setRememberedAccounts(getRememberedAccounts());
   }, []);
+
+  const submitForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotSubmitting(true);
+    try {
+      await api.post("/auth/forgot-password", { usernameOrEmail: forgotValue });
+    } catch {
+      // Deliberately swallowed - the backend already responds identically
+      // whether or not the name/email matched anything, so surfacing a
+      // request error here specifically would itself leak information.
+      // A genuinely broken deployment (no SMTP configured, say) is a "no
+      // email arrives" problem to chase up with whoever administers the
+      // system, not something this screen should hint at.
+    } finally {
+      setForgotSubmitting(false);
+      setForgotSent(true);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,7 +102,60 @@ export default function Login() {
         </div>
 
         <div className="bg-white rounded-xl shadow-xl p-6">
-          {!pickedAccount && rememberedAccounts.length > 0 && (
+          {showForgotPassword ? (
+            forgotSent ? (
+              <div className="text-center py-2">
+                <p className="text-sm text-slate-600 mb-5">
+                  If that account has an email address on file, a password reset link is on its way to it now -
+                  it's valid for the next hour.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForgotPassword(false);
+                    setForgotSent(false);
+                    setForgotValue("");
+                  }}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+                >
+                  ← Back to sign in
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={submitForgotPassword}>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="text-xs text-slate-500 hover:text-slate-700 mb-4"
+                >
+                  ← Back
+                </button>
+                <p className="text-sm text-slate-500 mb-4">
+                  Enter your login name or email address and we'll send a password reset link, if there's one on
+                  file for that account.
+                </p>
+                <div className="mb-5">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Name or email</label>
+                  <input
+                    autoFocus
+                    required
+                    value={forgotValue}
+                    onChange={(e) => setForgotValue(e.target.value)}
+                    className="input"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forgotSubmitting}
+                  className="w-full bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {forgotSubmitting ? "Sending..." : "Send reset link"}
+                </button>
+              </form>
+            )
+          ) : (
+            <>
+              {!pickedAccount && rememberedAccounts.length > 0 && (
             <div className="mb-5">
               <p className="text-xs font-medium text-slate-500 mb-2">Continue as</p>
               <div className="space-y-1.5">
@@ -167,14 +243,16 @@ export default function Login() {
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-slate-600 mb-5">
-                <input
-                  type="checkbox"
-                  checked={rememberAccountChecked}
-                  onChange={(e) => setRememberAccountChecked(e.target.checked)}
-                />
-                Remember this account on this device
-              </label>
+              <div className="flex items-center justify-between mb-5">
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={rememberAccountChecked}
+                    onChange={(e) => setRememberAccountChecked(e.target.checked)}
+                  />
+                  Remember this account on this device
+                </label>
+              </div>
 
               <button
                 type="submit"
@@ -183,7 +261,21 @@ export default function Login() {
               >
                 {submitting ? "Signing in..." : "Sign in"}
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(true);
+                  setForgotValue(name);
+                  setError(null);
+                }}
+                className="w-full text-center text-sm text-slate-500 hover:text-slate-700 mt-4"
+              >
+                Forgot password?
+              </button>
             </form>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, useParams, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { ToastProvider } from "./components/ToastContext";
 import Login from "./auth/Login";
+import ResetPassword from "./auth/ResetPassword";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
@@ -49,6 +50,7 @@ export default function App() {
             directly, and both login pages. */}
         <Route path="/rma" element={<RmaRequestForm />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/handheld/login" element={<HandheldLogin />} />
 
         <Route element={<RequireHandheldAuth />}>

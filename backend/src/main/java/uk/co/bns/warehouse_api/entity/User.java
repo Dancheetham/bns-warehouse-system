@@ -21,6 +21,12 @@ public class User {
     @Column(nullable = false, unique = true)
     private String name;
 
+    // Optional - only needed for "forgot password" to have somewhere to send
+    // the reset link. Uniqueness is enforced in UserController, not a DB
+    // constraint - see the V45 migration for why.
+    @Column(nullable = true)
+    private String email;
+
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 

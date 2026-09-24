@@ -36,6 +36,13 @@ first startup also seeds one login - **admin**, password
 `ChangeMe123!` - meant to be changed immediately from Settings > Users. **A
 login is required for everything except the public RMA form.**
 
+Each login can optionally have an email address (Settings > Users) so it can
+use **Forgot password?** on the sign-in page - a one-time reset link, valid
+for an hour, sent through the shared Settings > Email account. If this
+deployment sits behind a reverse proxy or tunnel, also set **Public URL**
+under Settings > Email so those reset links come out as `https://` rather
+than a plain `http://` guess.
+
 ## Trying out the core workflow
 
 1. Log in as admin (see above).

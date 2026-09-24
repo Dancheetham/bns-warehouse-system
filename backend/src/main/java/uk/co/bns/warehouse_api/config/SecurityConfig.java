@@ -37,7 +37,9 @@ import java.util.Map;
  * The public RMA form and the Shopify OAuth callback stay unauthenticated -
  * customers submitting a return obviously have no login, and Shopify's
  * browser-redirect callback can't carry our session cookie since it's a
- * fresh, unauthenticated navigation from Shopify's own domain.
+ * fresh, unauthenticated navigation from Shopify's own domain. Forgot/reset
+ * password are unauthenticated for the same reason as login itself - see
+ * AuthController for their own, narrower abuse protection (SimpleRateLimiter).
  */
 @Configuration
 @RequiredArgsConstructor
@@ -91,6 +93,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/api/auth/logout").permitAll()
+                        // Forgot/reset password - has to be reachable by someone who is,
+                        // by definition, not logged in yet. See AuthController/
+                        // PasswordResetService for the enumeration/abuse protection.
+                        .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
                         .requestMatchers("/api/rma-requests/**").permitAll()
                         .requestMatchers("/api/shopify/oauth/**").permitAll()
                         // Its own separate SHA-256 API-key check happens after this, via

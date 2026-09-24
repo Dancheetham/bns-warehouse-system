@@ -1,30 +1,37 @@
-v0.098: Backup & Restore (full data + secrets), seeded login renamed to admin
+v0.099: password reset (forgot password / reset via email)
 
-- Added Settings -> Backup & Restore: "Download Full Backup" produces one
-  .zip with a full pg_dump (every order, product, stock item, ticket,
-  company, and every Settings field - all DB-backed) plus secrets.env, the
-  connection secrets that only ever live in .env and never touch the
-  database (Postgres credentials, SMTP account, Shopify Client ID/Secret).
-  "Restore into THIS system" replaces the current database from an
-  uploaded backup (type RESTORE to confirm - cannot be undone); the
-  backup's secrets are listed but never auto-applied to a running
-  container, since Docker only reads .env at container start.
-- Added restore.sh (repo root) - stands a brand new machine up from a
-  backup in one command: writes .env from the backup's secrets, imports
-  the database, brings up the full stack. Added backup.sh as the
-  command-line equivalent of the in-app download, running pg_dump inside
-  the postgres container itself (always version-matched, cron-friendly).
-- backend/Dockerfile now installs postgres client tools (pg_dump/psql) so
-  the in-app Backup & Restore buttons actually work - needs a rebuild
-  (docker compose up --build) to pick up.
-- Bumped the multipart upload limit 20MB -> 200MB (application.yml) so
-  restoring a backup isn't capped by the old stock-import-sized limit.
-- Renamed the seeded first-login user from "Dan Cheetham" to "admin" (same
-  ChangeMe123! temporary password) - FirstUserSeeder, README.
-- Folded the new Backup & Restore instructions into
-  docs/BNS_Warehouse_Setup_Guide.pdf as a new Section 10, renumbering the
-  former "Known Gaps" to Section 11 and dropping its now-solved
-  "no backup strategy" bullet.
+Logins can now have an optional email address:
+- Settings > Users lets you add one when creating a new login, or add/edit
+  the email on an existing one (email is unique across logins, enforced in
+  application code so the error message can stay friendly).
+- "Forgot password?" on the sign-in page sends a one-time reset link to
+  that address, through the shared Settings > Email account. The link is
+  valid for one hour and single-use - resetting the password also retires
+  any other still-live link for the same login.
+- Deliberately silent about whether a given name/email actually matched
+  anything, so this can't be used to enumerate valid logins. The endpoint
+  is rate limited (SimpleRateLimiter, 5 attempts / 15 min per client IP) as
+  basic abuse protection now that this app is internet-facing - it's the
+  first genuinely public, unauthenticated write endpoint this system has
+  had.
+- New "Public URL" setting under Settings > Email, for deployments behind
+  a reverse proxy or tunnel where the backend can't otherwise tell it's
+  being reached over HTTPS (request.getScheme() sees "http" through
+  Cloudflare Tunnel/nginx here) - keeps reset links from coming out with
+  the wrong scheme.
+
+Backend: V45 migration (users.email, password_reset_tokens), User/
+UserRepository, PasswordResetToken(+Repository), PasswordResetService
+(SHA-256 token hashing, same pattern as ApiKeyService), SimpleRateLimiter,
+AuthController's new /forgot-password and /reset-password endpoints,
+SecurityConfig permitAll additions, UserController's new PUT .../email
+endpoint and CreateUserRequest.email.
+
+Frontend: Login.tsx forgot-password flow, new /reset-password page, and
+Settings.tsx Users section email UI (add on create, add/edit on existing).
+
+Also updated docs/BNS_Warehouse_Setup_Guide.pdf (Users, and a new
+Section 6.3) and README.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

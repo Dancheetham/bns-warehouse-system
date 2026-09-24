@@ -10,6 +10,7 @@ import { useToast } from "../components/ToastContext";
 interface UserView {
   id: number;
   name: string;
+  email: string | null;
 }
 
 interface RestoreResult {
@@ -69,6 +70,7 @@ export default function Settings() {
   const [smtpUsername, setSmtpUsername] = useState("");
   const [smtpPassword, setSmtpPassword] = useState("");
   const [mailFromAddress, setMailFromAddress] = useState("");
+  const [appPublicUrl, setAppPublicUrl] = useState("");
   const [dpdApiKey, setDpdApiKey] = useState("");
   const [dpdApiSecret, setDpdApiSecret] = useState("");
   const [dpdEnvironment, setDpdEnvironment] = useState<"sandbox" | "live">("sandbox");
@@ -143,6 +145,7 @@ export default function Settings() {
     // load is the wrong default. Left blank and only sent on save if the
     // user actually types a new one - see saveMutation below.
     setMailFromAddress(settings["mail_from_address"] ?? "");
+    setAppPublicUrl(settings["app_public_url"] ?? "");
     setDpdApiKey(settings["dpd_api_key"] ?? "");
     // dpd_api_secret deliberately never populated back, same reasoning as
     // smtp_password above.
@@ -195,6 +198,7 @@ export default function Settings() {
         // is left untouched when saving any other setting on this page.
         ...(smtpPassword ? { smtp_password: smtpPassword } : {}),
         mail_from_address: mailFromAddress,
+        app_public_url: appPublicUrl,
         dpd_api_key: dpdApiKey,
         // Only included when actually typed - same reasoning as smtp_password
         // above, so saving anything else on this page doesn't wipe the secret.
@@ -327,12 +331,15 @@ export default function Settings() {
 
   const [newUserName, setNewUserName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserError, setNewUserError] = useState<string | null>(null);
   const createUserMutation = useMutation({
-    mutationFn: async () => api.post("/users", { name: newUserName, password: newUserPassword }),
+    mutationFn: async () =>
+      api.post("/users", { name: newUserName, password: newUserPassword, email: newUserEmail || null }),
     onSuccess: () => {
       setNewUserName("");
       setNewUserPassword("");
+      setNewUserEmail("");
       setNewUserError(null);
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
@@ -350,6 +357,24 @@ export default function Settings() {
       setPasswordChangeError(null);
     },
     onError: (err: Error) => setPasswordChangeError(err.message),
+  });
+
+  // Editing a login's email - separate from password change so the two
+  // don't fight over the same inline-edit slot on the same row; a login
+  // needs an email on file for "Forgot password?" (Login.tsx) to work at
+  // all, and this is how an existing login gets one added, or changed.
+  const [emailChangeUserId, setEmailChangeUserId] = useState<number | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailChangeError, setEmailChangeError] = useState<string | null>(null);
+  const changeEmailMutation = useMutation({
+    mutationFn: async () => api.put(`/users/${emailChangeUserId}/email`, { email: newEmail || null }),
+    onSuccess: () => {
+      setEmailChangeUserId(null);
+      setNewEmail("");
+      setEmailChangeError(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (err: Error) => setEmailChangeError(err.message),
   });
 
   return (
@@ -465,6 +490,22 @@ export default function Settings() {
             placeholder="e.g. sales@bnsdistribution.co.uk"
             className="input"
           />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            Public URL (leave blank for a plain LAN deployment)
+          </label>
+          <input
+            value={appPublicUrl}
+            onChange={(e) => setAppPublicUrl(e.target.value)}
+            placeholder="e.g. https://wms.yourcompany.co.uk"
+            className="input"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Used to build the link in password-reset emails. If this system is reachable through a reverse proxy
+            or tunnel (like Cloudflare Tunnel), set this to the address people actually use in their browser -
+            otherwise reset links can come out as plain http:// even when the real site is https://.
+          </p>
         </div>
       </SettingsSection>
 
@@ -787,45 +828,98 @@ export default function Settings() {
       >
         <div className="space-y-2">
           {users?.map((u) => (
-            <div key={u.id} className="flex items-center justify-between border border-slate-100 rounded px-3 py-2">
-              <span className="text-sm text-slate-700">
-                {u.name} {u.name === user?.name && <span className="text-xs text-emerald-600 ml-1">(you)</span>}
-              </span>
-              {passwordChangeUserId === u.id ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    autoFocus
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="New password"
-                    className="input w-40 text-sm"
-                  />
-                  <button
-                    onClick={() => changePasswordMutation.mutate()}
-                    disabled={changePasswordMutation.isPending || newPassword.length < 6}
-                    className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setPasswordChangeUserId(null);
-                      setNewPassword("");
-                      setPasswordChangeError(null);
-                    }}
-                    className="text-xs text-slate-400 hover:text-slate-600"
-                  >
-                    Cancel
-                  </button>
+            <div key={u.id} className="border border-slate-100 rounded px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm text-slate-700">
+                    {u.name} {u.name === user?.name && <span className="text-xs text-emerald-600 ml-1">(you)</span>}
+                  </span>
+                  {emailChangeUserId !== u.id && (
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {u.email ?? "No email on file - \"Forgot password?\" won't work for this login"}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <button
-                  onClick={() => setPasswordChangeUserId(u.id)}
-                  className="text-xs text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"
-                >
-                  Change password
-                </button>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {passwordChangeUserId === u.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="password"
+                        autoFocus
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="New password"
+                        className="input w-40 text-sm"
+                      />
+                      <button
+                        onClick={() => changePasswordMutation.mutate()}
+                        disabled={changePasswordMutation.isPending || newPassword.length < 6}
+                        className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPasswordChangeUserId(null);
+                          setNewPassword("");
+                          setPasswordChangeError(null);
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : emailChangeUserId === u.id ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        autoFocus
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="name@example.com"
+                        className="input w-52 text-sm"
+                      />
+                      <button
+                        onClick={() => changeEmailMutation.mutate()}
+                        disabled={changeEmailMutation.isPending}
+                        className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEmailChangeUserId(null);
+                          setNewEmail("");
+                          setEmailChangeError(null);
+                        }}
+                        className="text-xs text-slate-400 hover:text-slate-600"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEmailChangeUserId(u.id);
+                          setNewEmail(u.email ?? "");
+                        }}
+                        className="text-xs text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"
+                      >
+                        {u.email ? "Edit email" : "Add email"}
+                      </button>
+                      <button
+                        onClick={() => setPasswordChangeUserId(u.id)}
+                        className="text-xs text-slate-500 hover:text-slate-700 border border-slate-300 rounded px-2 py-1"
+                      >
+                        Change password
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              {emailChangeUserId === u.id && emailChangeError && (
+                <p className="text-xs text-red-600 mt-1">{emailChangeError}</p>
               )}
             </div>
           ))}
@@ -848,6 +942,16 @@ export default function Settings() {
                 className="input w-44"
               />
             </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Email (optional)</label>
+              <input
+                type="email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="input w-52"
+              />
+            </div>
             <button
               onClick={() => createUserMutation.mutate()}
               disabled={createUserMutation.isPending || !newUserName || newUserPassword.length < 6}
@@ -856,6 +960,10 @@ export default function Settings() {
               {createUserMutation.isPending ? "Adding..." : "Add Login"}
             </button>
           </div>
+          <p className="text-xs text-slate-400 mt-2">
+            An email lets that login use "Forgot password?" on the sign-in page - it's not required, and can be
+            added or changed later from here.
+          </p>
           {newUserError && <p className="text-xs text-red-600 mt-2">{newUserError}</p>}
         </div>
       </SettingsSection>

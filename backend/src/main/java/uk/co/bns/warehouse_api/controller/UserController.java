@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.AuthUserView;
 import uk.co.bns.warehouse_api.dto.ChangePasswordRequest;
 import uk.co.bns.warehouse_api.dto.CreateUserRequest;
+import uk.co.bns.warehouse_api.dto.UpdateEmailRequest;
 import uk.co.bns.warehouse_api.entity.User;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.exception.ValidationException;
@@ -35,7 +36,7 @@ public class UserController {
     @GetMapping
     public List<AuthUserView> getAll() {
         return userRepository.findAll().stream()
-                .map(u -> new AuthUserView(u.getId(), u.getName()))
+                .map(u -> new AuthUserView(u.getId(), u.getName(), u.getEmail()))
                 .toList();
     }
 
@@ -45,11 +46,30 @@ public class UserController {
         if (userRepository.existsByNameIgnoreCase(request.name())) {
             throw new ValidationException("A login already exists with that name");
         }
+        if (request.email() != null && !request.email().isBlank() && userRepository.existsByEmailIgnoreCase(request.email())) {
+            throw new ValidationException("A login already exists with that email address");
+        }
         User user = new User();
         user.setName(request.name());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setEmail(blankToNull(request.email()));
         user = userRepository.save(user);
-        return new AuthUserView(user.getId(), user.getName());
+        return new AuthUserView(user.getId(), user.getName(), user.getEmail());
+    }
+
+    @PutMapping("/{id}/email")
+    public AuthUserView updateEmail(@PathVariable Long id, @Valid @RequestBody UpdateEmailRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("User " + id + " not found"));
+        String email = blankToNull(request.email());
+        if (email != null && userRepository.findByEmailIgnoreCase(email)
+                .filter(existing -> !existing.getId().equals(id))
+                .isPresent()) {
+            throw new ValidationException("A login already exists with that email address");
+        }
+        user.setEmail(email);
+        user = userRepository.save(user);
+        return new AuthUserView(user.getId(), user.getName(), user.getEmail());
     }
 
     @PutMapping("/{id}/password")
@@ -58,6 +78,10 @@ public class UserController {
                 .orElseThrow(() -> new NotFoundException("User " + id + " not found"));
         user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
         userRepository.save(user);
+    }
+
+    private String blankToNull(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     @GetMapping("/me/settings")

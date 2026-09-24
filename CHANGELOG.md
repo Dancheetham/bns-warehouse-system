@@ -5,6 +5,30 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.34] - 2026-09-24 (v0.099)
+
+### Added
+- **Password reset** - logins can now have an optional email address
+  (Settings > Users: add one when creating a login, or "Add email"/"Edit
+  email" on an existing one), and "Forgot password?" on the sign-in page
+  sends a one-time reset link to it, valid for one hour, sent through the
+  shared Settings > Email account. Never reveals whether a given name/email
+  actually matched anything, and the endpoint is rate limited (5 attempts
+  per 15 minutes per IP) so it can't be used to mail-bomb an inbox or as a
+  side-channel for guessing valid logins.
+- New "Public URL" field under Settings > Email - only matters if this
+  system sits behind a reverse proxy or tunnel (like the Cloudflare Tunnel
+  setup some deployments use). Set it to the address people actually use in
+  their browser so reset-link emails come out as `https://` rather than a
+  plain `http://` guess.
+
+### Security
+- This is the first genuinely public, unauthenticated write endpoint this
+  app has had since going internet-facing (see v0.098's live deployment) -
+  built with its own rate limiting from day one rather than bolted on
+  afterwards. This is separate from, and doesn't replace, adding rate
+  limiting to the login form itself, which is still an open item.
+
 ## [0.23.33] - 2026-09-24 (v0.098)
 
 ### Added
