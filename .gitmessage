@@ -1,19 +1,14 @@
-v0.096: Print Agent system tray app with Settings GUI; add Setup Guide to docs/
+v0.097: fix build_exe.bat PyInstaller PATH failure
 
-- Print Agent now runs as a system tray icon (printer with a person behind
-  it) instead of a bare console window. Right-click for Settings (set the
-  SumatraPDF.exe path from a GUI, persisted to %APPDATA%\BNSPrintAgent\
-  config.json - no more editing files/env vars) and Exit.
-- Added print-agent/build_exe.bat + requirements.txt to build a standalone
-  BNSPrintAgent.exe via PyInstaller (bundles the tray icon, no Python
-  needed on the PC that runs it). Running "python agent.py" directly still
-  works exactly as before, tray icon included when pystray/Pillow are
-  installed, falling back to plain console mode otherwise.
-- Added print-agent/generate_icon.py + assets/icon.ico (procedurally drawn,
-  no external asset).
-- Folded the standalone Setup Guide PDF into docs/BNS_Warehouse_Setup_Guide.pdf
-  as planned, updated its Print Agent section for the new tray/exe workflow,
-  and listed it in README's docs/ section.
+- build_exe.bat called the bare "pyinstaller" command, which isn't on PATH
+  on most Windows Python installs even when the package installed fine
+  (pip puts its .exe in Python's Scripts folder, not the main install dir).
+  Switched to "python -m PyInstaller", which works regardless of PATH.
+- Added upfront checks (python present, PyInstaller present - installing
+  requirements.txt automatically if not) and errorlevel checks after each
+  step, so a real failure stops with a clear message instead of printing
+  a misleading "Done - see dist\BNSPrintAgent.exe".
+- Documented the gotcha in print-agent/README.md's troubleshooting section.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

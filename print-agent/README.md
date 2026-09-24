@@ -120,6 +120,9 @@ starts automatically (see below) - it needs `assets/icon.ico` at *build*
 time only, not alongside the finished .exe.
 
 Re-run `build_exe.bat` any time `agent.py` changes, to pick up the update.
+`build_exe.bat` now installs its own dependencies and checks each step, so
+it's safe to just double-click it even before running `pip install -r
+requirements.txt` by hand.
 
 ## Settings, and where they're stored
 
@@ -142,6 +145,16 @@ shell:startup
 
 ## Troubleshooting
 
+- **`build_exe.bat` says `'pyinstaller' is not recognized...`** - this means
+  PyInstaller's own `.exe` isn't on PATH, which is common even when it
+  installed fine (`pip` puts it in Python's `Scripts` folder, which isn't
+  always on PATH). `build_exe.bat` calls it as `python -m PyInstaller`
+  instead, which doesn't depend on PATH at all - just re-run
+  `build_exe.bat` as-is; it also now checks each step and installs
+  `requirements.txt` itself first if it's missing, so a bare double-click
+  works even before `pip install -r requirements.txt` has been run by hand.
+  If it still fails, check that plain `python` (not `pyinstaller`) is on
+  PATH - `build_exe.bat` prints a clear message and stops if it isn't.
 - **"SumatraPDF not found"** - open Settings from the tray icon and check the
   path, or use **Browse...** to find it properly.
 - **"Raw label printing needs the pywin32 package"** - run

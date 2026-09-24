@@ -5,6 +5,18 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.32] - 2026-09-24 (v0.097)
+
+### Fixed
+- `print-agent/build_exe.bat` failed with `'pyinstaller' is not recognized as
+  an internal or external command` even when PyInstaller had installed
+  correctly - `pip` puts its `.exe` in Python's `Scripts` folder, which
+  isn't always on PATH. Now calls it as `python -m PyInstaller` instead,
+  which bypasses PATH entirely. It also now checks for `python` and for
+  PyInstaller up front, installs `requirements.txt` itself if needed, and
+  stops with a clear message (instead of a misleading "Done") if any step
+  actually fails.
+
 ## [0.23.31] - 2026-09-24 (v0.096)
 
 ### Added
