@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { RmaStatus, RmaSummaryView } from "../types";
+import { inDateRange } from "../utils/format";
+import DateRangePicker from "../components/DateRangePicker";
 
 const tabs: { label: string; value: RmaStatus | "" }[] = [
   { label: "Submitted", value: "SUBMITTED" },
@@ -15,12 +17,32 @@ const tabs: { label: string; value: RmaStatus | "" }[] = [
 export default function RmaInbox() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<RmaStatus | "">("SUBMITTED");
+  const [search, setSearch] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const { data: rmas, isLoading } = useQuery({
     queryKey: ["rma-list", tab],
     queryFn: async () =>
       (await api.get<RmaSummaryView[]>("/rma", { params: tab ? { status: tab } : {} })).data,
   });
+
+  const filtered = useMemo(() => {
+    const list = rmas ?? [];
+    const term = search.trim().toLowerCase();
+    let matches = term
+      ? list.filter(
+          (r) =>
+            r.publicReference.toLowerCase().includes(term) ||
+            (r.rmaNumber ?? "").toLowerCase().includes(term) ||
+            r.customerName.toLowerCase().includes(term)
+        )
+      : list;
+    if (from || to) {
+      matches = matches.filter((r) => inDateRange(r.submittedAt, from, to));
+    }
+    return matches;
+  }, [rmas, search, from, to]);
 
   return (
     <div>
@@ -44,6 +66,20 @@ export default function RmaInbox() {
         ))}
       </div>
 
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
+        <div className="flex-1 min-w-[240px]">
+          <label className="block text-xs font-medium text-slate-500 mb-1">Search</label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Reference, RMA number or customer name..."
+            className="w-full border-2 border-slate-300 focus:border-emerald-500 rounded-lg px-4 py-2.5 outline-none text-sm"
+          />
+        </div>
+        <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} fromLabel="Submitted from" toLabel="Submitted to" />
+        <span className="text-sm text-slate-500 mb-2">{filtered.length} record(s)</span>
+      </div>
+
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-500 text-left">
@@ -64,14 +100,14 @@ export default function RmaInbox() {
                 </td>
               </tr>
             )}
-            {rmas?.length === 0 && !isLoading && (
+            {filtered.length === 0 && !isLoading && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                  Nothing here.
+                  {search || from || to ? "No RMAs match the current filters." : "Nothing here."}
                 </td>
               </tr>
             )}
-            {rmas?.map((r) => (
+            {filtered.map((r) => (
               <tr
                 key={r.id}
                 onClick={() => navigate(`/rmas/${r.id}`)}

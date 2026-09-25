@@ -11,6 +11,7 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     items: [
       { to: "/sales-activity", label: "Sales Activity" },
       { to: "/delivery-history", label: "Delivery History" },
+      { to: "/purchase-orders", label: "Purchase Orders" },
       { to: "/companies", label: "Companies" },
     ],
   },
@@ -26,7 +27,6 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     heading: "Warehouse",
     items: [
       { to: "/products", label: "Products" },
-      { to: "/purchase-orders", label: "Purchase Orders" },
       { to: "/goods-in", label: "Goods In" },
       { to: "/despatch", label: "Despatch" },
       { to: "/stock-movement", label: "Stock Movement" },

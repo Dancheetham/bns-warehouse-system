@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
+import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, InvoiceHistoryView, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
 import { dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
@@ -107,6 +107,18 @@ export default function OrderEdit() {
     queryFn: async () => (await api.get<TicketSummaryView[]>(`/tickets/by-order/${id}`)).data,
     enabled: !isNew,
   });
+
+  // Whether this order has actually reached invoicing yet - reuses the same
+  // cached list Invoice History itself loads (react-query dedupes on the
+  // query key), just to answer "does a link to Invoice History, filtered to
+  // this order, actually go anywhere". Delivery History doesn't need this -
+  // existingOrder.despatchedAt already answers that one directly.
+  const { data: invoiceHistory } = useQuery({
+    queryKey: ["invoice-history"],
+    queryFn: async () => (await api.get<InvoiceHistoryView[]>("/invoices/history")).data,
+    enabled: !isNew,
+  });
+  const hasInvoices = !isNew && !!existingOrder && (invoiceHistory ?? []).some((inv) => inv.orderNumbers.includes(existingOrder.orderNumber));
 
   const { data: testDataResetStatus } = useQuery({
     queryKey: ["test-data-reset-status"],
@@ -460,25 +472,39 @@ export default function OrderEdit() {
       </div>
 
       {!isNew && (
-        <div className="mb-6">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
           {linkedTickets && linkedTickets.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {linkedTickets.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => navigate(`/tickets/${t.id}`)}
-                  className="text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100"
-                >
-                  Linked ticket: {t.ticketNumber} - {t.title} →
-                </button>
-              ))}
-            </div>
+            linkedTickets.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => navigate(`/tickets/${t.id}`)}
+                className="text-sm bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-3 py-1 hover:bg-amber-100"
+              >
+                Linked ticket: {t.ticketNumber} - {t.title} →
+              </button>
+            ))
           ) : (
             <button
               onClick={() => navigate(`/tickets/new?orderId=${id}`)}
               className="text-sm text-slate-500 hover:text-slate-800"
             >
               + Open a support ticket for this order
+            </button>
+          )}
+          {existingOrder?.despatchedAt && (
+            <button
+              onClick={() => navigate(`/delivery-history/${existingOrder.id}`)}
+              className="text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1 hover:bg-blue-100"
+            >
+              Delivery History →
+            </button>
+          )}
+          {hasInvoices && (
+            <button
+              onClick={() => navigate(`/invoicing/history?order=${encodeURIComponent(existingOrder!.orderNumber)}`)}
+              className="text-sm bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-3 py-1 hover:bg-emerald-100"
+            >
+              Invoice History →
             </button>
           )}
         </div>

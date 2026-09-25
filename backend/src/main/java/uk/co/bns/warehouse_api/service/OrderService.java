@@ -11,12 +11,14 @@ import uk.co.bns.warehouse_api.dto.OrderRequest;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
+import uk.co.bns.warehouse_api.entity.Shipment;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.PickingStatus;
 import uk.co.bns.warehouse_api.exception.ConflictException;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.ProductRepository;
+import uk.co.bns.warehouse_api.repository.ShipmentRepository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -33,6 +35,7 @@ public class OrderService {
     private final CompanyService companyService;
     private final OrderReversalService orderReversalService;
     private final ShopifyOrderAmendService shopifyOrderAmendService;
+    private final ShipmentRepository shipmentRepository;
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -124,6 +127,19 @@ public class OrderService {
         // (already despatched/invoiced) order, this is the one thing allowed
         // to reopen it - see the status/shipping handling below.
         boolean extraStockNeeded = linesAddedOrIncreased(order, request.lines());
+        // Broader than "wasLocked && extraStockNeeded": a Partially
+        // Despatched order isn't locked (it's already open for edits - see
+        // below), but if it currently has its OWN shipment booked
+        // (dpdShipmentId set - i.e. shipment #2 already went out and this
+        // order is sitting there awaiting either the rest or invoicing) and
+        // extra lines are added on top of that, a THIRD shipment is what's
+        // actually being started. Without this, only the very first reopen
+        // (from a fully locked order) would ever archive/rebook correctly -
+        // a second reopen on an already-Partially-Despatched order would
+        // silently reuse shipment #2's DPD booking for shipment #3 too,
+        // exactly the bug this whole mechanism exists to avoid.
+        boolean reopeningForExtraShipment = extraStockNeeded
+                && (wasLocked || (statusBeforeEdit == OrderStatus.PARTIALLY_DESPATCHED && order.getDpdShipmentId() != null));
 
         // Status: INVOICE_PENDING/COMPLETED/PARTIALLY_DESPATCHED are all set
         // by the despatch/invoicing process itself (DespatchService,
@@ -150,11 +166,11 @@ public class OrderService {
         // delivery charge has actually been invoiced (order.shippingInvoiced -
         // see InvoiceService). Once that's happened the figures are locked -
         // UNLESS this exact save is what's reopening the order for an extra
-        // shipment (extraStockNeeded on a locked order), in which case
-        // shippingInvoiced is about to be reset below anyway, so there's
-        // nothing to protect and a new cost/courier/service can be set in
-        // the very same save as the added lines.
-        boolean shippingLocked = order.isShippingInvoiced() && !(wasLocked && extraStockNeeded);
+        // shipment (reopeningForExtraShipment), in which case shippingInvoiced
+        // is about to be reset below anyway, so there's nothing to protect
+        // and a new cost/courier/service can be set in the very same save as
+        // the added lines.
+        boolean shippingLocked = order.isShippingInvoiced() && !reopeningForExtraShipment;
         if (shippingLocked) {
             boolean costChanged = !bigDecimalEquals(request.shippingCost(), order.getShippingCost());
             boolean courierChanged = !java.util.Objects.equals(request.courierMethod(), order.getCourierMethod());
@@ -164,6 +180,18 @@ public class OrderService {
                 throw new uk.co.bns.warehouse_api.exception.ValidationException(
                         "Shipping cost, courier and service can no longer be changed - this order's delivery has already been invoiced");
             }
+        }
+
+        // Reopening for an extra shipment: archive whatever's currently on
+        // the order as its own Shipment history row, and clear the order's
+        // own dpd*/despatch fields so DespatchService's booking logic sees
+        // "nothing booked yet" and books a genuinely new DPD shipment next
+        // time, instead of silently reusing (and never updating) the first
+        // one. Must happen before applyFields() below, which is what's about
+        // to overwrite shippingCost/courierMethod/dpdNetworkKey with
+        // whatever this save is setting them to for the new shipment.
+        if (reopeningForExtraShipment) {
+            archiveCurrentShipment(order);
         }
 
         // Snapshot taken before any field is touched, so the amend sync below
@@ -177,16 +205,25 @@ public class OrderService {
         if (wasLocked && extraStockNeeded) {
             // Treated exactly like a genuine partial despatch - because it
             // now genuinely is one: this order shipped in full once already,
-            // and now owes more. shippingInvoiced resets so a separate
-            // shipping charge can be set and, in time, invoiced for this
-            // extra shipment on its own - the original delivery already was.
+            // and now owes more.
             order.setStatus(OrderStatus.PARTIALLY_DESPATCHED);
-            order.setShippingInvoiced(false);
         } else if (!wasLocked) {
             order.setStatus(request.status());
         }
         // else: wasLocked with nothing extra needed - status was already
         // validated above to be unchanged, so there's nothing to set.
+
+        if (reopeningForExtraShipment) {
+            // Covers both the wasLocked branch above (status just moved to
+            // PARTIALLY_DESPATCHED) and the already-Partially-Despatched/
+            // own-shipment-booked case (status was already PARTIALLY_DESPATCHED
+            // and stays there via request.status() above) - either way,
+            // shippingInvoiced resets so a separate shipping charge can be
+            // set and, in time, invoiced for this new extra shipment on its
+            // own, independent of whatever's already been invoiced for the
+            // one(s) before it.
+            order.setShippingInvoiced(false);
+        }
 
         Order saved = orderRepository.save(order);
         // Best-effort, never blocks or reverses the save above - see
@@ -195,6 +232,42 @@ public class OrderService {
         // can show the result of this one save.
         saved.setShopifyAmendStatus(shopifyOrderAmendService.syncAmendments(saved, before));
         return saved;
+    }
+
+    /**
+     * Copies whatever shipment is currently live on the order (its
+     * shippingCost/courierMethod/dpdNetworkKey and, if DPD-booked, its
+     * dpdShipmentId/dpdConsignmentNumber/dpdParcelNumbers/dpdShippedAt) into
+     * a Shipment history row, then clears the order's own dpd* booking
+     * fields - shippingCost/courierMethod/dpdNetworkKey are left alone here,
+     * since applyFields() (called right after this) is what sets those to
+     * the new shipment's values from the request. Only called (via
+     * reopeningForExtraShipment in update() above) once it's already
+     * established this order has a shipment worth archiving - either it was
+     * locked (fully despatched/invoiced at least once) or it's Partially
+     * Despatched with its own shipment already booked - so there's always
+     * something genuine here to keep.
+     */
+    private void archiveCurrentShipment(Order order) {
+        Shipment shipment = new Shipment();
+        shipment.setOrder(order);
+        shipment.setShippedAt(order.getDpdShippedAt() != null ? order.getDpdShippedAt() : order.getDespatchedAt());
+        shipment.setCourierMethod(order.getCourierMethod());
+        shipment.setDpdNetworkKey(order.getDpdNetworkKey());
+        shipment.setDpdShipmentId(order.getDpdShipmentId());
+        shipment.setDpdConsignmentNumber(order.getDpdConsignmentNumber());
+        shipment.setDpdParcelNumbers(order.getDpdParcelNumbers());
+        shipment.setShippingCost(order.getShippingCost());
+        shipmentRepository.save(shipment);
+
+        // Now safely archived - clear so DespatchService's "already booked,
+        // skip" check doesn't fire on the next despatch confirmation for
+        // this order, same "looks unbooked again" pattern
+        // OrderReversalService already uses for Reverse to Despatch.
+        order.setDpdShipmentId(null);
+        order.setDpdConsignmentNumber(null);
+        order.setDpdParcelNumbers(null);
+        order.setDpdShippedAt(null);
     }
 
     private static boolean isSystemOnlyStatus(OrderStatus status) {

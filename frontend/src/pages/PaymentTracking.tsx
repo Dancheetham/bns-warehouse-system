@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useToast } from "../components/ToastContext";
-import { formatDate } from "../utils/format";
+import { formatDate, inDateRange } from "../utils/format";
+import DateRangePicker from "../components/DateRangePicker";
 import {
   ApplyCreditBalanceRequest,
   CompanyView,
@@ -158,6 +159,8 @@ function PaymentRow({ invoice }: { invoice: OutstandingInvoiceView }) {
 export default function PaymentTracking() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const { data: outstanding, isLoading } = useQuery({
     queryKey: ["payment-tracking-outstanding"],
@@ -184,9 +187,12 @@ export default function PaymentTracking() {
     } else if (statusFilter === "PART_PAID") {
       matches = matches.filter((inv) => inv.paidAmount > 0 && inv.outstanding > 0);
     }
+    if (from || to) {
+      matches = matches.filter((inv) => inDateRange(inv.generationDate, from, to));
+    }
 
     return [...matches].sort((a, b) => b.daysOverTerms - a.daysOverTerms || b.daysSinceInvoiced - a.daysSinceInvoiced);
-  }, [outstanding, search, statusFilter]);
+  }, [outstanding, search, statusFilter, from, to]);
 
   const totalOutstanding = filtered.reduce((sum, inv) => sum + inv.outstanding, 0);
 
@@ -202,7 +208,7 @@ export default function PaymentTracking() {
         </div>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap items-center">
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -219,6 +225,7 @@ export default function PaymentTracking() {
           <option value="OVER_TERMS">Over payment terms</option>
           <option value="PART_PAID">Part payment</option>
         </select>
+        <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} fromLabel="Invoiced from" toLabel="Invoiced to" />
         <span className="text-sm text-slate-500 ml-auto">
           {filtered.length} invoice(s) · {money(totalOutstanding)} outstanding
         </span>

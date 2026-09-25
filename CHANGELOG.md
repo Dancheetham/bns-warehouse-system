@@ -5,6 +5,59 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.40] - 2026-09-25 (v0.105)
+
+### Added
+- **An order can now genuinely have more than one DPD shipment** - reopening
+  a despatched order for an extra shipment (adding/increasing lines) used
+  to silently reuse the first shipment's DPD booking on the next despatch,
+  so the extra parcels never got their own tracking number and the
+  original shipment's own consignment number was at risk of being
+  overwritten - flagged as a known limitation in the last release. Fixed
+  properly: whatever shipment is currently on the order (consignment
+  number, parcel numbers, shipping cost, courier/service) is now archived
+  to its own history record the moment the order is reopened, and the
+  order's own DPD fields are cleared so the next despatch confirmation
+  books a real, new shipment. Works for a third, fourth, etc. shipment on
+  the same order too, not just a second one. Delivery History's detail
+  page now shows a "Previous Shipments" section listing every earlier
+  shipment on the order, each with its own Track link.
+- **Purchase Orders moved into the Sales nav group** - it always sat oddly
+  under Warehouse; it's a sales/ordering function (what's been bought in,
+  from whom, expected when), not a warehouse-floor one. No functional
+  change, no URL change.
+- **Date range + search added wherever a list has dates and didn't already
+  have both** - Sales Activity (order date), Invoice History (invoice
+  date), Payment Tracking (invoice date), RMAs (submitted date, plus a
+  search box it didn't have before), and Purchase Orders (created date,
+  plus a search box it didn't have before). Delivery History already had
+  both.
+- **An order's own screen now links to its Invoice History and Delivery
+  History**, alongside the existing linked-ticket pill - "Delivery
+  History →" once the order has actually despatched, "Invoice History →"
+  once it's actually been invoiced (checks the real invoice list, not just
+  guessed from status). Both link through pre-filtered to that order.
+- **Delivery History detail page**: a "Carton Summary" dropdown above the
+  item table and search box, showing each carton and exactly how many of
+  each SKU were packed into it - regardless of packing mode (Split or
+  Serial), this is never ambiguous the way the per-unit "which carton"
+  column can be for a Split-Packing line spread across more than one
+  carton. Also added: a search box for the item table itself (SKU,
+  product, MAC, serial, batch), and a small clipboard icon next to the MAC
+  Address and Serial Number column headers that copies every value
+  currently shown in that column to the clipboard, one per line (respects
+  the search box, so a filtered subset can be copied too).
+
+### Note on Split Packing carton accuracy
+Asked directly: in Split Packing mode, is the carton shown for a unit exact
+or just "Split across cartons"? It's exact whenever that order line's whole
+quantity went into a single carton - "Split across cartons" only appears
+when a line's quantity was genuinely divided across more than one carton,
+which is the one case a specific unit's own carton can't be pinned down
+from what was recorded. The new Carton Summary section isn't affected by
+this at all either way - it's built from the same carton-line records but
+summed per carton rather than attributed per unit, so it's always exact.
+
 ## [0.23.39] - 2026-09-25 (v0.104)
 
 ### Added

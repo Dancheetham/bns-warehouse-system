@@ -123,9 +123,19 @@ shipment (its own shipping cost/courier/service, and it's invoiceable for
 just what's actually shipped). A **Delivery History** page (Sales) lists
 every despatched order with search, a date range and an Excel export, and
 each row opens a detail page of exactly what was shipped - MAC/serial/batch
-and carton number per unit, also exportable - plus a "Track" link wherever
-a DPD consignment number is shown, opening DPD's tracking page pre-filled
-with the consignment number.
+and carton number per unit, also exportable, a Carton Summary dropdown
+(quantity of each SKU per carton, always exact regardless of packing mode),
+and clipboard-copy icons on the MAC Address/Serial Number columns - plus a
+"Track" link wherever a DPD consignment number is shown, opening DPD's
+tracking page pre-filled with the consignment number. An order can have
+more than one shipment - each reopen for an extra shipment gets its own
+DPD booking and shipping cost, with earlier shipments kept and shown on
+the Delivery History detail page rather than overwritten. Sales Activity,
+Invoice History, Payment Tracking, RMAs and Purchase Orders all have a
+date-range filter and a search box now too. Purchase Orders lives under
+the Sales nav group alongside Sales Activity, Delivery History and
+Companies. An order's own screen links straight through to its filtered
+Invoice History/Delivery History once it's reached those stages.
 
 **RMAs** - public customer-facing return request form with live MAC/serial
 lookup, staff review/approval queue, receipt processing, automatic

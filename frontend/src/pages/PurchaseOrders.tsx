@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { PurchaseOrder, Product, Supplier } from "../types";
-import { formatDate } from "../utils/format";
+import { formatDate, inDateRange } from "../utils/format";
 import { useToast } from "../components/ToastContext";
+import DateRangePicker from "../components/DateRangePicker";
 
 interface LineDraft {
   productId: string;
@@ -27,11 +28,28 @@ export default function PurchaseOrders() {
   const [expectedDate, setExpectedDate] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([{ productId: "", quantityOrdered: "" }]);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
   const { data: purchaseOrders, isLoading } = useQuery({
     queryKey: ["purchase-orders"],
     queryFn: async () => (await api.get<PurchaseOrder[]>("/purchase-orders")).data,
   });
+
+  const filtered = useMemo(() => {
+    const list = purchaseOrders ?? [];
+    const term = search.trim().toLowerCase();
+    let matches = term
+      ? list.filter(
+          (po) => po.poNumber.toLowerCase().includes(term) || po.supplier.name.toLowerCase().includes(term)
+        )
+      : list;
+    if (from || to) {
+      matches = matches.filter((po) => inDateRange(po.createdAt, from, to));
+    }
+    return matches;
+  }, [purchaseOrders, search, from, to]);
 
   const { data: suppliers } = useQuery({
     queryKey: ["suppliers"],
@@ -169,6 +187,20 @@ export default function PurchaseOrders() {
         </form>
       )}
 
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
+        <div className="flex-1 min-w-[240px]">
+          <label className="block text-xs font-medium text-slate-500 mb-1">Search</label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="PO number or supplier..."
+            className="w-full border-2 border-slate-300 focus:border-emerald-500 rounded-lg px-4 py-2.5 outline-none text-sm"
+          />
+        </div>
+        <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} fromLabel="Created from" toLabel="Created to" />
+        <span className="text-sm text-slate-500 mb-2">{filtered.length} record(s)</span>
+      </div>
+
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-500">
@@ -187,7 +219,14 @@ export default function PurchaseOrders() {
                 </td>
               </tr>
             )}
-            {purchaseOrders?.map((po) => (
+            {filtered.length === 0 && !isLoading && (
+              <tr>
+                <td className="px-4 py-4 text-slate-400" colSpan={4}>
+                  {search || from || to ? "No purchase orders match the current filters." : "No purchase orders yet."}
+                </td>
+              </tr>
+            )}
+            {filtered.map((po) => (
               <tr key={po.id} className="hover:bg-slate-50">
                 <td className="px-4 py-2 font-medium">
                   <Link to={`/purchase-orders/${po.id}`} className="text-blue-600 hover:underline">

@@ -10,9 +10,11 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
+import uk.co.bns.warehouse_api.dto.DeliveryHistoryCartonSummaryRow;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryDetailView;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryItemView;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryView;
+import uk.co.bns.warehouse_api.dto.ShipmentView;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.CartonLine;
 import uk.co.bns.warehouse_api.entity.Order;
@@ -24,6 +26,7 @@ import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.CartonLineRepository;
 import uk.co.bns.warehouse_api.repository.CartonRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
+import uk.co.bns.warehouse_api.repository.ShipmentRepository;
 import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
 import java.io.ByteArrayOutputStream;
@@ -55,6 +58,7 @@ public class DeliveryHistoryService {
     private final StockItemRepository stockItemRepository;
     private final CartonRepository cartonRepository;
     private final CartonLineRepository cartonLineRepository;
+    private final ShipmentRepository shipmentRepository;
 
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
@@ -74,7 +78,19 @@ public class DeliveryHistoryService {
         if (order.getDespatchedAt() == null) {
             throw new NotFoundException("Order " + order.getOrderNumber() + " hasn't been despatched yet");
         }
-        return new DeliveryHistoryDetailView(toView(order), itemsFor(order));
+        return new DeliveryHistoryDetailView(toView(order), itemsFor(order), cartonSummaryFor(order), previousShipmentsFor(order));
+    }
+
+    private List<ShipmentView> previousShipmentsFor(Order order) {
+        return shipmentRepository.findByOrder_IdOrderByCreatedAtAsc(order.getId()).stream()
+                .map(s -> new ShipmentView(
+                        s.getShippedAt(),
+                        s.getDpdConsignmentNumber() != null ? "DPD" : null,
+                        s.getCourierMethod(),
+                        s.getDpdConsignmentNumber(),
+                        s.getDpdParcelNumbers(),
+                        s.getShippingCost()))
+                .toList();
     }
 
     public byte[] exportExcel(LocalDate from, LocalDate to) {
@@ -148,6 +164,29 @@ public class DeliveryHistoryService {
                 row.createCell(5).setCellValue(nullToBlank(item.batchCode()));
                 row.createCell(6).setCellValue(item.quantity());
                 row.createCell(7).setCellValue(item.cartonNumber() != null ? String.valueOf(item.cartonNumber()) : "");
+            }
+
+            Sheet summarySheet = workbook.createSheet("Carton Summary");
+            CellStyle summaryHeaderStyle = headerStyle(workbook);
+            String[] summaryHeaders = {"Carton Number", "SKU", "Product Name", "Quantity"};
+            Row summaryHeader = summarySheet.createRow(0);
+            for (int i = 0; i < summaryHeaders.length; i++) {
+                var cell = summaryHeader.createCell(i);
+                cell.setCellValue(summaryHeaders[i]);
+                cell.setCellStyle(summaryHeaderStyle);
+            }
+            summarySheet.createFreezePane(0, 1);
+            int[] summaryWidths = {3500, 4000, 9000, 3000};
+            for (int i = 0; i < summaryWidths.length; i++) {
+                summarySheet.setColumnWidth(i, summaryWidths[i]);
+            }
+            int summaryRowNum = 1;
+            for (DeliveryHistoryCartonSummaryRow row : detail.cartonSummary()) {
+                Row r = summarySheet.createRow(summaryRowNum++);
+                r.createCell(0).setCellValue(row.cartonNumber());
+                r.createCell(1).setCellValue(row.sku());
+                r.createCell(2).setCellValue(row.productName());
+                r.createCell(3).setCellValue(row.quantity());
             }
 
             return toBytes(workbook);
@@ -227,6 +266,45 @@ public class DeliveryHistoryService {
 
         rows.sort(Comparator.comparing(DeliveryHistoryItemView::sku));
         return rows;
+    }
+
+    /**
+     * Per-carton SKU quantities, for the "Carton Summary" dropdown above the
+     * item table. Combines the same two sources as itemsFor() above - a
+     * Serial-Packing StockItem's own carton, or a Split-Packing/NONE-tracking
+     * CartonLine - but summed per carton+product rather than listed per
+     * unit. Unlike the per-unit view, this is never ambiguous: whichever
+     * packing mode was used, every packed unit ends up counted against
+     * exactly one carton here (a StockItem contributes to its own carton, a
+     * CartonLine's quantity to its carton - the two sources never overlap
+     * for the same units, since Split Packing never sets StockItem.carton
+     * and Serial Packing never creates CartonLines).
+     */
+    private List<DeliveryHistoryCartonSummaryRow> cartonSummaryFor(Order order) {
+        record Key(int cartonNumber, String sku, String productName) {}
+        Map<Key, Integer> totals = new java.util.LinkedHashMap<>();
+
+        List<StockItem> despatchedItems = stockItemRepository.findByOrderLine_Order_IdAndStatus(
+                order.getId(), StockItemStatus.DESPATCHED);
+        for (StockItem item : despatchedItems) {
+            if (item.getCarton() == null) continue;
+            Key key = new Key(item.getCarton().getCartonNumber(), item.getProduct().getSku(), item.getProduct().getName());
+            totals.merge(key, 1, Integer::sum);
+        }
+
+        List<CartonLine> cartonLines = cartonLineRepository.findByOrderLine_Order_Id(order.getId());
+        for (CartonLine cl : cartonLines) {
+            if (cl.getCarton() == null || cl.getOrderLine() == null || cl.getQuantity() == null || cl.getQuantity() <= 0) continue;
+            var product = cl.getOrderLine().getProduct();
+            Key key = new Key(cl.getCarton().getCartonNumber(), product.getSku(), product.getName());
+            totals.merge(key, cl.getQuantity(), Integer::sum);
+        }
+
+        return totals.entrySet().stream()
+                .map(e -> new DeliveryHistoryCartonSummaryRow(e.getKey().cartonNumber(), e.getKey().sku(), e.getKey().productName(), e.getValue()))
+                .sorted(Comparator.comparingInt(DeliveryHistoryCartonSummaryRow::cartonNumber)
+                        .thenComparing(DeliveryHistoryCartonSummaryRow::sku))
+                .toList();
     }
 
     private CellStyle headerStyle(Workbook workbook) {

@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
-import { formatDate } from "../utils/format";
+import { formatDate, inDateRange } from "../utils/format";
+import DateRangePicker from "../components/DateRangePicker";
 import { InvoiceHistoryView, InvoiceType } from "../types";
 
 const money = (v: number) => `£${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -12,8 +14,20 @@ const TYPE_STYLES: Record<InvoiceType, string> = {
 };
 
 export default function InvoiceHistory() {
-  const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  // A link from an order's own screen (OrderEdit's "Invoice History" link,
+  // once that order has actually been invoiced) lands here with ?order=
+  // set, pre-filtering to just that order number rather than dumping the
+  // whole history on screen.
+  const [search, setSearch] = useState(() => searchParams.get("order") ?? "");
   const [typeFilter, setTypeFilter] = useState<InvoiceType | "">("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  useEffect(() => {
+    const order = searchParams.get("order");
+    if (order) setSearch(order);
+  }, [searchParams]);
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["invoice-history"],
@@ -34,8 +48,11 @@ export default function InvoiceHistory() {
     if (typeFilter) {
       matches = matches.filter((inv) => inv.invoiceType === typeFilter);
     }
+    if (from || to) {
+      matches = matches.filter((inv) => inDateRange(inv.generationDate, from, to));
+    }
     return matches;
-  }, [invoices, search, typeFilter]);
+  }, [invoices, search, typeFilter, from, to]);
 
   return (
     <div>
@@ -46,7 +63,7 @@ export default function InvoiceHistory() {
         </div>
       </div>
 
-      <div className="flex gap-3 mb-4 flex-wrap items-center">
+      <div className="flex gap-3 mb-4 flex-wrap items-end">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -58,6 +75,7 @@ export default function InvoiceHistory() {
           <option value="INVOICE">Invoices</option>
           <option value="CREDIT_NOTE">Credit notes</option>
         </select>
+        <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} />
         <span className="text-sm text-slate-500 ml-auto">{filtered.length} record(s)</span>
       </div>
 

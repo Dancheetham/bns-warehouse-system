@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Order, OrderStatus, OrderType } from "../types";
-import { formatDate } from "../utils/format";
+import { formatDate, inDateRange } from "../utils/format";
 import { ORDER_STATUSES, resolveStatusColors, statusLabel } from "../utils/statusColors";
+import DateRangePicker from "../components/DateRangePicker";
 
 const TYPE_STYLES: Record<OrderType, string> = {
   ORDER: "bg-slate-100 text-slate-600",
@@ -40,8 +41,11 @@ const SEARCHABLE_FIELDS: (keyof Order)[] = [
 
 export default function SalesActivity() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState<Order | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
+  const [orderDateFrom, setOrderDateFrom] = useState("");
+  const [orderDateTo, setOrderDateTo] = useState("");
   // Defaults match the previous fixed behaviour (newest order date first) so
   // nothing changes on screen until someone actually clicks a header or
   // picks a filter.
@@ -82,6 +86,11 @@ export default function SalesActivity() {
 
   const statusColors = useMemo(() => resolveStatusColors(myUserSettings), [myUserSettings]);
 
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) setSearch(q);
+  }, [searchParams]);
+
   const filtered = useMemo(() => {
     const list = orders ?? [];
     const term = search.trim().toLowerCase();
@@ -101,6 +110,9 @@ export default function SalesActivity() {
     if (typeFilter) {
       matches = matches.filter((order) => order.orderType === typeFilter);
     }
+    if (orderDateFrom || orderDateTo) {
+      matches = matches.filter((order) => inDateRange(order.orderDate, orderDateFrom, orderDateTo));
+    }
 
     const direction = sortDirection === "asc" ? 1 : -1;
     return [...matches].sort((a, b) => {
@@ -108,7 +120,7 @@ export default function SalesActivity() {
       const bValue = sortField === "id" ? b.id : new Date(b.orderDate).getTime();
       return (aValue - bValue) * direction;
     });
-  }, [orders, search, statusFilter, typeFilter, sortField, sortDirection]);
+  }, [orders, search, statusFilter, typeFilter, orderDateFrom, orderDateTo, sortField, sortDirection]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-140px)]">
@@ -122,12 +134,22 @@ export default function SalesActivity() {
         </button>
       </div>
 
-      <input
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search by order number, customer, reference, delivery details..."
-        className="w-full border-2 border-slate-300 focus:border-emerald-500 rounded-lg px-4 py-2.5 mb-4 outline-none text-sm shrink-0"
-      />
+      <div className="flex gap-3 mb-4 flex-wrap items-end shrink-0">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by order number, customer, reference, delivery details..."
+          className="flex-1 min-w-[260px] border-2 border-slate-300 focus:border-emerald-500 rounded-lg px-4 py-2.5 outline-none text-sm"
+        />
+        <DateRangePicker
+          from={orderDateFrom}
+          to={orderDateTo}
+          onFromChange={setOrderDateFrom}
+          onToChange={setOrderDateTo}
+          fromLabel="Order date from"
+          toLabel="Order date to"
+        />
+      </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-auto flex-[3] mb-4 w-full">
         <table className="w-full text-sm table-fixed">

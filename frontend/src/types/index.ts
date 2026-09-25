@@ -702,6 +702,11 @@ export interface Order {
   dpdConsignmentNumber?: string;
   dpdParcelNumbers?: string;
   dpdShippedAt?: string;
+  // Set once, the first time this order actually despatches - never cleared
+  // by Reverse to Despatch. Absence means it's never gone out the door at
+  // all, which is what OrderEdit uses to decide whether to show a Delivery
+  // History link for it.
+  despatchedAt?: string;
   lines: OrderLine[];
   // Set only on the response to a save - whether (and how) that save's
   // changes were pushed back to the underlying Shopify order. Never present
@@ -899,7 +904,25 @@ export interface DeliveryHistoryItemView {
   cartonNumber?: number;
 }
 
+export interface DeliveryHistoryCartonSummaryRow {
+  cartonNumber: number;
+  sku: string;
+  productName: string;
+  quantity: number;
+}
+
+export interface ShipmentView {
+  shippedAt?: string;
+  courier?: string;
+  courierMethod?: string;
+  dpdConsignmentNumber?: string;
+  dpdParcelNumbers?: string;
+  shippingCost?: number;
+}
+
 export interface DeliveryHistoryDetailView {
   order: DeliveryHistoryView;
   items: DeliveryHistoryItemView[];
+  cartonSummary: DeliveryHistoryCartonSummaryRow[];
+  previousShipments: ShipmentView[];
 }
