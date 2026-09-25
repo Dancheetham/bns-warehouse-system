@@ -74,6 +74,19 @@ public class DespatchService {
             throw new ValidationException("This order hasn't finished picking yet");
         }
 
+        // Checked first, before anything below touches stock or the order's
+        // status - if the service saved on the order isn't actually bookable
+        // right now, despatch must not proceed at all (stock stays put, the
+        // order stays exactly as it was), not "despatch anyway and report the
+        // booking failure afterwards" (that's what bookDpdShipment() below
+        // still does for other, more transient failures - this is the one
+        // case explicitly asked to be a hard stop instead). Skipped entirely
+        // once a shipment's already booked for this order - nothing to
+        // re-validate at that point.
+        if (order.getDpdShipmentId() == null && !settingsService.get("dpd_api_key", "").isBlank()) {
+            dpdShippingService.assertOrderServiceAvailable(order);
+        }
+
         // Anything still unpacked at this point (picker never opened Packing, or
         // left a few units unassigned) gets swept into one final carton so nothing
         // picked is ever left off a label - whichever packing mode is active.

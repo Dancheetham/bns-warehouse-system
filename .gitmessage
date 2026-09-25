@@ -1,45 +1,58 @@
-Bill delivery as an invoice line, company name on Generate Invoices, order screen rework (v0.102)
+Fix DPD service surviving reverse-to-despatch, block despatch on an
+unavailable saved service, keep shipping fields editable until invoiced (v0.103)
 
-Delivery billed as a line item:
-- Generate Invoices now bills an order's shipping/delivery cost as its
-  own line on the invoice PDF ("DELIVERY", qty 1, VAT applied the same
-  as a product line), instead of that cost only ever showing in the
-  pre-invoice credit estimate and disappearing once the order's product
-  lines are invoiced.
-- Order.shippingInvoiced is a once-only guard so an order's delivery
-  charge is billed on exactly one invoice, whichever generation run
-  first touches that order, even if its lines end up split across more
-  than one invoice run.
-- Not applied to RMA credit notes - those credit returned goods, not the
-  original outbound delivery charge.
-- InvoiceLine.orderLine is now nullable (a shipping line has no product
-  OrderLine behind it) with a new boolean "shipping" flag to tell it
-  apart from a product line.
-- CompanyService.creditUsed()'s bucket 2 (despatched, not yet invoiced)
-  now also carries an order's shipping cost for as long as it stays
-  unbilled, so it's counted in exactly one bucket as it moves from
-  pre-despatch to despatched-but-unbilled to actually invoiced - closes
-  the gap flagged in v0.101.
+Reverse to Despatch no longer clears the chosen DPD service:
+- OrderReversalService.reverseToDespatch() was clearing dpdNetworkKey
+  alongside the actual DPD booking fields it's undoing (consignment/parcel
+  numbers, shipped-at). Clearing the service too meant the next despatch
+  found nothing explicitly chosen and silently auto-picked whatever DPD's
+  live lookup returned first - reported as a Parcel Next Day order coming
+  back as a Pre-12 (or similar) after reversing and re-shipping.
+- The DPD booking itself is still fully undone on reversal exactly as
+  before; only the staff member's own Service choice now survives it.
+  cancelAndReturnToStock() (a full cancellation back to On Hold, not the
+  reported scenario) still clears it, since that's genuinely a fresh
+  release cycle.
 
-Generate Invoices:
-- Each order's row now also shows its company name (previously only the
-  group heading above it did), so a special requirement can be spotted
-  without scrolling back up to check whose orders are being looked at.
+Despatch now refuses to proceed if the saved service isn't available:
+- DespatchService.confirmDespatch() calls a new
+  DpdShippingService.assertOrderServiceAvailable() right at the start,
+  before any stock movement or status change - if the order's explicitly
+  chosen service isn't actually available (or DPD can't even be asked),
+  the whole despatch is rejected and nothing moves. Everything else about
+  DPD booking (bookDpdShipment(), further down) stays best-effort exactly
+  as before - this is deliberately the one case that's a hard stop, per
+  the explicit ask.
+- Skipped when no service was ever explicitly chosen (existing auto-pick
+  fallback still applies) or a shipment's already booked for the order.
+- No frontend change needed for the "error with a back button" part - both
+  Split and Serial Packing already show a top-level error banner and
+  already have a permanent "← Back to Despatch" link above the packing
+  grid; this now just reaches them via a real validation failure instead
+  of never firing before despatch had already gone through.
 
-Sales Activity / Order Edit:
-- Order Lines now comes before the Despatch panel.
-- The Despatch panel is now two columns: the existing release/despatch
-  controls on the left, and a live Cost Breakdown on the right (Goods
-  Net, Delivery, Total Net, Total Tax, Total Order) that recalculates
-  immediately as order lines or the shipping cost are edited, using the
-  linked company's VAT rate override or the Settings default - before
-  the order is even saved.
+Shipping cost/courier/service editable for an order's whole life, until invoiced:
+- Order Edit no longer restricts these to the On Hold release form - they
+  now stay editable (open the order, change them, click Save Order) at any
+  status right up until the order's delivery has actually been invoiced
+  (Order.shippingInvoiced, from v0.102), at which point the screen locks
+  them to a read-only summary instead.
+- OrderRequest/OrderService.applyFields carry dpdNetworkKey now too (only
+  releaseForDespatch could set it before), and OrderService.update()
+  rejects a genuine change to any of the three once shippingInvoiced is
+  true - enforced server-side, not just hidden in the UI.
+- Covers the reported scenario directly: an order released on one service,
+  changed by staff before despatch after a customer calls to switch, and
+  despatch/packing picks up whatever's saved at confirmation time - not
+  what was chosen at release.
 
 Written and reviewed without a working compiler in this environment
 (Maven Central/npm registry both blocked here) - please build and
-smoke-test before relying on this, particularly Generate Invoices (the
-new delivery line, and that shipping is billed exactly once per order)
-and the reworked order screen's live cost breakdown.
+smoke-test before relying on this, particularly: reversing an order to
+despatch and re-shipping keeps the original service; a despatch with a
+now-unavailable saved service is cleanly blocked and rolls back; and
+shipping cost/courier/service can be changed and saved after release, then
+lock once actually invoiced.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

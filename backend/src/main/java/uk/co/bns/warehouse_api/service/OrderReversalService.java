@@ -79,11 +79,18 @@ public class OrderReversalService {
         // still technically exist on DPD's side, uncancelled - if that
         // matters (e.g. it was already scanned in for collection), it needs
         // cancelling from DPD's own portal (myDPD), not from here.
+        //
+        // dpdNetworkKey (the chosen Service) is deliberately NOT cleared here,
+        // unlike the fields above - it's the staff member's explicit choice,
+        // not a DPD booking artefact, and resolveNetworkCode() treats it as
+        // authoritative. Clearing it used to mean the next despatch found no
+        // order choice and silently auto-picked whatever DPD's live lookup
+        // returned first (often not what was on the order before), instead
+        // of re-booking against the exact same service as before.
         order.setDpdShipmentId(null);
         order.setDpdConsignmentNumber(null);
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
-        order.setDpdNetworkKey(null);
 
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
         for (StockItem item : items) {

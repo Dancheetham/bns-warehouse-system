@@ -109,7 +109,12 @@ Despatch (credit-checked, see below), on-demand Picking Note PDFs, genuinely
 silent printing via `print-agent/`, Split and Serial packing modes, sample
 shipping labels, and a despatch confirmation email (own system, not
 Shopify's - see Shopify section) listing MAC/serial/default password per
-device shipped.
+device shipped. Shipping cost, courier and DPD service stay editable on the
+order screen for its whole life, not just while On Hold - right up until
+its delivery has actually been invoiced - and whatever's saved at the exact
+moment despatch is confirmed is what gets booked; if that saved service
+isn't actually available any more, despatch is refused outright (nothing
+moves) rather than silently booking a different one.
 
 **RMAs** - public customer-facing return request form with live MAC/serial
 lookup, staff review/approval queue, receipt processing, automatic

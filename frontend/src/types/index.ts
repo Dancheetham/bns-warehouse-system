@@ -692,6 +692,10 @@ export interface Order {
   shippingCost?: number;
   courierMethod?: string;
   dpdNetworkKey?: string;
+  // Once-only guard, set the moment this order's delivery charge is actually
+  // billed on an invoice (see InvoiceService) - shipping cost/courier/service
+  // stay editable right up until this flips true, then they're locked.
+  shippingInvoiced?: boolean;
   specialInstructions?: string;
   acknowledgementSentAt?: string;
   dpdShipmentId?: string;

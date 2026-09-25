@@ -42,6 +42,18 @@ public class OrderService {
                 .orElseThrow(() -> new NotFoundException("Order " + id + " not found"));
     }
 
+    // BigDecimal.equals() is scale-sensitive (10.0 != 10.00), which would
+    // treat a value that's genuinely unchanged - just round-tripped through
+    // the frontend with a different number of decimal places - as a change
+    // to reject once shippingInvoiced. compareTo() is the numeric comparison
+    // actually wanted here.
+    private static boolean bigDecimalEquals(java.math.BigDecimal a, java.math.BigDecimal b) {
+        if (a == null || b == null) {
+            return a == b;
+        }
+        return a.compareTo(b) == 0;
+    }
+
     /**
      * A brand-new order has no picked stock to worry about - clear and
      * recreate is simple and correct here.
@@ -89,6 +101,23 @@ public class OrderService {
             throw new ConflictException(
                     "This was changed by someone else while you had it open - reload the page to see their changes, then try your edit again");
         }
+        // Shipping cost/courier/service stay editable throughout an order's
+        // life - including after release, right up until the point its
+        // delivery charge has actually been invoiced (order.shippingInvoiced -
+        // see InvoiceService). Once that's happened the figures are locked:
+        // rejecting a genuine change outright here, rather than silently
+        // ignoring it, means the person editing finds out immediately rather
+        // than assuming their change took.
+        if (order.isShippingInvoiced()) {
+            boolean costChanged = !bigDecimalEquals(request.shippingCost(), order.getShippingCost());
+            boolean courierChanged = !java.util.Objects.equals(request.courierMethod(), order.getCourierMethod());
+            boolean serviceChanged = request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()
+                    && !request.dpdNetworkKey().equals(order.getDpdNetworkKey());
+            if (costChanged || courierChanged || serviceChanged) {
+                throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                        "Shipping cost, courier and service can no longer be changed - this order's delivery has already been invoiced");
+            }
+        }
         // Snapshot taken before any field is touched, so the amend sync below
         // is diffing genuine before/after state rather than something already
         // overwritten by applyFields().
@@ -124,6 +153,13 @@ public class OrderService {
         order.setOrderType(request.orderType());
         order.setShippingCost(request.shippingCost());
         order.setCourierMethod(request.courierMethod());
+        // Blank/null is "leave whatever's there", matching releaseForDespatch
+        // below - callers that don't know about DPD services at all (e.g. a
+        // future integration building an OrderRequest without ever touching
+        // this field) shouldn't silently wipe out a service someone picked.
+        if (request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()) {
+            order.setDpdNetworkKey(request.dpdNetworkKey());
+        }
         order.setSpecialInstructions(request.specialInstructions());
         order.setCompany(request.companyId() != null ? companyService.findById(request.companyId()) : null);
     }

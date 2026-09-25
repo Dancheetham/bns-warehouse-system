@@ -754,6 +754,48 @@ public class DpdShippingService {
         return services.get(0).path("networkKey").asText();
     }
 
+    /**
+     * Confirms the order's explicitly-chosen service (order.dpdNetworkKey) is
+     * still actually available right now, WITHOUT booking anything - called
+     * at the very top of DespatchService.confirmDespatch(), before any stock
+     * or status change, so an order can be blocked from despatching at all
+     * rather than despatching and only then discovering the booking can't be
+     * made. Deliberately stricter than resolveNetworkCode() above: that
+     * method trusts the order's choice completely and never re-checks it at
+     * booking time, by design, since the picked service is what the picking
+     * note tells the picker to use. This is the one place that IS allowed to
+     * say "no" to it - because here, saying no stops the despatch itself
+     * rather than silently substituting a different service.
+     *
+     * A blank order choice is left alone (returns normally) - that's the
+     * existing "nothing was picked, fall back to auto-select at booking
+     * time" path, unrelated to this check.
+     */
+    public void assertOrderServiceAvailable(Order order) {
+        String orderChoice = order.getDpdNetworkKey();
+        if (orderChoice == null || orderChoice.isBlank()) {
+            return;
+        }
+
+        String senderPostcode = settingsService.get("dpd_sender_postcode", "");
+        String senderTown = settingsService.get("dpd_sender_town", "");
+        String senderCountryCode = settingsService.get("dpd_sender_country_code", "GB");
+
+        JsonNode services;
+        try {
+            services = fetchAvailableServices(order, senderPostcode, senderTown, senderCountryCode);
+        } catch (Exception e) {
+            throw new ValidationException("Couldn't confirm the DPD service saved on this order (" + orderChoice
+                    + ") is still available: " + e.getMessage()
+                    + " - check the service on the order screen and try despatching again");
+        }
+        if (!matches(services, orderChoice)) {
+            throw new ValidationException("The DPD service saved on this order (" + orderChoice
+                    + ") is no longer available for this delivery address/weight - pick a different service on the "
+                    + "order screen, then despatch again");
+        }
+    }
+
     private boolean matches(JsonNode services, String networkKey) {
         for (JsonNode service : services) {
             if (networkKey.equals(service.path("networkKey").asText(null))) {

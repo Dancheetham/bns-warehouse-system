@@ -32,6 +32,13 @@ public record OrderRequest(
         @NotNull OrderType orderType,
         BigDecimal shippingCost,
         String courierMethod,
+        // Optional - the general update path can now carry the DPD service
+        // choice too (previously only releaseForDespatch could set it), so
+        // it can be changed after release without going through that
+        // ON_HOLD-only endpoint. Null/blank means "leave whatever's there" -
+        // see OrderService.applyFields, which mirrors releaseForDespatch's
+        // own blank-is-a-no-op handling rather than wiping it out.
+        String dpdNetworkKey,
         String specialInstructions,
         // Only meaningful on update, not create - the version the editor
         // loaded, so a stale save (someone else has saved since) can be

@@ -5,6 +5,58 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.38] - 2026-09-25 (v0.103)
+
+### Fixed
+- **Reversing to despatch no longer changes the DPD service** - `Reverse to
+  Despatch` was clearing the order's chosen Service (dpdNetworkKey) along
+  with the actual DPD booking it was undoing, so the next despatch found no
+  service saved on the order and silently auto-picked whichever one DPD's
+  live lookup happened to return first (a "9:00-12:00" style service, not
+  what was actually chosen) - reported as a Parcel Next Day order coming
+  back as a Pre-12 (or similar) after a reverse-and-reship. The booking
+  itself is still fully undone on reversal (consignment/parcel numbers,
+  shipped-at all cleared, so the next despatch books a fresh shipment) -
+  only the staff member's own Service choice now survives it, exactly as it
+  would if the order had never been reversed at all.
+
+### Added
+- **Despatch now refuses to proceed if the saved DPD service isn't
+  available** - previously, DPD booking at despatch confirmation was
+  entirely best-effort: if it failed for any reason, the order still
+  despatched (stock still moved, status still advanced) and the failure was
+  only reported afterwards as a status message. That's still true for most
+  failures, but the specific case of "the service saved on this order isn't
+  actually available right now" is now checked *before* anything else
+  happens - if it fails, the order isn't despatched at all, nothing moves,
+  and the despatch screen (Split/Serial Packing) shows the error with its
+  existing "← Back to Despatch" button, exactly as asked. Skipped entirely
+  once a DPD shipment's already booked for the order, or when no service was
+  ever explicitly chosen (that still falls back to auto-picking one, as
+  before).
+- **Shipping cost, courier and service stay editable for an order's whole
+  life, until invoiced** - previously these could only be changed while an
+  order was On Hold, via the release form; once released, the order screen
+  only ever showed them read-only. They're now editable at every status
+  (change them on the order screen, then Save Order as normal) right up
+  until the order's delivery charge has actually been invoiced
+  (Order.shippingInvoiced, from v0.102), at which point they lock and the
+  screen goes back to a read-only summary. Covers the scenario an order is
+  released on one service, the customer calls before despatch to switch
+  (e.g. Parcel Next Day to Pre-12), staff change it on the order screen, and
+  despatch/packing picks up and books whatever's saved at that moment - not
+  what was originally chosen at release. Enforced server-side too (an edit
+  to any of the three is rejected outright once shippingInvoiced), not just
+  hidden in the UI.
+
+### Known limitations
+- Written and reviewed without a working compiler in this environment
+  (Maven Central/npm registry both blocked here) - please build and
+  smoke-test before relying on it, particularly the reverse-to-despatch fix,
+  the new pre-despatch DPD service check (including its rollback - nothing
+  should move if it fires), and editing shipping cost/courier/service after
+  release.
+
 ## [0.23.37] - 2026-09-25 (v0.102)
 
 ### Added

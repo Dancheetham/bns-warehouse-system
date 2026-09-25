@@ -166,6 +166,12 @@ export default function OrderEdit() {
         orderType,
         shippingCost: shippingCost ? Number(shippingCost) : undefined,
         courierMethod: courierMethod || undefined,
+        // Included so a service change made after release (once the order's
+        // no longer ON_HOLD, and so no longer going through
+        // release-for-despatch) is actually saved by the ordinary Save Order
+        // button - see OrderService.applyFields, which now accepts this on
+        // the general update path too.
+        dpdNetworkKey: dpdNetworkKey || undefined,
         specialInstructions: specialInstructions || undefined,
         // Only meaningful for an existing order - lets the backend reject
         // the save with a clear conflict if someone else has already saved
@@ -241,7 +247,10 @@ export default function OrderEdit() {
   } = useQuery({
     queryKey: ["dpd-services", id],
     queryFn: async () => (await api.get<DpdServiceLookupResult>(`/orders/${id}/dpd-services`)).data,
-    enabled: !isNew && status === "ON_HOLD" && courier === "DPD",
+    // Not limited to ON_HOLD any more - the service stays editable (and so
+    // needs a live options list) at any status up until the order's shipping
+    // has actually been invoiced.
+    enabled: !isNew && courier === "DPD" && !existingOrder?.shippingInvoiced,
     retry: false,
   });
   const dpdServices = dpdServiceResult?.services;
@@ -636,11 +645,14 @@ export default function OrderEdit() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-          {/* Always visible, even after release - Dan didn't like this
-              disappearing the moment an order left On Hold, since it's
-              useful to see what was actually charged/booked at a glance
-              without having to remember or dig for it. */}
-          {status !== "ON_HOLD" && (shippingCost || courier || courierMethod) && (
+          {/* Once the delivery charge has actually been invoiced, the figures
+              are locked (see OrderService.update) - shown read-only here,
+              same as before. Until then, the editable form below is shown
+              instead, at every status - not just On Hold - since Dan wants
+              these changeable right up to the point of invoicing, including
+              after release (e.g. the customer calls to switch courier
+              service before despatch). */}
+          {existingOrder?.shippingInvoiced && (shippingCost || courier || courierMethod) && (
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600 mb-3">
               <span>
                 <span className="text-slate-400">Shipping Cost:</span>{" "}
@@ -652,14 +664,16 @@ export default function OrderEdit() {
               <span>
                 <span className="text-slate-400">Service:</span> {courierMethod || "-"}
               </span>
+              <span className="text-xs text-slate-400 italic">Locked - this order has been invoiced</span>
             </div>
           )}
 
-          {status === "ON_HOLD" ? (
+          {!existingOrder?.shippingInvoiced && (
             <div>
               <p className="text-sm text-slate-500 mb-3">
-                Set the shipping cost and courier, then release - this replaces the old
-                "untick On Hold" step.
+                {status === "ON_HOLD"
+                  ? 'Set the shipping cost and courier, then release - this replaces the old "untick On Hold" step.'
+                  : "Shipping cost, courier and service stay editable until this order is invoiced - change them here, then click Save Order below. At despatch, whatever's saved on the order at that moment is what's used."}
               </p>
               <div className="flex gap-3 items-end flex-wrap mb-3">
                 <div>
@@ -761,16 +775,18 @@ export default function OrderEdit() {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={() => releaseMutation.mutate(undefined)}
-                  disabled={releaseMutation.isPending}
-                  className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
-                >
-                  {releaseMutation.isPending ? "Releasing..." : "Release for Despatch"}
-                </button>
+                {status === "ON_HOLD" && (
+                  <button
+                    onClick={() => releaseMutation.mutate(undefined)}
+                    disabled={releaseMutation.isPending}
+                    className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {releaseMutation.isPending ? "Releasing..." : "Release for Despatch"}
+                  </button>
+                )}
               </div>
 
-              {showCreditOverride && (
+              {status === "ON_HOLD" && showCreditOverride && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-3">
                   <p className="text-sm text-red-700 mb-2">
                     Blocked by the credit limit. Enter a reason to release anyway - this is logged.
@@ -793,7 +809,9 @@ export default function OrderEdit() {
                 </div>
               )}
             </div>
-          ) : (
+          )}
+
+          {status !== "ON_HOLD" && (
             <div className="flex flex-wrap gap-3 items-center">
               <button
                 onClick={printPickingNote}
