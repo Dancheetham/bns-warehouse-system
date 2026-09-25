@@ -116,12 +116,14 @@ lookup, staff review/approval queue, receipt processing, automatic
 replacement-order or credit-note creation depending on fault status,
 configurable return windows, and a cover sheet PDF.
 
-**B2B credit control** - Companies with an optional credit limit, a Payments
-ledger recorded against specific orders, a live credit-used calculation, and
-release-for-despatch blocking when a company is over its limit (with a
-required-reason override that's logged). Companies also carry an On Hold
-(credit hold) flag, a Do Not Use flag, and GAPS/GDMS tick-boxes imported
-from OrderWise, all filterable on the Companies page.
+**B2B credit control** - Companies with an optional credit limit, a live
+credit-used calculation (orders in progress, despatched-but-not-yet-invoiced
+lines, and unpaid invoices, added together), a credit balance "wallet" for
+overpayments and unapplied credit notes, and release-for-despatch blocking
+when a company is over its limit (with a required-reason override that's
+logged). Companies also carry an On Hold (credit hold) flag, a Do Not Use
+flag, and GAPS/GDMS tick-boxes imported from OrderWise, all filterable on
+the Companies page.
 
 **Generate Invoices** - a fully despatched order on a company account moves
 to Invoice Pending rather than straight to Complete, and sits on the
@@ -134,8 +136,28 @@ invoiced. Invoice numbering continues from OrderWise's own sequence and is
 editable from Settings > Invoicing, which also holds the default VAT rate
 (overridable per company), payment terms, and optional bank details for the
 PDF. Credit notes (from RMAs) go through the same page under the Credit
-radio button. Each company also has its own Invoice Grouping setting - one
-invoice per order, or all of a day's selected lines consolidated onto one.
+radio button, and are auto-applied to the RMA's replacement order invoice
+when one already exists. Each company also has its own Invoice Grouping
+setting - one invoice per order, or all of a day's selected lines
+consolidated onto one. Invoicing > Invoice History lists every invoice and
+credit note ever generated, searchable the same way as the rest of the app.
+
+**Payment Tracking** - Invoicing > Payment Tracking lists every invoiced
+order with an outstanding balance, searchable and filterable (close to
+payment terms / over payment terms / part payment), shaded orange as an
+invoice nears its payment terms and red once it's over. Recording a payment
+or applying a company's credit balance against an invoice attempts to push
+full payment to Shopify (`orderMarkAsPaid`, GraphQL only - this integration
+deliberately avoids Shopify's legacy REST API); partial payments and
+multi-order consolidated invoices are recorded here but reported back as
+not pushed, with the reason, rather than guessed at. Each company has a
+Payment Terms (days) override and an Auto-hold-when-overdue toggle
+(Companies) - with it on, a company is put on hold the first time an
+invoice goes over terms and taken back off once nothing's outstanding,
+without re-holding a company staff have deliberately taken off hold by hand
+for the same invoice(s). A daily job also sends once-only warning and
+overdue chaser emails per invoice, with editable templates under Settings >
+Payment Tracking, always to the company's Invoice Email.
 
 **CRM** - Support Tickets (sequential ticket numbers, company/order/contact
 linking, a dated timeline, and a public API for a call-transcription/CRM

@@ -25,5 +25,10 @@ public record CompanyView(
         // Generate Invoices - see Company.java.
         String invoiceEmail,
         BigDecimal vatRate,
-        InvoiceGrouping invoiceGrouping
+        InvoiceGrouping invoiceGrouping,
+        // Payment Tracking - see Company.java.
+        Integer paymentTermsDays,
+        boolean autoHoldOnOverdue,
+        boolean autoHeld,
+        BigDecimal creditBalance
 ) {}

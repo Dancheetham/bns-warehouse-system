@@ -106,6 +106,12 @@ export default function Settings() {
   const [invoiceBankSortCode, setInvoiceBankSortCode] = useState("");
   const [invoiceBankIban, setInvoiceBankIban] = useState("");
   const [invoiceBankSwiftBic, setInvoiceBankSwiftBic] = useState("");
+  const [paymentTermsDays, setPaymentTermsDays] = useState("30");
+  const [paymentTermsWarningDays, setPaymentTermsWarningDays] = useState("5");
+  const [chaserWarningSubject, setChaserWarningSubject] = useState("");
+  const [chaserWarningBody, setChaserWarningBody] = useState("");
+  const [chaserOverdueSubject, setChaserOverdueSubject] = useState("");
+  const [chaserOverdueBody, setChaserOverdueBody] = useState("");
   const [statusColors, setStatusColors] = useState<Record<OrderStatus, string>>(DEFAULT_STATUS_COLORS);
   const [saved, setSaved] = useState(false);
   const [colorsSaved, setColorsSaved] = useState(false);
@@ -192,6 +198,12 @@ export default function Settings() {
     setInvoiceBankSortCode(settings["invoice_bank_sort_code"] ?? "");
     setInvoiceBankIban(settings["invoice_bank_iban"] ?? "");
     setInvoiceBankSwiftBic(settings["invoice_bank_swift_bic"] ?? "");
+    setPaymentTermsDays(settings["payment_terms_days"] ?? "30");
+    setPaymentTermsWarningDays(settings["payment_terms_warning_days"] ?? "5");
+    setChaserWarningSubject(settings["chaser_warning_subject"] ?? "");
+    setChaserWarningBody(settings["chaser_warning_body"] ?? "");
+    setChaserOverdueSubject(settings["chaser_overdue_subject"] ?? "");
+    setChaserOverdueBody(settings["chaser_overdue_body"] ?? "");
   }, [settings]);
 
   useEffect(() => {
@@ -256,6 +268,12 @@ export default function Settings() {
         invoice_bank_sort_code: invoiceBankSortCode,
         invoice_bank_iban: invoiceBankIban,
         invoice_bank_swift_bic: invoiceBankSwiftBic,
+        payment_terms_days: paymentTermsDays,
+        payment_terms_warning_days: paymentTermsWarningDays,
+        chaser_warning_subject: chaserWarningSubject,
+        chaser_warning_body: chaserWarningBody,
+        chaser_overdue_subject: chaserOverdueSubject,
+        chaser_overdue_body: chaserOverdueBody,
       }),
     onSuccess: () => {
       setSaved(true);
@@ -957,6 +975,81 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title="Payment Tracking"
+        description="Default payment terms and the two chaser email templates - see Payment Tracking. A company's own Payment Terms (days) override (Companies) and Auto-hold on overdue setting take priority over the defaults below."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Default payment terms (days)</label>
+            <input
+              type="number"
+              min={1}
+              value={paymentTermsDays}
+              onChange={(e) => setPaymentTermsDays(e.target.value)}
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Warning window (days before terms)</label>
+            <input
+              type="number"
+              min={0}
+              value={paymentTermsWarningDays}
+              onChange={(e) => setPaymentTermsWarningDays(e.target.value)}
+              className="input"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              The "close to payment terms" chaser goes out this many days before an invoice hits its terms.
+            </p>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">Warning chaser (sent once, at the warning window)</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Subject</label>
+              <input value={chaserWarningSubject} onChange={(e) => setChaserWarningSubject(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Body</label>
+              <textarea
+                value={chaserWarningBody}
+                onChange={(e) => setChaserWarningBody(e.target.value)}
+                rows={6}
+                className="input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-slate-100">
+          <h4 className="text-sm font-medium text-slate-700 mb-2">Overdue chaser (sent once, the day it hits terms)</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Subject</label>
+              <input value={chaserOverdueSubject} onChange={(e) => setChaserOverdueSubject(e.target.value)} className="input" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Body</label>
+              <textarea
+                value={chaserOverdueBody}
+                onChange={(e) => setChaserOverdueBody(e.target.value)}
+                rows={6}
+                className="input"
+              />
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-400">
+          Both templates support {"{invoiceNumber}"}, {"{companyName}"}, {"{amount}"}, {"{invoiceDate}"},{" "}
+          {"{daysRemaining}"} (warning chaser only) and {"{daysOverdue}"} (overdue chaser only) placeholders, filled
+          in automatically. Always sent to the company's Invoice Email (Companies) - never anywhere else.
+        </p>
       </SettingsSection>
 
       <SettingsSection

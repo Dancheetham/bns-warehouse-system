@@ -9,33 +9,41 @@ import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.GenerateInvoicesRequest;
 import uk.co.bns.warehouse_api.dto.GenerateInvoicesResult;
 import uk.co.bns.warehouse_api.dto.GeneratedInvoiceSummary;
+import uk.co.bns.warehouse_api.dto.InvoiceHistoryView;
 import uk.co.bns.warehouse_api.dto.PendingInvoiceLineView;
 import uk.co.bns.warehouse_api.entity.Company;
 import uk.co.bns.warehouse_api.entity.Invoice;
 import uk.co.bns.warehouse_api.entity.InvoiceLine;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
+import uk.co.bns.warehouse_api.entity.Payment;
+import uk.co.bns.warehouse_api.entity.RmaRequest;
 import uk.co.bns.warehouse_api.enums.InvoiceGrouping;
 import uk.co.bns.warehouse_api.enums.InvoiceType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.OrderType;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.exception.ValidationException;
+import uk.co.bns.warehouse_api.repository.InvoiceLineRepository;
 import uk.co.bns.warehouse_api.repository.InvoiceRepository;
 import uk.co.bns.warehouse_api.repository.OrderLineRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
+import uk.co.bns.warehouse_api.repository.PaymentRepository;
+import uk.co.bns.warehouse_api.repository.RmaRequestRepository;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * "Generate Invoices" - turns selected order lines on INVOICE_PENDING orders
@@ -63,12 +71,28 @@ public class InvoiceService {
     private final OrderRepository orderRepository;
     private final OrderLineRepository orderLineRepository;
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceLineRepository invoiceLineRepository;
     private final SettingsService settingsService;
     private final InvoicePdfService invoicePdfService;
     private final EmailService emailService;
+    private final PaymentRepository paymentRepository;
+    private final RmaRequestRepository rmaRequestRepository;
 
     @Value("${app.invoices-dir:/app/invoices}")
     private String invoicesDir;
+
+    /** Every invoice/credit note ever generated - Invoice History, newest first. */
+    public List<InvoiceHistoryView> history() {
+        return invoiceRepository.findAll().stream()
+                .sorted(Comparator.comparing(Invoice::getGenerationDate).reversed()
+                        .thenComparing(Comparator.comparing(Invoice::getInvoiceNumber).reversed()))
+                .map(invoice -> new InvoiceHistoryView(
+                        invoice.getId(), invoice.getInvoiceNumber(), invoice.getInvoiceType(),
+                        invoice.getGenerationDate(), invoice.getCompany().getName(),
+                        invoice.getNetTotal(), invoice.getVatTotal(), invoice.getGrandTotal(),
+                        invoice.getLines().stream().map(l -> l.getOrder().getOrderNumber()).distinct().toList()))
+                .toList();
+    }
 
     public List<PendingInvoiceLineView> pending(InvoiceType invoiceType) {
         OrderType orderType = orderTypeFor(invoiceType);
@@ -137,6 +161,10 @@ public class InvoiceService {
             byte[] pdf = invoicePdfService.generate(invoice);
             String pdfPath = savePdf(invoice, pdf);
             invoice.setPdfPath(pdfPath);
+
+            if (request.invoiceType() == InvoiceType.CREDIT_NOTE) {
+                autoApplyRmaCredit(invoice, warnings);
+            }
 
             emailInvoice(invoice, pdf, warnings);
 
@@ -277,6 +305,87 @@ public class InvoiceService {
         } else {
             invoice.setEmailError(result.reason());
             warnings.add(company.getName() + ": " + result.reason());
+        }
+    }
+
+    /**
+     * A credit note reduces what's owed the moment it's generated (Dan:
+     * "let the credits reduce what's owed once they're generated") - by
+     * default that means the whole amount goes into the company's general
+     * credit balance (Company.creditBalance), available immediately as
+     * credit and applied to whichever invoice staff choose from Payment
+     * Tracking. The one special case: a credit note raised for an RMA whose
+     * replacement order has ALREADY been invoiced auto-applies straight to
+     * that replacement invoice instead, since that's specifically the debt
+     * it's meant to cancel out - any leftover once that invoice's paid off
+     * still spills into the general credit balance. If the replacement
+     * hasn't been invoiced yet, this falls back to the general balance the
+     * same as any other credit (see the warning added below).
+     *
+     * Grouped by the ORDER each of this credit note's own lines came from
+     * (not just the RMA on the group as a whole), since a CONSOLIDATED
+     * company can have more than one RMA's credit lines merged onto a
+     * single generated credit note in one run.
+     */
+    private void autoApplyRmaCredit(Invoice creditInvoice, List<String> warnings) {
+        Map<Order, BigDecimal> shareByOrder = new LinkedHashMap<>();
+        for (InvoiceLine line : creditInvoice.getLines()) {
+            shareByOrder.merge(line.getOrder(), line.getNetAmount().add(line.getVatAmount()), BigDecimal::add);
+        }
+
+        Company company = creditInvoice.getCompany();
+        for (Map.Entry<Order, BigDecimal> entry : shareByOrder.entrySet()) {
+            Order creditOrderForShare = entry.getKey();
+            BigDecimal share = entry.getValue();
+
+            Optional<RmaRequest> rma = rmaRequestRepository.findByCreditOrder_Id(creditOrderForShare.getId());
+            Order replacementOrder = rma.map(RmaRequest::getReplacementOrder).orElse(null);
+            if (replacementOrder == null) {
+                company.setCreditBalance(company.getCreditBalance().add(share));
+                continue;
+            }
+
+            List<Invoice> replacementInvoices = invoiceLineRepository.findByOrder_Id(replacementOrder.getId()).stream()
+                    .map(InvoiceLine::getInvoice)
+                    .distinct()
+                    .filter(inv -> inv.getInvoiceType() == InvoiceType.INVOICE)
+                    .filter(inv -> inv.getGrandTotal().subtract(inv.getPaidAmount()).compareTo(BigDecimal.ZERO) > 0)
+                    .sorted(Comparator.comparing(Invoice::getGenerationDate))
+                    .toList();
+
+            if (replacementInvoices.isEmpty()) {
+                company.setCreditBalance(company.getCreditBalance().add(share));
+                warnings.add("Credit note " + creditInvoice.getInvoiceNumber() + ": its RMA's replacement order "
+                        + replacementOrder.getOrderNumber() + " hasn't been invoiced (or is already settled), so "
+                        + "this credit went to " + company.getName() + "'s general credit balance instead - apply "
+                        + "it from Payment Tracking once that invoice exists.");
+                continue;
+            }
+
+            BigDecimal remaining = share;
+            for (Invoice replacementInvoice : replacementInvoices) {
+                if (remaining.compareTo(BigDecimal.ZERO) <= 0) break;
+                BigDecimal owing = replacementInvoice.getGrandTotal().subtract(replacementInvoice.getPaidAmount());
+                BigDecimal applied = remaining.min(owing);
+
+                Payment payment = new Payment();
+                payment.setInvoice(replacementInvoice);
+                payment.setOrder(replacementOrder);
+                payment.setAmount(applied);
+                payment.setReceivedAt(LocalDateTime.now());
+                payment.setReference("Credit note " + creditInvoice.getInvoiceNumber());
+                payment.setNotes("Auto-applied from RMA credit note " + creditInvoice.getInvoiceNumber());
+                payment.setRecordedBy("System (RMA auto-credit)");
+                payment.setFromCreditBalance(true);
+                paymentRepository.save(payment);
+
+                replacementInvoice.setPaidAmount(replacementInvoice.getPaidAmount().add(applied));
+                invoiceRepository.save(replacementInvoice);
+                remaining = remaining.subtract(applied);
+            }
+            if (remaining.compareTo(BigDecimal.ZERO) > 0) {
+                company.setCreditBalance(company.getCreditBalance().add(remaining));
+            }
         }
     }
 

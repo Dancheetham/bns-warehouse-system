@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.GenerateInvoicesRequest;
 import uk.co.bns.warehouse_api.dto.GenerateInvoicesResult;
+import uk.co.bns.warehouse_api.dto.InvoiceHistoryView;
 import uk.co.bns.warehouse_api.dto.PendingInvoiceLineView;
 import uk.co.bns.warehouse_api.entity.Invoice;
 import uk.co.bns.warehouse_api.enums.InvoiceType;
@@ -32,6 +33,11 @@ public class InvoiceController {
     @GetMapping("/pending")
     public List<PendingInvoiceLineView> pending(@RequestParam InvoiceType type) {
         return invoiceService.pending(type);
+    }
+
+    @GetMapping("/history")
+    public List<InvoiceHistoryView> history() {
+        return invoiceService.history();
     }
 
     @PostMapping("/generate")

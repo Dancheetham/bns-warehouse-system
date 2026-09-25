@@ -5,6 +5,88 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.36] - 2026-09-25 (v0.101)
+
+### Added
+- **Payment Tracking** - a new Invoicing page replacing the old per-order
+  Payments box on Sales Activity. Lists every invoiced order with an
+  outstanding balance: company, invoice number, date, order number(s),
+  total, paid, outstanding, days since invoiced and days over payment
+  terms. Searchable (company/invoice number/order number) and filterable
+  (close to payment terms, over payment terms, part payment). A row is
+  shaded orange within 5 days (configurable) of its payment terms and red
+  once it's actually over. Click a row to record a payment (amount,
+  reference, notes) or, if the company has a credit balance, apply some or
+  all of it to the invoice instead. Recording a payment attempts to push it
+  to Shopify:
+  - Full payment on a single-order invoice uses Shopify's `orderMarkAsPaid`
+    GraphQL mutation.
+  - A consolidated invoice spanning more than one order, or an order with no
+    Shopify order behind it, is reported back as "not pushed" with the
+    reason rather than silently failing.
+  - A partial payment isn't pushed to Shopify at all - this app's Shopify
+    integration is deliberately GraphQL-only (REST access is progressively
+    restricted for newer apps), and there's no reliable GraphQL equivalent
+    for a partial-payment transaction, so rather than guess we report it
+    honestly as not pushed. The payment is still recorded here either way.
+  Any amount paid beyond what's owing on the invoice (an overpayment) is
+  added to the company's credit balance automatically rather than being
+  lost.
+- **Payment terms, auto-hold and chaser emails** - Companies now has a
+  Payment Terms (days) override (falls back to a new Settings > Payment
+  Tracking default, 30 days) and an "Auto-hold when overdue" toggle. With
+  that toggle on, a company is automatically put on hold the first time one
+  of its invoices goes over terms, and automatically taken back off hold
+  once nothing's outstanding any more - but only for a hold this feature put
+  in place itself. If staff take a company off hold by hand while something's
+  still overdue, this won't silently re-hold them the next day for the same
+  invoice(s) - it only reacts to genuinely new overdue invoices from then on.
+  A daily background job also sends two chaser emails per invoice, each only
+  ever sent once: a warning a configurable number of days before terms are
+  reached, and an overdue notice on the day terms are reached. Both templates
+  (subject and body, with placeholders for the invoice number, company,
+  amount, date, days remaining/overdue) are editable under a new Settings >
+  Payment Tracking section. Chasers always go to the company's Invoice
+  Email - nowhere else.
+- **RMA credit auto-apply** - generating a credit note for an RMA now
+  automatically applies it to the outstanding invoice(s) for that RMA's
+  replacement order, if the replacement has already been invoiced. Any
+  leftover (or the whole amount, if the replacement hasn't been invoiced
+  yet) goes to the company's credit balance instead, same as any other
+  credit note.
+- **Invoice History** - a new Invoicing page listing every invoice and
+  credit note ever generated (not just outstanding ones): invoice number,
+  type, date, company, order number(s), net, VAT and gross, with a PDF link
+  and the same search bar style as the rest of the app.
+- **Sales Activity** - the shipping cost/courier/service summary on an
+  order now stays visible after it's released for despatch instead of
+  disappearing (it used to only show while the order was On Hold). The
+  Payments box has been removed from this page - see Payment Tracking
+  above.
+- Companies now shows a read-only credit balance figure and lets you set
+  the payment terms override and auto-hold toggle described above.
+
+### Fixed
+- The password reset email link not working until the port was added
+  manually - this was never a code bug: Settings > Email > Public URL
+  (`app_public_url`) needs to be set to the full address including the
+  port (e.g. `http://192.168.1.245:8081`), because the reverse proxy
+  strips the port off the incoming request otherwise and there was nothing
+  set for the app to fall back on. No code change - just needed setting.
+
+### Known limitations
+- Generated invoices still don't put a shipping/delivery line on the PDF -
+  only order lines are billed. This was already the case before this
+  release; flagged here because the new credit-usage calculation for
+  Payment Tracking had to account for it. Carried over to a future release.
+- Generate Invoices still doesn't show the company name on each individual
+  order row (it's shown as the group heading above each company's orders)
+  - carried over to a future release.
+- This release was written and reviewed without a working compiler in this
+  environment (Maven Central and the npm registry are both blocked here) -
+  please build and smoke-test before relying on it, particularly the new
+  Payment Tracking flows and the daily chaser/auto-hold job.
+
 ## [0.23.35] - 2026-09-24 (v0.100)
 
 ### Added

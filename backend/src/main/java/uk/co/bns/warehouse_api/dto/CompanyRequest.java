@@ -27,5 +27,9 @@ public record CompanyRequest(
         // Generate Invoices - see Company.java.
         @Email(message = "That doesn't look like a valid email address") String invoiceEmail,
         BigDecimal vatRate,
-        InvoiceGrouping invoiceGrouping
+        InvoiceGrouping invoiceGrouping,
+        // Payment Tracking - see Company.java. Null paymentTermsDays uses the
+        // global default (Settings > Invoicing).
+        Integer paymentTermsDays,
+        Boolean autoHoldOnOverdue
 ) {}

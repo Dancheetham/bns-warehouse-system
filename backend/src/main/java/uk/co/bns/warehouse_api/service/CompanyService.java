@@ -7,14 +7,17 @@ import uk.co.bns.warehouse_api.dto.CompanyRequest;
 import uk.co.bns.warehouse_api.dto.CompanyView;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
 import uk.co.bns.warehouse_api.entity.Company;
+import uk.co.bns.warehouse_api.entity.Invoice;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Payment;
 import uk.co.bns.warehouse_api.entity.Ticket;
+import uk.co.bns.warehouse_api.enums.InvoiceType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.CompanyRepository;
+import uk.co.bns.warehouse_api.repository.InvoiceRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.PaymentRepository;
 import uk.co.bns.warehouse_api.repository.TicketRepository;
@@ -39,6 +42,7 @@ public class CompanyService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final TicketRepository ticketRepository;
+    private final InvoiceRepository invoiceRepository;
 
     public List<Company> findAll() {
         return companyRepository.findAll();
@@ -96,6 +100,10 @@ public class CompanyService {
             company.setAccountNumber(request.accountNumber());
         }
         if (request.onHold() != null) {
+            // Any manual edit of onHold from here is, by definition, a human
+            // decision - clear autoHeld so PaymentChaserService's daily job
+            // never silently reinstates or removes it again on its own.
+            company.setAutoHeld(false);
             company.setOnHold(request.onHold());
         }
         if (request.doNotUse() != null) {
@@ -111,6 +119,10 @@ public class CompanyService {
         company.setVatRate(request.vatRate());
         if (request.invoiceGrouping() != null) {
             company.setInvoiceGrouping(request.invoiceGrouping());
+        }
+        company.setPaymentTermsDays(request.paymentTermsDays());
+        if (request.autoHoldOnOverdue() != null) {
+            company.setAutoHoldOnOverdue(request.autoHoldOnOverdue());
         }
     }
 
@@ -143,20 +155,57 @@ public class CompanyService {
     }
 
     /**
-     * Outstanding balance across every non-cancelled order for a company - the
-     * "credit used" figure. Fully paid orders naturally drop out since their
-     * outstanding balance reaches zero.
+     * Outstanding balance across every non-cancelled order for a company -
+     * the "credit used" figure. Since Payment Tracking, this is three things
+     * added together, so nothing is ever double-counted or falls through a
+     * gap between stages:
+     *   1. Orders that haven't reached Invoice Pending yet (still being
+     *      picked/despatched, or on hold) - their full estimated total
+     *      (pre-VAT, matching how credit was always checked before despatch).
+     *   2. Despatched lines that haven't been invoiced yet - happens between
+     *      despatch and someone actually running Generate Invoices. Priced
+     *      off what's actually gone out (quantityDespatched), not the
+     *      original order quantity.
+     *   3. Every unpaid INVOICE (not credit note - those feed the credit
+     *      balance instead, see toView) for this company - the real,
+     *      VAT-inclusive amount actually billed and still outstanding.
+     * Known gap: Generate Invoices doesn't currently put delivery/shipping
+     * cost on the invoice itself (see InvoicePdfService), so an order's
+     * shipping cost is only ever reflected in bucket 1 below and stops being
+     * counted at all once the order's lines are invoiced - fine for now
+     * since delivery is usually a small fraction of an order's value, but
+     * worth fixing alongside actually billing for it on the PDF.
      */
     public BigDecimal creditUsed(Long companyId) {
-        List<Order> orders = orderRepository.findByCompany_Id(companyId);
         BigDecimal used = BigDecimal.ZERO;
-        for (Order order : orders) {
+
+        for (Order order : orderRepository.findByCompany_Id(companyId)) {
             if (order.getStatus() == OrderStatus.CANCELLED) continue;
-            BigDecimal outstanding = orderTotal(order).subtract(amountPaid(order.getId()));
-            if (outstanding.compareTo(BigDecimal.ZERO) > 0) {
-                used = used.add(outstanding);
+
+            if (order.getStatus() != OrderStatus.INVOICE_PENDING && order.getStatus() != OrderStatus.COMPLETED) {
+                // Bucket 1 - not despatched (or not fully) yet, use the
+                // pre-invoice estimate exactly as before Payment Tracking.
+                BigDecimal outstanding = orderTotal(order).subtract(amountPaid(order.getId()));
+                if (outstanding.compareTo(BigDecimal.ZERO) > 0) used = used.add(outstanding);
+                continue;
+            }
+            // Bucket 2 - despatched but not yet invoiced quantity on each
+            // line (usually zero once Generate Invoices has run for it).
+            for (OrderLine line : order.getLines()) {
+                int uninvoiced = line.getQuantityDespatched() - line.getQuantityInvoiced();
+                if (uninvoiced <= 0 || line.getUnitPrice() == null) continue;
+                used = used.add(line.getUnitPrice().multiply(BigDecimal.valueOf(uninvoiced)));
             }
         }
+
+        // Bucket 3 - actual unpaid invoices (credit notes excluded - those
+        // reduce the credit BALANCE instead, applied in toView/creditStatusForOrder).
+        for (Invoice invoice : invoiceRepository.findByCompany_IdOrderByCreatedAtDesc(companyId)) {
+            if (invoice.getInvoiceType() != InvoiceType.INVOICE) continue;
+            BigDecimal outstanding = invoice.getGrandTotal().subtract(invoice.getPaidAmount());
+            if (outstanding.compareTo(BigDecimal.ZERO) > 0) used = used.add(outstanding);
+        }
+
         return used;
     }
 
@@ -167,16 +216,24 @@ public class CompanyService {
                     company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                     company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
                     null, null, false,
-                    company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping());
+                    company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping(),
+                    company.getPaymentTermsDays(), company.isAutoHoldOnOverdue(), company.isAutoHeld(),
+                    company.getCreditBalance());
         }
         BigDecimal used = creditUsed(company.getId());
-        BigDecimal available = company.getCreditLimit().subtract(used);
+        // The stored credit balance (overpayments/unapplied credit notes -
+        // see Payment Tracking) counts as available straight away, which is
+        // deliberately how a customer who's paid ahead can show more
+        // available credit than the raw limit.
+        BigDecimal available = company.getCreditLimit().subtract(used).add(company.getCreditBalance());
         return new CompanyView(company.getId(), company.getName(), company.getCreditLimit(),
                 company.getShopifyCompanyId(), company.getNotes(),
                 company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                 company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
                 used, available, available.compareTo(BigDecimal.ZERO) < 0,
-                company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping());
+                company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping(),
+                company.getPaymentTermsDays(), company.isAutoHoldOnOverdue(), company.isAutoHeld(),
+                company.getCreditBalance());
     }
 
     /** The banner shown whenever a linked order is opened. */
@@ -193,7 +250,7 @@ public class CompanyService {
         }
 
         BigDecimal used = creditUsed(company.getId());
-        BigDecimal available = company.getCreditLimit().subtract(used);
+        BigDecimal available = company.getCreditLimit().subtract(used).add(company.getCreditBalance());
         return new OrderCreditStatus(company.getId(), company.getName(), company.getCreditLimit(), used, available,
                 available.compareTo(BigDecimal.ZERO) < 0, orderTotal, orderOutstanding);
     }

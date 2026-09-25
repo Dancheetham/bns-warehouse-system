@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, PaymentView, Product, TicketSummaryView } from "../types";
+import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
 import { useToast } from "../components/ToastContext";
 
@@ -67,9 +67,6 @@ export default function OrderEdit() {
   const [error, setError] = useState<string | null>(null);
   const [errorIsConflict, setErrorIsConflict] = useState(false);
   const [ackResult, setAckResult] = useState<AcknowledgementResult | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
 
   const { data: existingOrder } = useQuery({
     queryKey: ["order", id],
@@ -90,12 +87,6 @@ export default function OrderEdit() {
   const { data: creditStatus, refetch: refetchCreditStatus } = useQuery({
     queryKey: ["order-credit-status", id],
     queryFn: async () => (await api.get<OrderCreditStatus | null>(`/orders/${id}/credit-status`)).data,
-    enabled: !isNew,
-  });
-
-  const { data: payments, refetch: refetchPayments } = useQuery({
-    queryKey: ["order-payments", id],
-    queryFn: async () => (await api.get<PaymentView[]>(`/orders/${id}/payments`)).data,
     enabled: !isNew,
   });
 
@@ -369,24 +360,6 @@ export default function OrderEdit() {
     }
   };
 
-  const paymentMutation = useMutation({
-    mutationFn: async () =>
-      api.post(`/orders/${id}/payments`, {
-        amount: Number(paymentAmount),
-        reference: paymentReference || undefined,
-        notes: paymentNotes || undefined,
-      }),
-    onSuccess: () => {
-      setPaymentAmount("");
-      setPaymentReference("");
-      setPaymentNotes("");
-      refetchPayments();
-      refetchCreditStatus();
-      queryClient.invalidateQueries({ queryKey: ["companies"] });
-    },
-    onError: (err: Error) => setError(err.message),
-  });
-
   const [printStatus, setPrintStatus] = useState<string | null>(null);
 
   const printPickingNote = async () => {
@@ -563,6 +536,25 @@ export default function OrderEdit() {
       {!isNew && (
         <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
           <h3 className="font-medium text-slate-700 mb-3">Despatch</h3>
+
+          {/* Always visible, even after release - Dan didn't like this
+              disappearing the moment an order left On Hold, since it's
+              useful to see what was actually charged/booked at a glance
+              without having to remember or dig for it. */}
+          {status !== "ON_HOLD" && (shippingCost || courier || courierMethod) && (
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600 mb-3">
+              <span>
+                <span className="text-slate-400">Shipping Cost:</span>{" "}
+                {shippingCost ? `£${Number(shippingCost).toFixed(2)}` : "-"}
+              </span>
+              <span>
+                <span className="text-slate-400">Courier:</span> {courier || "-"}
+              </span>
+              <span>
+                <span className="text-slate-400">Service:</span> {courierMethod || "-"}
+              </span>
+            </div>
+          )}
 
           {status === "ON_HOLD" ? (
             <div>
@@ -834,70 +826,6 @@ export default function OrderEdit() {
               </details>
             </div>
           )}
-        </div>
-      )}
-
-      {!isNew && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
-          <h3 className="font-medium text-slate-700 mb-3">Payments</h3>
-          {payments && payments.length > 0 ? (
-            <table className="w-full text-sm mb-4">
-              <thead className="text-left text-slate-500">
-                <tr>
-                  <th className="py-1.5 pr-4">Date</th>
-                  <th className="py-1.5 pr-4">Amount</th>
-                  <th className="py-1.5 pr-4">Reference</th>
-                  <th className="py-1.5">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {payments.map((p) => (
-                  <tr key={p.id}>
-                    <td className="py-1.5 pr-4">{new Date(p.receivedAt).toLocaleDateString("en-GB")}</td>
-                    <td className="py-1.5 pr-4 font-medium">{p.amount.toFixed(2)}</td>
-                    <td className="py-1.5 pr-4">{p.reference ?? "-"}</td>
-                    <td className="py-1.5">{p.notes ?? "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <p className="text-sm text-slate-400 mb-4">No payments recorded yet.</p>
-          )}
-
-          <div className="flex gap-3 items-end flex-wrap">
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Amount</label>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                className="input w-32"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Reference</label>
-              <input
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. bank ref"
-                className="input w-40"
-              />
-            </div>
-            <div className="flex-1 min-w-[160px]">
-              <label className="block text-xs text-slate-400 mb-1">Notes</label>
-              <input value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)} className="input" />
-            </div>
-            <button
-              onClick={() => paymentMutation.mutate()}
-              disabled={paymentMutation.isPending || !paymentAmount}
-              className="bg-slate-800 text-white text-sm px-4 py-2 rounded-md hover:bg-slate-700 disabled:opacity-50"
-            >
-              {paymentMutation.isPending ? "Recording..." : "Record Payment"}
-            </button>
-          </div>
         </div>
       )}
 

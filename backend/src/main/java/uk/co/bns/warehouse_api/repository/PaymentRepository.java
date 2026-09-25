@@ -8,4 +8,5 @@ import java.util.List;
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByOrder_IdOrderByReceivedAtDesc(Long orderId);
     List<Payment> findByOrder_Company_Id(Long companyId);
+    List<Payment> findByInvoice_IdOrderByReceivedAtDesc(Long invoiceId);
 }

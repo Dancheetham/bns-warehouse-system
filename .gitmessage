@@ -1,47 +1,69 @@
-Add Generate Invoices (payment capturing) and login throttling (v0.100)
+Add Payment Tracking, payment terms/auto-hold and Invoice History (v0.101)
 
-Generate Invoices:
-- New INVOICE_PENDING order status: a fully-despatched order on a company
-  (credit) account now lands here instead of going straight to Complete,
-  and sits on a new Invoicing > Generate Invoices page until picked up.
-  An order with no company (already paid at checkout) still goes straight
-  to Complete as before.
-- Generate Invoices page: pick a Generation Date and Invoice/Credit, tick
-  the order lines to include (or Select all), Generate. Selection is per
-  order LINE rather than per order, so one order's lines can be split
-  across separate invoices (e.g. phones vs routers) per the customer's
-  own preference.
-- Generating builds a PDF matching the current OrderWise invoice layout,
-  allocates the next invoice/credit note number (one shared sequence,
-  continuing from OrderWise's own numbering and editable from Settings),
-  emails it to the company's Invoice Email with a saved local copy, and
-  marks the order Complete once every line on it has been invoiced.
-- Credit notes (from processed RMAs) flow through the same page and the
-  same INVOICE_PENDING mechanism, under the Credit radio button.
-- New per-company settings (Companies): Invoice Email, a VAT rate override
-  (e.g. 0% for a zero-rated Irish account), and Invoice Grouping (one
-  invoice per order, or all of a day's selected lines consolidated onto
-  one invoice for that company).
-- New Settings > Invoicing section: default VAT rate, next invoice number,
-  payment terms, company registration number/email, and optional bank
-  details - the bank details box is left off the PDF entirely unless
-  actually filled in, never fabricated.
-- Local PDF backup: generated invoices/credit notes are saved to a new
-  bns_invoices_data Docker volume (not yet covered by backup.sh/restore.sh
-  - flagged as a known gap in the changelog).
+Payment Tracking:
+- New Invoicing > Payment Tracking page, replacing the per-order Payments
+  box on Sales Activity. Lists every invoiced order with an outstanding
+  balance - company, invoice number, date, order number(s), total, paid,
+  outstanding, days since invoiced and days over payment terms. Searchable
+  and filterable (close to payment terms / over payment terms / part
+  payment), shaded orange near terms and red once over.
+- Recording a payment (amount/reference/notes) or applying a company's
+  credit balance to an invoice attempts to push full payment to Shopify
+  via the GraphQL orderMarkAsPaid mutation for a single-order invoice.
+  A consolidated (multi-order) invoice, or a partial payment, is recorded
+  here but reported back as "not pushed" with the reason - this app's
+  Shopify integration is deliberately GraphQL-only, and there's no
+  reliable GraphQL equivalent for an arbitrary partial payment, so nothing
+  is guessed at.
+- Any amount paid or applied beyond what's owing on the invoice (an
+  overpayment) is added to the company's credit balance automatically.
+- Payment moved from being linked only to an Order to (going forward)
+  being linked to an Invoice, since a consolidated invoice can span
+  multiple orders. Order stays populated for legacy traceability.
 
-Login throttling:
-- Repeated failed logins for the same IP or the same username now face a
-  growing delay (a few free attempts, then doubling up to a 30s cap)
-  instead of being retried instantly. Deliberately not a hard lockout -
-  mistyping a password can never lock a genuine user out of their own
-  account.
+Payment terms, auto-hold and chasers:
+- Company gains a Payment Terms (days) override (falls back to a new
+  Settings > Payment Tracking default, 30 days) and an Auto-hold when
+  overdue toggle.
+- With auto-hold on, a daily job puts a company on hold the first time one
+  of its invoices goes over terms, and takes it back off once nothing's
+  outstanding - edge-triggered (Invoice.autoHoldTriggered/Company.autoHeld)
+  so it never re-holds a company for invoices staff have already decided
+  to leave overdue after taking them off hold by hand.
+- The same daily job sends two chaser emails per invoice, each only once:
+  a warning before terms and an overdue notice on the day. Both templates
+  are editable under the new Settings > Payment Tracking section and
+  always go to the company's Invoice Email.
 
-Also updates the Setup Guide PDF, README and CHANGELOG for both features.
+RMA credit auto-apply:
+- Generating a credit note for an RMA now auto-applies it to the
+  outstanding invoice(s) for that RMA's replacement order when one
+  already exists, falling back to the company's general credit balance
+  (with a warning) when it doesn't.
 
-Note: this environment's Maven Central/npm registry access is blocked, so
-none of this has been compiled or type-checked - only manually reviewed.
+Invoice History:
+- New Invoicing > Invoice History page listing every invoice/credit note
+  ever generated, with the same search bar style as the rest of the app.
+
+Sales Activity:
+- Shipping cost/courier/service now stays visible after an order is
+  released for despatch instead of disappearing.
+- Removed the per-order Payments box (superseded by Payment Tracking).
+
+Credit calculation:
+- CompanyService.creditUsed() rewritten to a three-bucket model (orders
+  not yet despatched, despatched-but-not-invoiced lines, unpaid invoices)
+  so nothing is double-counted or falls through a gap now that Payment
+  Tracking payments are invoice-linked rather than order-linked.
+
+Also: documented that the password reset link issue reported this release
+was a missing Settings > Email > Public URL value, not a code bug (no
+code change).
+
+Written and reviewed without a working compiler in this environment
+(Maven Central/npm registry both blocked here) - please build and
+smoke-test before relying on this, particularly Payment Tracking and the
+daily chaser/auto-hold job.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
-

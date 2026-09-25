@@ -26,6 +26,10 @@ function CompanyRow({ company }: { company: CompanyView }) {
   const [invoiceEmail, setInvoiceEmail] = useState(company.invoiceEmail ?? "");
   const [companyVatRate, setCompanyVatRate] = useState(company.vatRate != null ? String(company.vatRate) : "");
   const [invoiceGrouping, setInvoiceGrouping] = useState<InvoiceGrouping>(company.invoiceGrouping);
+  const [paymentTermsDays, setPaymentTermsDays] = useState(
+    company.paymentTermsDays != null ? String(company.paymentTermsDays) : ""
+  );
+  const [autoHoldOnOverdue, setAutoHoldOnOverdue] = useState(company.autoHoldOnOverdue);
   const [error, setError] = useState<string | null>(null);
 
   const updateMutation = useMutation({
@@ -45,6 +49,8 @@ function CompanyRow({ company }: { company: CompanyView }) {
         invoiceEmail: invoiceEmail || undefined,
         vatRate: companyVatRate ? Number(companyVatRate) : undefined,
         invoiceGrouping,
+        paymentTermsDays: paymentTermsDays ? Number(paymentTermsDays) : undefined,
+        autoHoldOnOverdue,
       };
       return api.put(`/companies/${company.id}`, body);
     },
@@ -108,6 +114,18 @@ function CompanyRow({ company }: { company: CompanyView }) {
           <p className="text-xs text-slate-400">
             {company.invoiceEmail ? `Invoices to: ${company.invoiceEmail}` : "No invoice email set"}
             {company.invoiceGrouping === "CONSOLIDATED" && " · Consolidated invoicing"}
+          </p>
+          <p className="text-xs text-slate-400">
+            Payment terms: {company.paymentTermsDays ?? "default"} days
+            {company.autoHoldOnOverdue && " · Auto-hold on overdue"}
+            {company.autoHeld && (
+              <span className="ml-1 text-amber-600 font-medium">(currently auto-held)</span>
+            )}
+            {company.creditBalance > 0 && (
+              <span className="ml-1 text-emerald-600 font-medium">
+                · £{company.creditBalance.toFixed(2)} credit balance
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -271,6 +289,25 @@ function CompanyRow({ company }: { company: CompanyView }) {
               <option value="CONSOLIDATED">Consolidate same-day orders</option>
             </select>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Payment Terms (days)</label>
+            <input
+              type="number"
+              min={0}
+              value={paymentTermsDays}
+              onChange={(e) => setPaymentTermsDays(e.target.value)}
+              placeholder="Uses global default if blank"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Credit Balance</label>
+            <input
+              disabled
+              value={`£${company.creditBalance.toFixed(2)}`}
+              className="input bg-slate-50 text-slate-500"
+            />
+          </div>
           <div className="col-span-2 md:col-span-4 flex flex-wrap gap-4 pt-1">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={onHold} onChange={(e) => setOnHold(e.target.checked)} />
@@ -287,6 +324,14 @@ function CompanyRow({ company }: { company: CompanyView }) {
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" checked={gdms} onChange={(e) => setGdms(e.target.checked)} />
               GDMS
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={autoHoldOnOverdue}
+                onChange={(e) => setAutoHoldOnOverdue(e.target.checked)}
+              />
+              Auto-hold when overdue on payment terms
             </label>
           </div>
           <button

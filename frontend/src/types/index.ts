@@ -496,6 +496,14 @@ export interface CompanyView {
   invoiceEmail?: string;
   vatRate?: number;
   invoiceGrouping: InvoiceGrouping;
+  // Payment Tracking - see below. paymentTermsDays overrides the Settings >
+  // Invoicing default just for this company; autoHeld is read-only (true
+  // only while the current onHold was set by the chaser job itself, never
+  // by a person - see PaymentChaserService/CompanyService on the backend).
+  paymentTermsDays?: number;
+  autoHoldOnOverdue: boolean;
+  autoHeld: boolean;
+  creditBalance: number;
 }
 
 export interface CompanyRequest {
@@ -519,6 +527,9 @@ export interface CompanyRequest {
   // Whether a Generate Invoices run bundles this company's ticked lines
   // into one invoice per order (default) or one invoice per company.
   invoiceGrouping?: InvoiceGrouping;
+  // Payment Tracking overrides - see CompanyView above.
+  paymentTermsDays?: number;
+  autoHoldOnOverdue?: boolean;
 }
 
 export interface InvoicedMonthValue {
@@ -592,6 +603,69 @@ export interface PaymentRequest {
   reference?: string;
   notes?: string;
   recordedBy?: string;
+}
+
+// Payment Tracking - see PaymentTrackingController/PaymentTrackingService on
+// the backend. An "outstanding invoice" is any INVOICE (never a credit note)
+// with paidAmount < grandTotal.
+export interface OutstandingInvoiceView {
+  invoiceId: number;
+  invoiceNumber: number;
+  companyId: number;
+  companyName: string;
+  generationDate: string;
+  grandTotal: number;
+  paidAmount: number;
+  outstanding: number;
+  daysSinceInvoiced: number;
+  paymentTermsDays: number;
+  // 0 while still within terms - only positive once actually overdue.
+  daysOverTerms: number;
+  orderNumbers: string[];
+}
+
+export interface RecordInvoicePaymentRequest {
+  invoiceId: number;
+  amount: number;
+  reference?: string;
+  notes?: string;
+}
+
+export interface ApplyCreditBalanceRequest {
+  invoiceId: number;
+  amount: number;
+}
+
+export interface InvoicePaymentView {
+  id: number;
+  amount: number;
+  receivedAt: string;
+  reference?: string;
+  notes?: string;
+  recordedBy?: string;
+  fromCreditBalance: boolean;
+}
+
+export interface RecordPaymentResult {
+  payment: InvoicePaymentView;
+  invoice: OutstandingInvoiceView;
+  // Null when nothing was pushed (multi-order invoice, no Shopify order, or
+  // the invoice isn't fully paid yet - see ShopifyPaymentPushService).
+  shopifyPushResult?: string;
+}
+
+// Invoice History - every invoice/credit note ever generated, not just the
+// outstanding ones. See InvoiceController#history/InvoiceService#history.
+export interface InvoiceHistoryView {
+  invoiceId: number;
+  invoiceNumber: number;
+  invoiceType: InvoiceType;
+  generationDate: string;
+  companyName: string;
+  netTotal: number;
+  vatTotal: number;
+  grandTotal: number;
+  orderNumbers: string[];
 }
 
 export interface Order {

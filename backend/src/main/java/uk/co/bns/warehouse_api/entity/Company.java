@@ -85,6 +85,31 @@ public class Company {
     @Column(name = "invoice_grouping", nullable = false)
     private InvoiceGrouping invoiceGrouping = InvoiceGrouping.PER_ORDER;
 
+    // Payment Tracking (PaymentTrackingService/PaymentChaserService). Null =
+    // use the global default (Settings > Invoicing > payment_terms_days).
+    @Column(name = "payment_terms_days")
+    private Integer paymentTermsDays;
+
+    // If on, the daily job puts this company on hold the first time one of
+    // its invoices goes past terms, and takes it back off once none remain
+    // overdue - see autoHeld below for how a manual override is respected.
+    @Column(name = "auto_hold_on_overdue", nullable = false)
+    private boolean autoHoldOnOverdue = false;
+
+    // True only while the current onHold=true was set by the scheduled job
+    // itself, never by a person - CompanyService clears this on any manual
+    // save of onHold, so a staff override of an auto-hold is never silently
+    // reinstated the next time the job runs.
+    @Column(name = "auto_held", nullable = false)
+    private boolean autoHeld = false;
+
+    // Unapplied credit from overpayments and non-auto-applied credit notes -
+    // see PaymentTrackingService. Counted towards available credit straight
+    // away (CompanyService.creditUsed), which is how available credit can
+    // exceed the raw creditLimit once a customer's effectively paid ahead.
+    @Column(name = "credit_balance", precision = 12, scale = 2, nullable = false)
+    private BigDecimal creditBalance = BigDecimal.ZERO;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -10,4 +10,8 @@ import java.util.Optional;
 public interface RmaRequestRepository extends JpaRepository<RmaRequest, Long> {
     Optional<RmaRequest> findByPublicReference(String publicReference);
     List<RmaRequest> findByStatusOrderBySubmittedAtAsc(RmaStatus status);
+    // Generate Invoices uses this to find, for a credit note it's just
+    // raised, whether it came from an RMA with a replacement order to
+    // auto-apply the credit to - see InvoiceService.
+    Optional<RmaRequest> findByCreditOrder_Id(Long orderId);
 }

@@ -41,6 +41,8 @@ import TicketDetail from "./pages/TicketDetail";
 import Contacts from "./pages/Contacts";
 import CompanyImport from "./pages/CompanyImport";
 import GenerateInvoices from "./pages/GenerateInvoices";
+import PaymentTracking from "./pages/PaymentTracking";
+import InvoiceHistory from "./pages/InvoiceHistory";
 
 export default function App() {
   return (
@@ -97,6 +99,8 @@ export default function App() {
             <Route path="/trace" element={<StockTrace />} />
             <Route path="/api-access" element={<ApiAccess />} />
             <Route path="/invoicing/generate" element={<GenerateInvoices />} />
+            <Route path="/invoicing/payment-tracking" element={<PaymentTracking />} />
+            <Route path="/invoicing/history" element={<InvoiceHistory />} />
             <Route path="/reports/orders" element={<ReportsOrders />} />
             <Route path="/reports/stock" element={<ReportsStock />} />
             <Route path="/reports/invoices" element={<ReportsInvoices />} />

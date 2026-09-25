@@ -35,7 +35,11 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
   },
   {
     heading: "Invoicing",
-    items: [{ to: "/invoicing/generate", label: "Generate Invoices" }],
+    items: [
+      { to: "/invoicing/generate", label: "Generate Invoices" },
+      { to: "/invoicing/payment-tracking", label: "Payment Tracking" },
+      { to: "/invoicing/history", label: "Invoice History" },
+    ],
   },
   {
     heading: "Reports",

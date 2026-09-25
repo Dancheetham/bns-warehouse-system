@@ -89,6 +89,28 @@ public class Invoice {
     @Column(name = "created_by")
     private String createdBy;
 
+    // Payment Tracking (PaymentTrackingService) - running total of Payments
+    // (and applied credit-balance amounts) recorded against this invoice.
+    // Kept as a stored running total rather than summed from Payments on
+    // every read, since it's checked constantly (Payment Tracking's list,
+    // the daily chaser job, credit-used calculations).
+    @Column(name = "paid_amount", precision = 12, scale = 2, nullable = false)
+    private BigDecimal paidAmount = BigDecimal.ZERO;
+
+    // Set once each - the daily job never sends either chaser twice for the
+    // same invoice. Null = not sent yet.
+    @Column(name = "chaser_warning_sent_at")
+    private LocalDateTime chaserWarningSentAt;
+
+    @Column(name = "chaser_overdue_sent_at")
+    private LocalDateTime chaserOverdueSentAt;
+
+    // True once this invoice has caused its company to be auto-held - see
+    // Company.autoHeld. Prevents the job re-holding a company over the same
+    // invoice after a staff member has deliberately taken them off hold.
+    @Column(name = "auto_hold_triggered", nullable = false)
+    private boolean autoHoldTriggered = false;
+
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InvoiceLine> lines = new ArrayList<>();
 
