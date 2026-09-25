@@ -74,16 +74,54 @@ export default function DeliveryHistoryDetail() {
     return [...groups.values()];
   }, [data]);
 
+  // navigator.clipboard only exists in a "secure context" (HTTPS or
+  // localhost) - it's simply undefined on plain http://<LAN-IP>, which is
+  // exactly how this app is reached day to day on the warehouse floor (see
+  // the same gotcha already noted against crypto.randomUUID() above in this
+  // file). copyToClipboard falls back to the older
+  // document.execCommand("copy") - deprecated, but still the one thing that
+  // reliably works without HTTPS - via a hidden, off-screen textarea:
+  // select its text and issue the copy command, exactly as this technique
+  // has worked in every browser for years.
+  async function copyToClipboard(text: string): Promise<boolean> {
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        // falls through to the execCommand fallback below
+      }
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    // Off-screen rather than display:none - some browsers refuse to select
+    // (and therefore copy) text in an element that isn't actually rendered.
+    textarea.style.position = "fixed";
+    textarea.style.left = "-9999px";
+    textarea.style.top = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(textarea);
+    return ok;
+  }
+
   const copyColumn = async (label: string, values: (string | undefined)[]) => {
     const cleaned = values.filter((v): v is string => !!v && v.trim() !== "");
     if (cleaned.length === 0) {
       showToast(`No ${label.toLowerCase()} to copy.`);
       return;
     }
-    try {
-      await navigator.clipboard.writeText(cleaned.join("\n"));
+    const ok = await copyToClipboard(cleaned.join("\n"));
+    if (ok) {
       showToast(`Copied ${cleaned.length} ${label.toLowerCase()}${cleaned.length === 1 ? "" : "s"} to the clipboard.`);
-    } catch {
+    } else {
       showToast("Couldn't copy to the clipboard - your browser may be blocking clipboard access.");
     }
   };

@@ -1,60 +1,13 @@
-Support multiple shipments per order, move Purchase Orders into Sales,
-add date-range/search everywhere, cross-link order to its history, add
-Carton Summary and clipboard copy to Delivery History (v0.105)
+Fix Delivery History clipboard-copy failing over plain HTTP (v0.106)
 
-Multiple shipments per order:
-- New Shipment entity/table (V50 migration) - a snapshot of one
-  completed shipment (shippingCost, courierMethod, dpdNetworkKey, and if
-  DPD-booked its dpdShipmentId/dpdConsignmentNumber/dpdParcelNumbers/
-  dpdShippedAt), written the moment that shipment is about to be
-  superseded by another.
-- OrderService.update(): archives the order's current shipment fields
-  into a Shipment row and clears the order's own dpd* booking fields
-  whenever reopening for an extra shipment - covers both reopening from
-  a fully locked order (Invoice Pending/Completed) and reopening an
-  already-Partially-Despatched order that already has its own shipment
-  booked (a third-or-later shipment), via a new reopeningForExtraShipment
-  condition (broader than the wasLocked check the status-lock rejection
-  logic still uses). Clearing the dpd fields means DespatchService's
-  existing "already booked, skip" check naturally books a genuinely new
-  DPD shipment on the next despatch confirmation, with no changes needed
-  in DespatchService itself.
-- Delivery History detail: new "Previous Shipments" section (backend:
-  ShipmentRepository, ShipmentView DTO, DeliveryHistoryDetailView gains
-  previousShipments) listing every earlier shipment with its own Track
-  link.
-
-Purchase Orders moved into the Sales nav group (Layout.tsx) - no route
-or functional change, just where it's found.
-
-Date range + search added to Sales Activity (order date), Invoice
-History (invoice date), Payment Tracking (invoice date), RMAs (submitted
-date, and RMAs didn't have a search box before either), and Purchase
-Orders (created date, ditto no search box before). New shared
-DateRangePicker component and utils/format.ts:inDateRange() - all of
-these already pull their full dataset into the browser, same as
-Delivery History's own search, so this filters client-side rather than
-adding new backend query params.
-
-OrderEdit: "Delivery History →" and "Invoice History →" pills next to
-the existing support-ticket pill, shown once the order has actually
-reached those stages, linking through pre-filtered to that order number
-(hasInvoices checked against the real invoice list, not guessed from
-order status).
-
-Delivery History detail page:
-- Carton Summary dropdown above the item table - per-carton SKU
-  quantities, always exact regardless of packing mode (new
-  DeliveryHistoryCartonSummaryRow DTO/query, built from the same two
-  data sources as the per-unit view but summed rather than attributed).
-- A search box for the item table (SKU, product, MAC, serial, batch).
-- Clipboard-copy icons on the MAC Address/Serial Number column headers -
-  copies every value currently shown in that column (respects the
-  search box), one per line.
-
-CHANGELOG.md, README.md and the User Guide PDF updated to match; the
-"can't have a second DPD shipment" known limitation noted in v0.104's
-changelog is resolved by this release.
+navigator.clipboard only exists in a secure context (HTTPS or
+localhost), so it was undefined on the LAN-IP-over-HTTP address this app
+is normally reached at - the copy buttons added in v0.105 threw
+"blocking clipboard access" for everyone, not a browser setting issue.
+copyToClipboard() now falls back to document.execCommand("copy") via a
+hidden off-screen textarea when navigator.clipboard/isSecureContext
+isn't available - same class of gotcha as the existing
+crypto.randomUUID() workaround already noted elsewhere in OrderEdit.tsx.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

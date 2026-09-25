@@ -5,6 +5,19 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.41] - 2026-09-25 (v0.106)
+
+### Fixed
+- **Delivery History's clipboard-copy icons now work over plain HTTP** -
+  `navigator.clipboard` only exists in a "secure context" (HTTPS or
+  localhost), so on the LAN-IP-over-HTTP address this app is normally
+  reached at, it was simply undefined and the copy buttons failed with
+  "your browser may be blocking clipboard access" - not actually a
+  browser setting to change, a gap in the fix (same underlying gotcha as
+  the existing `crypto.randomUUID()` workaround elsewhere in this app).
+  Now falls back to the older `document.execCommand("copy")` technique via
+  a hidden textarea, which works without HTTPS.
+
 ## [0.23.40] - 2026-09-25 (v0.105)
 
 ### Added
