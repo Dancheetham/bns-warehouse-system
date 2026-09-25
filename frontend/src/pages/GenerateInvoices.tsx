@@ -252,7 +252,8 @@ export default function GenerateInvoices() {
                         />
                       </td>
                       <td colSpan={5} className="py-1.5 pr-4 text-xs text-slate-500">
-                        Order {order.orderNumber} &middot; {formatDate(order.orderDate)}
+                        Order {order.orderNumber} &middot; <span className="font-medium text-slate-600">{company.companyName}</span> &middot;{" "}
+                        {formatDate(order.orderDate)}
                       </td>
                     </tr>
                     {order.lines.map((line) => (

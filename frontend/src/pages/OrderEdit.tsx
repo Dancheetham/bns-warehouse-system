@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -386,6 +386,29 @@ export default function OrderEdit() {
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
   };
 
+  // Live cost breakdown for the Despatch panel - goods net matches how
+  // CompanyService.goodsTotal prices an order (unit price x quantity
+  // ORDERED, not despatched), so this stays consistent with the credit
+  // figures shown elsewhere for the same order. Recomputes on every
+  // keystroke against the lines/shipping cost currently in the form, not
+  // just whatever was last saved - the whole point being it tracks edits
+  // before Save is even clicked.
+  const selectedCompany = companies?.find((c) => String(c.id) === companyId);
+  const vatRate = selectedCompany?.vatRate ?? Number(settings?.["vat_rate"] ?? "20");
+  const goodsNet = useMemo(
+    () =>
+      lines.reduce((sum, line) => {
+        const qty = Number(line.quantityOrdered) || 0;
+        const price = Number(line.unitPrice) || 0;
+        return sum + qty * price;
+      }, 0),
+    [lines]
+  );
+  const deliveryNet = Number(shippingCost) || 0;
+  const totalNet = goodsNet + deliveryNet;
+  const totalTax = (totalNet * vatRate) / 100;
+  const totalOrder = totalNet + totalTax;
+
   return (
     // pb-24 keeps the last bit of page content (the error block, whatever's
     // last in the form) clear of the floating Save button below, which sits
@@ -533,10 +556,86 @@ export default function OrderEdit() {
         </Field>
       </div>
 
+      <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="font-medium text-slate-700">Order Lines</h3>
+          <button
+            onClick={() => setLines((prev) => [...prev, emptyLine()])}
+            className="text-sm text-slate-600 hover:text-slate-900"
+          >
+            + Add line
+          </button>
+        </div>
+        <div className="space-y-2">
+          {lines.map((line) => (
+            <div key={line.key} className="flex gap-2 items-end flex-wrap border-b border-slate-100 pb-2">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-xs text-slate-400 mb-1">Product</label>
+                <select
+                  value={line.productId}
+                  onChange={(e) => updateLine(line.key, "productId", e.target.value)}
+                  className="input"
+                >
+                  <option value="">Select...</option>
+                  {products?.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} - {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Qty Ordered</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={line.quantityOrdered}
+                  onChange={(e) => updateLine(line.key, "quantityOrdered", e.target.value)}
+                  className="input w-24"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Qty Despatched</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={line.quantityDespatched}
+                  onChange={(e) => updateLine(line.key, "quantityDespatched", e.target.value)}
+                  className="input w-28"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Unit Price</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  value={line.unitPrice}
+                  onChange={(e) => updateLine(line.key, "unitPrice", e.target.value)}
+                  className="input w-24"
+                />
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <label className="block text-xs text-slate-400 mb-1">Notes</label>
+                <input value={line.notes} onChange={(e) => updateLine(line.key, "notes", e.target.value)} className="input" />
+              </div>
+              <button
+                onClick={() => removeLine(line.key)}
+                className="text-xs text-red-600 hover:text-red-800 px-2 pb-2"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {!isNew && (
         <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
           <h3 className="font-medium text-slate-700 mb-3">Despatch</h3>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
           {/* Always visible, even after release - Dan didn't like this
               disappearing the moment an order left On Hold, since it's
               useful to see what was actually charged/booked at a glance
@@ -826,82 +925,36 @@ export default function OrderEdit() {
               </details>
             </div>
           )}
+          </div>
+
+          <div className="md:border-l md:border-slate-100 md:pl-6">
+            <h4 className="text-sm font-medium text-slate-600 mb-3">Cost Breakdown</h4>
+            <dl className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Goods Net</dt>
+                <dd className="text-slate-700">£{goodsNet.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Delivery</dt>
+                <dd className="text-slate-700">£{deliveryNet.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-slate-100 pt-1.5">
+                <dt className="text-slate-500 font-medium">Total Net</dt>
+                <dd className="text-slate-800 font-medium">£{totalNet.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-400">Total Tax ({vatRate.toString().replace(/\.0+$/, "")}%)</dt>
+                <dd className="text-slate-700">£{totalTax.toFixed(2)}</dd>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                <dt className="text-slate-800 font-semibold">Total Order</dt>
+                <dd className="text-slate-900 font-semibold">£{totalOrder.toFixed(2)}</dd>
+              </div>
+            </dl>
+          </div>
+          </div>
         </div>
       )}
-
-      <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="font-medium text-slate-700">Order Lines</h3>
-          <button
-            onClick={() => setLines((prev) => [...prev, emptyLine()])}
-            className="text-sm text-slate-600 hover:text-slate-900"
-          >
-            + Add line
-          </button>
-        </div>
-        <div className="space-y-2">
-          {lines.map((line) => (
-            <div key={line.key} className="flex gap-2 items-end flex-wrap border-b border-slate-100 pb-2">
-              <div className="flex-1 min-w-[180px]">
-                <label className="block text-xs text-slate-400 mb-1">Product</label>
-                <select
-                  value={line.productId}
-                  onChange={(e) => updateLine(line.key, "productId", e.target.value)}
-                  className="input"
-                >
-                  <option value="">Select...</option>
-                  {products?.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.sku} - {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Qty Ordered</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={line.quantityOrdered}
-                  onChange={(e) => updateLine(line.key, "quantityOrdered", e.target.value)}
-                  className="input w-24"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Qty Despatched</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={line.quantityDespatched}
-                  onChange={(e) => updateLine(line.key, "quantityDespatched", e.target.value)}
-                  className="input w-28"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 mb-1">Unit Price</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  value={line.unitPrice}
-                  onChange={(e) => updateLine(line.key, "unitPrice", e.target.value)}
-                  className="input w-24"
-                />
-              </div>
-              <div className="flex-1 min-w-[140px]">
-                <label className="block text-xs text-slate-400 mb-1">Notes</label>
-                <input value={line.notes} onChange={(e) => updateLine(line.key, "notes", e.target.value)} className="input" />
-              </div>
-              <button
-                onClick={() => removeLine(line.key)}
-                className="text-xs text-red-600 hover:text-red-800 px-2 pb-2"
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {error && (
         <div className="mb-4">

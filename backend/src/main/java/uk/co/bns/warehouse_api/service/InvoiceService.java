@@ -234,6 +234,43 @@ public class InvoiceService {
             netTotal = netTotal.add(net);
             vatTotal = vatTotal.add(vat);
         }
+
+        // Bill each distinct order's delivery/shipping cost as its own line,
+        // once - the first invoice generated that touches an order is the
+        // one that carries its delivery charge (Order.shippingInvoiced is
+        // the once-only guard), whether or not every line on that order
+        // made it into this particular run. Only for real invoices - an RMA
+        // credit note is crediting returned goods, not refunding the
+        // original outbound delivery charge.
+        if (orderType != OrderType.CREDIT_REFUND) {
+            List<Order> distinctOrders = groupLines.stream().map(OrderLine::getOrder).distinct().toList();
+            for (Order groupOrder : distinctOrders) {
+                if (groupOrder.isShippingInvoiced()) continue;
+                BigDecimal shippingCost = groupOrder.getShippingCost();
+                if (shippingCost == null || shippingCost.compareTo(BigDecimal.ZERO) <= 0) continue;
+
+                BigDecimal net = shippingCost.setScale(2, RoundingMode.HALF_UP);
+                BigDecimal vat = net.multiply(vatRate).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+                InvoiceLine shippingLine = new InvoiceLine();
+                shippingLine.setInvoice(invoice);
+                shippingLine.setOrder(groupOrder);
+                shippingLine.setSku("DELIVERY");
+                shippingLine.setDescription("Delivery" + (groupOrder.getCourierMethod() != null
+                        ? " - " + groupOrder.getCourierMethod() : ""));
+                shippingLine.setQuantity(1);
+                shippingLine.setUnitPrice(net);
+                shippingLine.setNetAmount(net);
+                shippingLine.setVatAmount(vat);
+                shippingLine.setShipping(true);
+                invoice.getLines().add(shippingLine);
+
+                netTotal = netTotal.add(net);
+                vatTotal = vatTotal.add(vat);
+                groupOrder.setShippingInvoiced(true);
+            }
+        }
+
         invoice.setNetTotal(netTotal);
         invoice.setVatTotal(vatTotal);
         invoice.setGrandTotal(netTotal.add(vatTotal));

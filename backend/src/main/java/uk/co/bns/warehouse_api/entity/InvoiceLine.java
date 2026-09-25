@@ -32,8 +32,10 @@ public class InvoiceLine {
     @JsonIgnore
     private Invoice invoice;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "order_line_id", nullable = false)
+    // Null for a shipping line (see "shipping" below) - there's no OrderLine
+    // behind an order's delivery charge, only the Order itself.
+    @ManyToOne
+    @JoinColumn(name = "order_line_id")
     private OrderLine orderLine;
 
     @ManyToOne(optional = false)
@@ -56,4 +58,11 @@ public class InvoiceLine {
 
     @Column(name = "vat_amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal vatAmount;
+
+    // True for the one line per order that bills its delivery/shipping cost
+    // (see Order.shippingInvoiced) rather than a product - lets the PDF and
+    // any future reporting tell it apart from an ordinary product line
+    // without guessing from the SKU text.
+    @Column(nullable = false)
+    private boolean shipping = false;
 }

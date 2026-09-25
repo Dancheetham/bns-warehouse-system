@@ -132,12 +132,15 @@ per order line (not per whole order), so one order can be split across
 multiple invoices when a customer wants that; generating produces a PDF
 matching the OrderWise layout, emails it to the company's invoice contact
 with a saved local copy, and marks the order Complete once every line is
-invoiced. Invoice numbering continues from OrderWise's own sequence and is
-editable from Settings > Invoicing, which also holds the default VAT rate
-(overridable per company), payment terms, and optional bank details for the
-PDF. Credit notes (from RMAs) go through the same page under the Credit
-radio button, and are auto-applied to the RMA's replacement order invoice
-when one already exists. Each company also has its own Invoice Grouping
+invoiced. The order's delivery/shipping cost is billed as its own line on
+the invoice PDF, once per order, on whichever invoice first touches it -
+never on a credit note, since those credit returned goods, not the
+original delivery charge. Invoice numbering continues from OrderWise's own
+sequence and is editable from Settings > Invoicing, which also holds the
+default VAT rate (overridable per company), payment terms, and optional
+bank details for the PDF. Credit notes (from RMAs) go through the same
+page under the Credit radio button, and are auto-applied to the RMA's
+replacement order invoice when one already exists. Each company also has its own Invoice Grouping
 setting - one invoice per order, or all of a day's selected lines
 consolidated onto one. Invoicing > Invoice History lists every invoice and
 credit note ever generated, searchable the same way as the rest of the app.

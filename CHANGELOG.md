@@ -5,6 +5,44 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.37] - 2026-09-25 (v0.102)
+
+### Added
+- **Delivery billed as a line item** - Generate Invoices now bills an
+  order's shipping/delivery cost as its own line on the invoice PDF
+  ("DELIVERY", quantity 1, priced at the order's shipping cost, VAT
+  applied the same as any product line), rather than that cost only ever
+  showing up in the pre-invoice credit estimate and then disappearing once
+  the order's product lines are invoiced. Billed once per order, on
+  whichever invoice generation run first touches that order, even if the
+  order's lines end up split across more than one invoice - never billed
+  twice. Not applied to RMA credit notes (those credit returned goods, not
+  the original outbound delivery charge). The credit-used calculation
+  (Companies / Payment Tracking) has been updated to match, so a shipping
+  cost is always counted in exactly one place as it moves from
+  pre-despatch, to despatched-but-not-invoiced, to actually billed -
+  closes the gap flagged in v0.101.
+- **Company name on Generate Invoices** - each order's row now repeats the
+  company name alongside the order number and date, not just the group
+  heading above it, so a special requirement can be spotted at a glance
+  without scrolling back up to check which company's heading it's under.
+- **Sales Activity order screen reworked** - Order Lines now comes before
+  the Despatch panel (previously the other way round). The Despatch panel
+  itself is now two columns: the existing release/despatch controls on the
+  left, and a live Cost Breakdown on the right - Goods Net, Delivery,
+  Total Net, Total Tax and Total Order - that recalculates immediately as
+  order lines or the shipping cost are edited, using the same pricing
+  (quantity ordered x unit price, plus the company's VAT rate override or
+  the Settings default) as the rest of the system, before the order is
+  even saved.
+
+### Known limitations
+- Written and reviewed without a working compiler in this environment
+  (Maven Central/npm registry both blocked here) - please build and
+  smoke-test before relying on it, particularly Generate Invoices (the new
+  delivery line, and that shipping is billed exactly once per order) and
+  the reworked order screen's live cost breakdown.
+
 ## [0.23.36] - 2026-09-25 (v0.101)
 
 ### Added

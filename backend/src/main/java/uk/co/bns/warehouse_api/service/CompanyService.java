@@ -168,13 +168,13 @@ public class CompanyService {
      *      original order quantity.
      *   3. Every unpaid INVOICE (not credit note - those feed the credit
      *      balance instead, see toView) for this company - the real,
-     *      VAT-inclusive amount actually billed and still outstanding.
-     * Known gap: Generate Invoices doesn't currently put delivery/shipping
-     * cost on the invoice itself (see InvoicePdfService), so an order's
-     * shipping cost is only ever reflected in bucket 1 below and stops being
-     * counted at all once the order's lines are invoiced - fine for now
-     * since delivery is usually a small fraction of an order's value, but
-     * worth fixing alongside actually billing for it on the PDF.
+     *      VAT-inclusive amount actually billed and still outstanding, now
+     *      including delivery/shipping (Generate Invoices bills it as its
+     *      own line - see InvoiceService#buildInvoice).
+     * An order's delivery charge is carried in exactly one of these buckets
+     * at a time - bucket 1 pre-despatch, bucket 2 between despatch and
+     * being invoiced (Order.shippingInvoiced still false), then bucket 3
+     * once it's actually been billed - never double-counted or dropped.
      */
     public BigDecimal creditUsed(Long companyId) {
         BigDecimal used = BigDecimal.ZERO;
@@ -190,11 +190,17 @@ public class CompanyService {
                 continue;
             }
             // Bucket 2 - despatched but not yet invoiced quantity on each
-            // line (usually zero once Generate Invoices has run for it).
+            // line (usually zero once Generate Invoices has run for it),
+            // plus the order's own delivery charge for as long as it
+            // remains unbilled (Order.shippingInvoiced) - once Generate
+            // Invoices bills it, it's covered by bucket 3 below instead.
             for (OrderLine line : order.getLines()) {
                 int uninvoiced = line.getQuantityDespatched() - line.getQuantityInvoiced();
                 if (uninvoiced <= 0 || line.getUnitPrice() == null) continue;
                 used = used.add(line.getUnitPrice().multiply(BigDecimal.valueOf(uninvoiced)));
+            }
+            if (!order.isShippingInvoiced() && order.getShippingCost() != null) {
+                used = used.add(order.getShippingCost());
             }
         }
 

@@ -100,6 +100,12 @@ public class Order {
     @Column(name = "shipping_cost", precision = 12, scale = 2)
     private java.math.BigDecimal shippingCost;
 
+    // Once-only guard so this order's delivery charge is billed on exactly
+    // one generated invoice, however many separate Generate Invoices runs
+    // its product lines end up split across - see InvoiceService#buildInvoice.
+    @Column(name = "shipping_invoiced", nullable = false)
+    private boolean shippingInvoiced = false;
+
     @Column(name = "courier_method")
     private String courierMethod;
 
