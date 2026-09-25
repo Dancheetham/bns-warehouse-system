@@ -4,9 +4,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
+import { dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
 
-const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "COMPLETED", "PARTIALLY_DESPATCHED", "INVOICE_PENDING", "AWAITING_CONVERSION"];
+// COMPLETED, PARTIALLY_DESPATCHED and INVOICE_PENDING are deliberately left
+// out - the backend (OrderService.update) now rejects picking any of these
+// manually, since they're only ever set by actually going through despatch
+// and/or invoicing. See STATUS_OPTIONS_FOR below, which adds back whichever
+// of these the order is currently sitting in, read-only, so the dropdown
+// still shows the truth without offering it as a choice.
+const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "AWAITING_CONVERSION"];
+const SYSTEM_ONLY_STATUSES: OrderStatus[] = ["COMPLETED", "PARTIALLY_DESPATCHED", "INVOICE_PENDING"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
 // Only DPD is wired up today - this is a real dropdown (not hardcoded into the
 // service picker) so another courier can be added here later without
@@ -395,6 +403,24 @@ export default function OrderEdit() {
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
   };
 
+  // Matches OrderService.update()'s own "wasLocked" check server-side -
+  // once an order has actually gone through despatch and/or invoicing, its
+  // status can only move by adding lines for an extra shipment (handled
+  // automatically, not from this dropdown), never by picking a new value
+  // here. Based on the order as it loaded, not the (identical, since the
+  // dropdown is disabled below) local `status` state.
+  const statusLocked = existingOrder?.status === "INVOICE_PENDING" || existingOrder?.status === "COMPLETED";
+
+  const addingExtraLines = useMemo(
+    () =>
+      lines.some((l) => {
+        const existingLine = existingOrder?.lines.find((el) => String(el.product.id) === l.productId);
+        const requestedQty = Number(l.quantityOrdered) || 0;
+        return !existingLine || requestedQty > existingLine.quantityOrdered;
+      }),
+    [lines, existingOrder]
+  );
+
   // Live cost breakdown for the Despatch panel - goods net matches how
   // CompanyService.goodsTotal prices an order (unit price x quantity
   // ORDERED, not despatched), so this stays consistent with the credit
@@ -537,13 +563,40 @@ export default function OrderEdit() {
             <input value={deliveryCountryCode} onChange={(e) => setDeliveryCountryCode(e.target.value)} placeholder="GB" className="input" />
           </Field>
           <Field label="Status">
-            <select value={status} onChange={(e) => setStatus(e.target.value as OrderStatus)} className="input">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as OrderStatus)}
+              disabled={statusLocked}
+              className="input disabled:bg-slate-100 disabled:text-slate-400"
+            >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {s.replace(/_/g, " ")}
                 </option>
               ))}
+              {/* Not a real choice - added only so the dropdown can actually
+                  show the order's current value when it's one of the three
+                  the despatch/invoicing process sets on its own (see
+                  SYSTEM_ONLY_STATUSES above and OrderService.update). */}
+              {SYSTEM_ONLY_STATUSES.includes(status) && (
+                <option value={status}>{status.replace(/_/g, " ")} (set automatically)</option>
+              )}
             </select>
+            {statusLocked ? (
+              <p className="text-xs text-slate-400 mt-1">
+                Locked - this order has already been {existingOrder?.status === "COMPLETED" ? "completed" : "despatched and is awaiting invoicing"}.
+                Add order lines below for an extra shipment to reopen it, or use Reverse to Despatch / an RMA to
+                correct what's already gone out.
+              </p>
+            ) : (
+              addingExtraLines &&
+              existingOrder && (
+                <p className="text-xs text-amber-600 mt-1">
+                  This adds stock beyond what's already on the order - saving will move it to Partially Despatched
+                  for the extra shipment, and reopen shipping cost/courier/service for it.
+                </p>
+              )
+            )}
           </Field>
           <Field label="Order Type">
             <select value={orderType} onChange={(e) => setOrderType(e.target.value as OrderType)} className="input">
@@ -911,6 +964,14 @@ export default function OrderEdit() {
                     >
                       Print Label
                     </button>
+                    <a
+                      href={dpdTrackingUrl(existingOrder.dpdConsignmentNumber, deliveryPostcode)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
+                    >
+                      Track →
+                    </a>
                   </>
                 ) : (
                   <button

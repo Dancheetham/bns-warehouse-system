@@ -872,3 +872,34 @@ export interface CompanyImportResult {
   contactsSkipped: number;
   errors: string[];
 }
+
+// Sales -> Delivery History
+export interface DeliveryHistoryView {
+  orderId: number;
+  orderNumber: string;
+  despatchedAt: string;
+  companyName?: string;
+  deliveryName?: string;
+  deliveryPostcode?: string;
+  courier?: string;
+  deliveryMethod?: string;
+  consignmentNumber?: string;
+  parcelCount: number;
+  orderStatus: OrderStatus;
+}
+
+export interface DeliveryHistoryItemView {
+  sku: string;
+  productName: string;
+  macAddress?: string;
+  serialNumber?: string;
+  wifiMacAddress?: string;
+  batchCode?: string;
+  quantity: number;
+  cartonNumber?: number;
+}
+
+export interface DeliveryHistoryDetailView {
+  order: DeliveryHistoryView;
+  items: DeliveryHistoryItemView[];
+}

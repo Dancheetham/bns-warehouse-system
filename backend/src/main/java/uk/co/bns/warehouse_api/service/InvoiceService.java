@@ -94,10 +94,19 @@ public class InvoiceService {
                 .toList();
     }
 
+    // Orders eligible for Generate Invoices - a fully despatched order
+    // (INVOICE_PENDING) obviously, but also a PARTIALLY_DESPATCHED one:
+    // what's actually shipped on it so far is just as invoiceable as a full
+    // despatch, for the (smaller) quantity remainingQuantity works out per
+    // line - it simply stays PARTIALLY_DESPATCHED afterwards rather than
+    // completing, since there's still more owed.
+    private static final List<OrderStatus> INVOICEABLE_STATUSES =
+            List.of(OrderStatus.INVOICE_PENDING, OrderStatus.PARTIALLY_DESPATCHED);
+
     public List<PendingInvoiceLineView> pending(InvoiceType invoiceType) {
         OrderType orderType = orderTypeFor(invoiceType);
-        List<Order> orders = orderRepository.findByStatusAndOrderTypeOrderByOrderDateAsc(
-                OrderStatus.INVOICE_PENDING, orderType);
+        List<Order> orders = orderRepository.findByStatusInAndOrderTypeOrderByOrderDateAsc(
+                INVOICEABLE_STATUSES, orderType);
 
         List<PendingInvoiceLineView> rows = new ArrayList<>();
         for (Order order : orders) {
@@ -128,7 +137,7 @@ public class InvoiceService {
         }
         for (OrderLine line : lines) {
             Order order = line.getOrder();
-            if (order.getStatus() != OrderStatus.INVOICE_PENDING || order.getOrderType() != orderType) {
+            if (!INVOICEABLE_STATUSES.contains(order.getStatus()) || order.getOrderType() != orderType) {
                 throw new ValidationException("Order " + order.getOrderNumber()
                         + " is no longer awaiting " + (orderType == OrderType.CREDIT_REFUND ? "crediting" : "invoicing")
                         + " - someone else may have already generated it. Refresh the page and try again.");

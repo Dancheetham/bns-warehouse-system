@@ -1,58 +1,61 @@
-Fix DPD service surviving reverse-to-despatch, block despatch on an
-unavailable saved service, keep shipping fields editable until invoiced (v0.103)
+Lock order status to the despatch/invoicing process, invoice partial
+despatches, add Delivery History, add DPD Track links (v0.104)
 
-Reverse to Despatch no longer clears the chosen DPD service:
-- OrderReversalService.reverseToDespatch() was clearing dpdNetworkKey
-  alongside the actual DPD booking fields it's undoing (consignment/parcel
-  numbers, shipped-at). Clearing the service too meant the next despatch
-  found nothing explicitly chosen and silently auto-picked whatever DPD's
-  live lookup returned first - reported as a Parcel Next Day order coming
-  back as a Pre-12 (or similar) after reversing and re-shipping.
-- The DPD booking itself is still fully undone on reversal exactly as
-  before; only the staff member's own Service choice now survives it.
-  cancelAndReturnToStock() (a full cancellation back to On Hold, not the
-  reported scenario) still clears it, since that's genuinely a fresh
-  release cycle.
+Order status:
+- INVOICE_PENDING/COMPLETED/PARTIALLY_DESPATCHED can no longer be chosen
+  manually from the Status field, on create or edit - they're set only by
+  DespatchService/InvoiceService.
+- Once an order is INVOICE_PENDING or COMPLETED, its status is locked -
+  any other manual change is rejected - except adding/increasing order
+  lines, which automatically reopens it as PARTIALLY_DESPATCHED for an
+  extra shipment and resets shippingInvoiced so a new shipping
+  cost/courier/service can be set in the same save.
+- OrderService.update() computes this up front (statusBeforeEdit,
+  wasLocked, extraStockNeeded) before reconcileLines touches anything.
 
-Despatch now refuses to proceed if the saved service isn't available:
-- DespatchService.confirmDespatch() calls a new
-  DpdShippingService.assertOrderServiceAvailable() right at the start,
-  before any stock movement or status change - if the order's explicitly
-  chosen service isn't actually available (or DPD can't even be asked),
-  the whole despatch is rejected and nothing moves. Everything else about
-  DPD booking (bookDpdShipment(), further down) stays best-effort exactly
-  as before - this is deliberately the one case that's a hard stop, per
-  the explicit ask.
-- Skipped when no service was ever explicitly chosen (existing auto-pick
-  fallback still applies) or a shipment's already booked for the order.
-- No frontend change needed for the "error with a back button" part - both
-  Split and Serial Packing already show a top-level error banner and
-  already have a permanent "← Back to Despatch" link above the packing
-  grid; this now just reaches them via a real validation failure instead
-  of never firing before despatch had already gone through.
+Invoicing:
+- InvoiceService.INVOICEABLE_STATUSES now covers PARTIALLY_DESPATCHED as
+  well as INVOICE_PENDING, in both pending() and generate() - a partial
+  despatch is invoiceable for exactly what's shipped so far, using the
+  existing despatched-minus-invoiced quantity math.
+- New OrderRepository.findByStatusInAndOrderTypeOrderByOrderDateAsc for
+  the widened query.
 
-Shipping cost/courier/service editable for an order's whole life, until invoiced:
-- Order Edit no longer restricts these to the On Hold release form - they
-  now stay editable (open the order, change them, click Save Order) at any
-  status right up until the order's delivery has actually been invoiced
-  (Order.shippingInvoiced, from v0.102), at which point the screen locks
-  them to a read-only summary instead.
-- OrderRequest/OrderService.applyFields carry dpdNetworkKey now too (only
-  releaseForDespatch could set it before), and OrderService.update()
-  rejects a genuine change to any of the three once shippingInvoiced is
-  true - enforced server-side, not just hidden in the UI.
-- Covers the reported scenario directly: an order released on one service,
-  changed by staff before despatch after a customer calls to switch, and
-  despatch/packing picks up whatever's saved at confirmation time - not
-  what was chosen at release.
+Picking/despatch queues (found while sanity-checking the above):
+- PickingService.readyToPick()/start() and DespatchService.readyToPack()
+  only matched AWAITING_DESPATCH, so a reopened order (now
+  PARTIALLY_DESPATCHED) would silently vanish from both queues despite
+  genuinely needing picking and despatching again. Both now also match
+  PARTIALLY_DESPATCHED via a new
+  OrderRepository.findByStatusInAndPickingStatusInOrderByOrderDateAsc.
 
-Written and reviewed without a working compiler in this environment
-(Maven Central/npm registry both blocked here) - please build and
-smoke-test before relying on this, particularly: reversing an order to
-despatch and re-shipping keeps the original service; a despatch with a
-now-unavailable saved service is cleanly blocked and rolls back; and
-shipping cost/courier/service can be changed and saved after release, then
-lock once actually invoiced.
+Delivery History (new, Sales):
+- Order.despatchedAt (V49 migration) - set once on first despatch, never
+  cleared by Reverse to Despatch - the stable "despatched at least once"
+  marker and date basis for this page.
+- DeliveryHistoryService/Controller: list (search + date range), detail
+  (per-unit MAC/serial/batch/carton, handling the SERIAL-vs-SPLIT carton
+  resolution difference), and Excel export at both levels (Apache POI,
+  matching ReportService's pattern).
+- Frontend: DeliveryHistory.tsx (list) and DeliveryHistoryDetail.tsx
+  (detail), routed and added to the Sales nav group.
+
+Tracking:
+- frontend/src/utils/tracking.ts - dpdTrackingUrl() builds DPD's public
+  tracking URL from a consignment number + postcode (best-effort, not
+  smoke-tested against a live consignment in this environment).
+- "Track" links added to OrderEdit's Despatch panel, the post-despatch
+  banners in SplitPacking.tsx/SerialPacking.tsx, and each Delivery
+  History detail page.
+
+Known limitation (documented in CHANGELOG): an order reopened for an
+extra shipment reuses whatever DPD shipment was already booked rather
+than booking a new one, since Order only records a single DPD
+shipment/consignment - a genuine second DPD booking would need the data
+model to support more than one shipment per order, not built here.
+
+CHANGELOG.md, README.md and the User Guide PDF (Sections 1.2, 1.4 new
+note, new 1.5 Delivery History, 3.4) updated to match.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

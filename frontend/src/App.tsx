@@ -43,6 +43,8 @@ import CompanyImport from "./pages/CompanyImport";
 import GenerateInvoices from "./pages/GenerateInvoices";
 import PaymentTracking from "./pages/PaymentTracking";
 import InvoiceHistory from "./pages/InvoiceHistory";
+import DeliveryHistory from "./pages/DeliveryHistory";
+import DeliveryHistoryDetail from "./pages/DeliveryHistoryDetail";
 
 export default function App() {
   return (
@@ -81,6 +83,8 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/sales-activity" element={<SalesActivity />} />
             <Route path="/sales-activity/:id" element={<OrderEdit />} />
+            <Route path="/delivery-history" element={<DeliveryHistory />} />
+            <Route path="/delivery-history/:orderId" element={<DeliveryHistoryDetail />} />
             <Route path="/products" element={<Products />} />
             <Route path="/products/:id" element={<ProductDetail />} />
             <Route path="/purchase-orders" element={<PurchaseOrders />} />

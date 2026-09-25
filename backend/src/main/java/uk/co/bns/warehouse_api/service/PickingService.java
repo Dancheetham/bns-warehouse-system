@@ -34,8 +34,14 @@ public class PickingService {
     private final StockMovementRepository stockMovementRepository;
 
     public List<OrderPickSummary> readyToPick() {
-        List<Order> orders = orderRepository.findByStatusAndPickingStatusInOrderByOrderDateAsc(
-                OrderStatus.AWAITING_DESPATCH, List.of(PickingStatus.NOT_STARTED, PickingStatus.IN_PROGRESS));
+        // PARTIALLY_DESPATCHED is included alongside AWAITING_DESPATCH so an order
+        // reopened for an extra shipment (new lines added to a locked/despatched
+        // order - see OrderService.update()) surfaces here too: that reopen sets
+        // the order to PARTIALLY_DESPATCHED and pickingStatus back to IN_PROGRESS,
+        // and the new stock genuinely needs picking and despatching again.
+        List<Order> orders = orderRepository.findByStatusInAndPickingStatusInOrderByOrderDateAsc(
+                List.of(OrderStatus.AWAITING_DESPATCH, OrderStatus.PARTIALLY_DESPATCHED),
+                List.of(PickingStatus.NOT_STARTED, PickingStatus.IN_PROGRESS));
         return orders.stream().map(this::toSummary).toList();
     }
 
@@ -47,9 +53,10 @@ public class PickingService {
     @Transactional
     public PickOrderView start(Long orderId, PickStartRequest request) {
         Order order = findOrder(orderId);
-        if (order.getStatus() != OrderStatus.AWAITING_DESPATCH) {
+        if (order.getStatus() != OrderStatus.AWAITING_DESPATCH && order.getStatus() != OrderStatus.PARTIALLY_DESPATCHED) {
             throw new ValidationException(
-                    "Only an order that is Awaiting Despatch can be picked (this order is " + order.getStatus() + ")");
+                    "Only an order that is Awaiting Despatch, or Partially Despatched with more to go, can be picked (this order is "
+                            + order.getStatus() + ")");
         }
         if (order.getPickingStatus() == PickingStatus.NOT_STARTED) {
             order.setPickingStatus(PickingStatus.IN_PROGRESS);

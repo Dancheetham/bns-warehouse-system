@@ -142,6 +142,15 @@ public class Order {
     @Column(name = "dpd_shipped_at")
     private LocalDateTime dpdShippedAt;
 
+    // Set once, the first time DespatchService.confirmDespatch() runs for
+    // this order - unlike the dpd* fields above, never cleared by Reverse to
+    // Despatch or a later partial re-despatch, so it's a stable "this order
+    // has genuinely gone out at least once" marker and despatch date for
+    // Delivery History, independent of whatever DPD-specific state changes
+    // around it afterwards.
+    @Column(name = "despatched_at")
+    private LocalDateTime despatchedAt;
+
     // Picking (handheld) tracking - separate from despatch/packing, which happens
     // afterwards on the web GUI once a pick is COMPLETE or PARTIAL.
     @Enumerated(EnumType.STRING)

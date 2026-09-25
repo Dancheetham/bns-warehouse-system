@@ -114,7 +114,18 @@ order screen for its whole life, not just while On Hold - right up until
 its delivery has actually been invoiced - and whatever's saved at the exact
 moment despatch is confirmed is what gets booked; if that saved service
 isn't actually available any more, despatch is refused outright (nothing
-moves) rather than silently booking a different one.
+moves) rather than silently booking a different one. Order status itself is
+locked down once genuinely despatched/invoiced - Invoice Pending, Completed
+and Partially Despatched can only be set by the despatch/invoicing process,
+never picked manually - and adding extra lines to an already-despatched
+order automatically reopens it as Partially Despatched for a further
+shipment (its own shipping cost/courier/service, and it's invoiceable for
+just what's actually shipped). A **Delivery History** page (Sales) lists
+every despatched order with search, a date range and an Excel export, and
+each row opens a detail page of exactly what was shipped - MAC/serial/batch
+and carton number per unit, also exportable - plus a "Track" link wherever
+a DPD consignment number is shown, opening DPD's tracking page pre-filled
+with the consignment number.
 
 **RMAs** - public customer-facing return request form with live MAC/serial
 lookup, staff review/approval queue, receipt processing, automatic

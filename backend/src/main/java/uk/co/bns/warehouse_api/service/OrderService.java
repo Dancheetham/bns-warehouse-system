@@ -11,6 +11,7 @@ import uk.co.bns.warehouse_api.dto.OrderRequest;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
+import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.PickingStatus;
 import uk.co.bns.warehouse_api.exception.ConflictException;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
@@ -19,7 +20,9 @@ import uk.co.bns.warehouse_api.repository.ProductRepository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -68,7 +71,17 @@ public class OrderService {
         if (orderRepository.existsByOrderNumber(orderNumber)) {
             throw new ConflictException("An order with number " + orderNumber + " already exists");
         }
+        // INVOICE_PENDING/COMPLETED/PARTIALLY_DESPATCHED all mean "this order
+        // has actually been through despatch and/or invoicing" - not
+        // something true of an order that's just now being typed in, so
+        // there's no legitimate way to create one directly in any of them.
+        if (isSystemOnlyStatus(request.status())) {
+            throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                    "\"" + humanStatus(request.status()) + "\" is set automatically by the despatch/invoicing "
+                            + "process and can't be chosen when creating an order - start it On Hold instead.");
+        }
         order.setOrderNumber(orderNumber);
+        order.setStatus(request.status());
         applyFields(order, request);
         applyLines(order, request.lines());
         return orderRepository.save(order);
@@ -101,14 +114,48 @@ public class OrderService {
             throw new ConflictException(
                     "This was changed by someone else while you had it open - reload the page to see their changes, then try your edit again");
         }
+
+        OrderStatus statusBeforeEdit = order.getStatus();
+        boolean wasLocked = statusBeforeEdit == OrderStatus.INVOICE_PENDING || statusBeforeEdit == OrderStatus.COMPLETED;
+        // Computed against the order's CURRENT lines, before reconcileLines
+        // below touches anything - true when the request asks for more of a
+        // product already on the order than what's despatched/ordered so
+        // far, or a product that isn't on the order at all yet. On a locked
+        // (already despatched/invoiced) order, this is the one thing allowed
+        // to reopen it - see the status/shipping handling below.
+        boolean extraStockNeeded = linesAddedOrIncreased(order, request.lines());
+
+        // Status: INVOICE_PENDING/COMPLETED/PARTIALLY_DESPATCHED are all set
+        // by the despatch/invoicing process itself (DespatchService,
+        // InvoiceService) - never picked from this form's Status dropdown.
+        // Once an order is actually locked (despatched and/or invoiced),
+        // its status can only move by adding/increasing lines for an extra
+        // shipment (handled below, automatically) - any other manual change
+        // attempted here is rejected outright.
+        if (wasLocked) {
+            if (!extraStockNeeded && request.status() != statusBeforeEdit) {
+                throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                        "This order has already been " + (statusBeforeEdit == OrderStatus.COMPLETED ? "completed" : "despatched and is awaiting invoicing")
+                                + " - its status can't be changed manually. Add lines for an extra shipment to reopen "
+                                + "it, or use Reverse to Despatch / an RMA to correct what's already gone out.");
+            }
+        } else if (isSystemOnlyStatus(request.status()) && request.status() != statusBeforeEdit) {
+            throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                    "\"" + humanStatus(request.status()) + "\" is set automatically by the despatch/invoicing "
+                            + "process and can't be chosen manually.");
+        }
+
         // Shipping cost/courier/service stay editable throughout an order's
         // life - including after release, right up until the point its
         // delivery charge has actually been invoiced (order.shippingInvoiced -
-        // see InvoiceService). Once that's happened the figures are locked:
-        // rejecting a genuine change outright here, rather than silently
-        // ignoring it, means the person editing finds out immediately rather
-        // than assuming their change took.
-        if (order.isShippingInvoiced()) {
+        // see InvoiceService). Once that's happened the figures are locked -
+        // UNLESS this exact save is what's reopening the order for an extra
+        // shipment (extraStockNeeded on a locked order), in which case
+        // shippingInvoiced is about to be reset below anyway, so there's
+        // nothing to protect and a new cost/courier/service can be set in
+        // the very same save as the added lines.
+        boolean shippingLocked = order.isShippingInvoiced() && !(wasLocked && extraStockNeeded);
+        if (shippingLocked) {
             boolean costChanged = !bigDecimalEquals(request.shippingCost(), order.getShippingCost());
             boolean courierChanged = !java.util.Objects.equals(request.courierMethod(), order.getCourierMethod());
             boolean serviceChanged = request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()
@@ -118,6 +165,7 @@ public class OrderService {
                         "Shipping cost, courier and service can no longer be changed - this order's delivery has already been invoiced");
             }
         }
+
         // Snapshot taken before any field is touched, so the amend sync below
         // is diffing genuine before/after state rather than something already
         // overwritten by applyFields().
@@ -125,6 +173,21 @@ public class OrderService {
         applyFields(order, request);
         reconcileLines(order, request.lines());
         recomputePickingStatusIfMoreNeeded(order);
+
+        if (wasLocked && extraStockNeeded) {
+            // Treated exactly like a genuine partial despatch - because it
+            // now genuinely is one: this order shipped in full once already,
+            // and now owes more. shippingInvoiced resets so a separate
+            // shipping charge can be set and, in time, invoiced for this
+            // extra shipment on its own - the original delivery already was.
+            order.setStatus(OrderStatus.PARTIALLY_DESPATCHED);
+            order.setShippingInvoiced(false);
+        } else if (!wasLocked) {
+            order.setStatus(request.status());
+        }
+        // else: wasLocked with nothing extra needed - status was already
+        // validated above to be unchanged, so there's nothing to set.
+
         Order saved = orderRepository.save(order);
         // Best-effort, never blocks or reverses the save above - see
         // ShopifyOrderAmendService for why. Set directly on the entity being
@@ -132,6 +195,42 @@ public class OrderService {
         // can show the result of this one save.
         saved.setShopifyAmendStatus(shopifyOrderAmendService.syncAmendments(saved, before));
         return saved;
+    }
+
+    private static boolean isSystemOnlyStatus(OrderStatus status) {
+        return status == OrderStatus.INVOICE_PENDING || status == OrderStatus.COMPLETED
+                || status == OrderStatus.PARTIALLY_DESPATCHED;
+    }
+
+    private static String humanStatus(OrderStatus status) {
+        return status.name().replace('_', ' ');
+    }
+
+    /**
+     * True when the request asks for a product not currently on the order at
+     * all, or more of a product already on it than its current
+     * quantityOrdered - i.e. genuinely extra stock beyond what this order
+     * has asked for so far, regardless of how much of that has actually
+     * despatched. Compared against quantityOrdered (not quantityDespatched)
+     * so that bumping a partially-picked line's quantity back down to what
+     * it already was isn't mistaken for "extra" just because despatch hasn't
+     * caught up with picking yet.
+     */
+    private boolean linesAddedOrIncreased(Order order, List<OrderLineRequest> requestedLines) {
+        Map<Long, Integer> existingQtyByProduct = new HashMap<>();
+        for (OrderLine line : order.getLines()) {
+            existingQtyByProduct.put(line.getProduct().getId(), line.getQuantityOrdered());
+        }
+        for (OrderLineRequest lr : requestedLines) {
+            Integer existingQty = existingQtyByProduct.get(lr.productId());
+            if (existingQty == null) {
+                return true;
+            }
+            if (lr.quantityOrdered() != null && lr.quantityOrdered() > existingQty) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void applyFields(Order order, OrderRequest request) {
@@ -149,7 +248,9 @@ public class OrderService {
         order.setDeliveryCountry(request.deliveryCountry());
         order.setDeliveryPostcode(request.deliveryPostcode());
         order.setDeliveryCountryCode(request.deliveryCountryCode());
-        order.setStatus(request.status());
+        // Status is deliberately NOT set here any more - create() and
+        // update() each decide it themselves (see isSystemOnlyStatus) rather
+        // than trusting the request's status field blindly.
         order.setOrderType(request.orderType());
         order.setShippingCost(request.shippingCost());
         order.setCourierMethod(request.courierMethod());

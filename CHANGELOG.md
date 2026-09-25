@@ -5,6 +5,66 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.39] - 2026-09-25 (v0.104)
+
+### Added
+- **Order status is now locked down to what the despatch/invoicing process
+  itself sets** - "Invoice Pending", "Completed" and "Partially Despatched"
+  can no longer be picked manually from an order's Status dropdown, whether
+  creating a new order or editing an existing one; they're only ever set by
+  actually despatching or invoicing. Once an order has genuinely reached
+  Invoice Pending or Completed, its status is locked outright - any other
+  manual change is rejected with an explanation - **except** adding extra
+  lines (or increasing an existing line's quantity), which automatically
+  reopens it as Partially Despatched for the extra stock, and in that same
+  save also frees up shipping cost/courier/service to be set again (they're
+  otherwise locked once invoiced) so a separate charge can be applied to the
+  extra shipment.
+- **Partially Despatched orders are now invoiceable** - Generate Invoices
+  picks these up alongside Invoice Pending ones, and correctly invoices only
+  what's actually shipped so far (plus its own shipping cost) using the
+  despatched-minus-already-invoiced quantity math that already existed for
+  this - previously a partial despatch had to wait until everything shipped
+  before any of it could be invoiced.
+- **Reopening a locked order for an extra shipment now actually reaches the
+  handheld and the despatch screen** - picking's "ready to pick" list and
+  the despatch/packing "ready to pack" list both only ever matched orders
+  Awaiting Despatch; a reopened order sits at Partially Despatched instead,
+  so without this it would silently vanish from both queues despite
+  genuinely needing picking and despatching again. Both queries now also
+  match Partially Despatched orders with outstanding picking.
+- **New "Delivery History" page (Sales)** - lists every order that's been
+  despatched at least once, with a search box and a from/to date range, and
+  the order number, company, delivery name, postcode, courier, delivery
+  method, consignment number and parcel count for each. An "Export to
+  Excel" button gets the list out as a spreadsheet. Clicking a row opens a
+  detail page showing every unit that went out on that order - SKU, MAC
+  address, serial number, batch code, quantity and which carton it was
+  packed into (its own Export to Excel button too). Carton is shown as
+  "Split across cartons" for the rare Split-Packing case where a line's
+  quantity was divided across more than one carton and a specific unit's
+  own carton genuinely can't be pinned down from what was recorded -
+  Serial Packing mode always resolves this exactly.
+- **"Track" links for DPD shipments** - a Track link now appears next to the
+  DPD consignment number on an order's Despatch panel, on the confirmation
+  screen after despatching (both Split and Serial Packing), and on each
+  Delivery History detail page, opening DPD's tracking page in a new tab
+  with the consignment number (and postcode) pre-filled. The tracking URL
+  format hasn't been smoke-tested against a real DPD consignment in this
+  environment - worth checking against a live tracking number once
+  deployed.
+
+### Known limitation
+- An order reopened for an extra shipment reuses whatever DPD shipment was
+  already booked on it rather than booking a genuinely new one - the order
+  only has a single DPD consignment number/shipment ID recorded, so
+  confirming despatch again on a reopened order won't book (or get a
+  tracking number for) the extra parcels via DPD. A dummy/manual label can
+  still be printed and tracked by carton tracking number in the meantime;
+  properly supporting a second DPD booking on the same order would need the
+  order to record more than one shipment, which hasn't been built yet -
+  flagging this now rather than guessing at a fix.
+
 ## [0.23.38] - 2026-09-25 (v0.103)
 
 ### Fixed

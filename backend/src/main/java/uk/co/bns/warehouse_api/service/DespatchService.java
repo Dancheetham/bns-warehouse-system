@@ -57,8 +57,13 @@ public class DespatchService {
     public static final String PACKING_MODE_SERIAL = "SERIAL";
 
     public List<OrderPickSummary> readyToPack() {
-        List<Order> orders = orderRepository.findByStatusAndPickingStatusInOrderByOrderDateAsc(
-                OrderStatus.AWAITING_DESPATCH, List.of(PickingStatus.COMPLETE, PickingStatus.PARTIAL));
+        // PARTIALLY_DESPATCHED included alongside AWAITING_DESPATCH for the same
+        // reason as PickingService.readyToPick() - an order reopened for an extra
+        // shipment (new lines added to a locked/despatched order) needs its new
+        // stock to reach packing/despatch too once picked, not just picking.
+        List<Order> orders = orderRepository.findByStatusInAndPickingStatusInOrderByOrderDateAsc(
+                List.of(OrderStatus.AWAITING_DESPATCH, OrderStatus.PARTIALLY_DESPATCHED),
+                List.of(PickingStatus.COMPLETE, PickingStatus.PARTIAL));
         return orders.stream()
                 .map(o -> new OrderPickSummary(o.getId(), o.getOrderNumber(), o.getCustomerName(),
                         o.getOrderDate(), o.getLines().size(), o.getPickingStatus(), o.getPickedBy()))
@@ -127,6 +132,14 @@ public class DespatchService {
 
         for (OrderLine line : order.getLines()) {
             line.setQuantityDespatched(line.getQuantityPicked());
+        }
+
+        // Set once, on the very first despatch - unlike the dpd_* fields,
+        // never cleared again (not even by Reverse to Despatch), so it stays
+        // a reliable "this has genuinely gone out at least once" marker and
+        // despatch date for Delivery History.
+        if (order.getDespatchedAt() == null) {
+            order.setDespatchedAt(java.time.LocalDateTime.now());
         }
 
         // A fully-despatched order with a Company (credit account) goes to

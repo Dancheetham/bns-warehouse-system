@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { DespatchConfirmationResult, PackedItemView, SerialCartonView, SerialPackingView } from "../types";
 import { openAndPrintHtmlLabel, printPdf, printRaw } from "../utils/printAgent";
+import { dpdTrackingUrl } from "../utils/tracking";
 
 export default function SerialPacking() {
   const { orderId } = useParams();
@@ -144,13 +145,23 @@ export default function SerialPacking() {
 
         {result.dpdStatus && (
           <div
-            className={`rounded-lg p-4 mb-6 text-sm border ${
+            className={`rounded-lg p-4 mb-6 text-sm border flex items-center justify-between gap-3 ${
               result.dpdStatus.startsWith("DPD shipment NOT booked")
                 ? "bg-red-50 border-red-200 text-red-700"
                 : "bg-emerald-50 border-emerald-200 text-emerald-700"
             }`}
           >
-            {result.dpdStatus}
+            <span>{result.dpdStatus}</span>
+            {result.order.dpdConsignmentNumber && (
+              <a
+                href={dpdTrackingUrl(result.order.dpdConsignmentNumber, result.order.deliveryPostcode)}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 bg-white text-emerald-700 border border-emerald-300 text-xs px-3 py-1.5 rounded hover:bg-emerald-50"
+              >
+                Track →
+              </a>
+            )}
           </div>
         )}
 

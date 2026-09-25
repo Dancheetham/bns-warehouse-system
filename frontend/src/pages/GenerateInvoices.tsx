@@ -13,8 +13,10 @@ export default function GenerateInvoices() {
 
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("INVOICE");
   // Defaults to today - this is "the date that goes on the invoice", not a
-  // filter on which orders show up (every INVOICE_PENDING order for the
-  // selected type shows, regardless of when it was despatched).
+  // filter on which orders show up (every order awaiting invoicing for the
+  // selected type shows, regardless of when it was despatched - fully
+  // despatched (Invoice Pending) or only Partially Despatched, in which case
+  // just what's actually shipped so far is offered here).
   const [generationDate, setGenerationDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<GenerateInvoicesResult | null>(null);
