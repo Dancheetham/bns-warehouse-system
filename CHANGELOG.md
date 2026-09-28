@@ -5,6 +5,30 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.42] - 2026-09-28 (v0.107)
+
+### Added
+- **Docker host ports are now configurable per-environment without editing
+  `docker-compose.yml`** - `api`, `frontend` and `postgres` all read their
+  host-side port from an optional `API_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT`
+  in `.env` (defaulting to the same 8080/8081/5432 as before if unset). A
+  machine that already has something else running on those ports - a home
+  server with other services, say - now just sets the port it needs in its
+  own `.env` rather than hand-editing the compose file on every fresh
+  install/update.
+- **Account Settings page** - "My Email" and "Customisation" (order status
+  colours), which have always been per-user settings under the hood, moved
+  out of Admin > Settings (where they sat alongside shared/global
+  configuration - DPD credentials, invoice terms, other users' accounts) to
+  their own page, reached via a new settings icon next to your name at the
+  bottom of the sidebar. Admin > Settings keeps everything that actually is
+  shared/global.
+
+### Changed
+- **Sidebar "Log out"** swapped from a text link for an icon-only button
+  (next to the new settings icon), matching the more compact icon style
+  used elsewhere (e.g. the Delivery History clipboard-copy icons).
+
 ## [0.23.41] - 2026-09-25 (v0.106)
 
 ### Fixed

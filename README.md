@@ -31,6 +31,10 @@ packages). Once it's up:
 - **Frontend:** http://localhost:8081
 - **API:** http://localhost:8080/api
 
+If those ports clash with something else already running on this machine,
+set `API_PORT`/`FRONTEND_PORT`/`POSTGRES_PORT` in `.env` instead of editing
+`docker-compose.yml` - see the commented-out examples in `.env.example`.
+
 Flyway runs automatically on API startup and creates the full schema. The very
 first startup also seeds one login - **admin**, password
 `ChangeMe123!` - meant to be changed immediately from Settings > Users. **A
@@ -198,10 +202,12 @@ OrderWise customer export.
 **User accounts** - session-based login, a dedicated login page with a
 "remembered accounts" quick-switcher for shared devices (names only, never
 passwords, stored locally), a separate handheld login matching its own dark
-UI, new logins manageable from Settings > Users, per-user settings
-(currently just status colour customisation) alongside the app-wide ones,
-and increasing-delay login throttling per IP/username against repeated
-failed attempts.
+UI, new logins manageable from Settings > Users, and increasing-delay login
+throttling per IP/username against repeated failed attempts. Per-user
+settings (your own email account for outgoing mail, and order status colour
+customisation) live on their own **Account Settings** page, reached via the
+settings icon next to your name at the bottom of the sidebar - kept separate
+from Admin > Settings' shared/global configuration.
 
 **Handheld app** - a separate PWA (not the desktop app shrunk down) for
 Picking, Goods In, and Stock Movement, scan-first throughout (barcode fields

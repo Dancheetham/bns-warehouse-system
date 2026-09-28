@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import { DEFAULT_STATUS_COLORS, ORDER_STATUSES, resolveStatusColors, statusColorSettingKey, statusLabel } from "../utils/statusColors";
-import { OrderStatus } from "../types";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastContext";
+import SettingsSection from "../components/SettingsSection";
 
 interface UserView {
   id: number;
@@ -18,46 +17,6 @@ interface RestoreResult {
   backedUpAt: string | null;
   backedUpFromDatabase: string | null;
   secretKeysInBackup: string[];
-}
-
-/**
- * One collapsible block of settings. Everything starts collapsed so the page
- * opens as a short list of headings you can scan, rather than a very long
- * scroll - open just the area you came here to change. Collapsed state is
- * per-section and deliberately not remembered between visits: the useful
- * default is always "show me the list", not "show me whatever I left open
- * last time".
- */
-function SettingsSection({
-  title,
-  description,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  description?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg mb-4">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-slate-50 rounded-lg"
-      >
-        <span className="font-medium text-slate-800">{title}</span>
-        <span className={`text-slate-400 text-xs transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
-      </button>
-      {open && (
-        <div className="px-5 pb-5">
-          {description && <p className="text-sm text-slate-500 mb-4">{description}</p>}
-          <div className="space-y-4">{children}</div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function Settings() {
@@ -112,14 +71,7 @@ export default function Settings() {
   const [chaserWarningBody, setChaserWarningBody] = useState("");
   const [chaserOverdueSubject, setChaserOverdueSubject] = useState("");
   const [chaserOverdueBody, setChaserOverdueBody] = useState("");
-  const [statusColors, setStatusColors] = useState<Record<OrderStatus, string>>(DEFAULT_STATUS_COLORS);
   const [saved, setSaved] = useState(false);
-  const [colorsSaved, setColorsSaved] = useState(false);
-  const [myEmailUsername, setMyEmailUsername] = useState("");
-  const [myEmailPassword, setMyEmailPassword] = useState("");
-  const [myEmailFromAddress, setMyEmailFromAddress] = useState("");
-  const [myEmailCc, setMyEmailCc] = useState("");
-  const [myEmailSaved, setMyEmailSaved] = useState(false);
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -127,13 +79,6 @@ export default function Settings() {
   const { data: settings } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => (await api.get<Record<string, string>>("/settings")).data,
-  });
-
-  // Per-user, not global - this is the one thing in Settings that follows a
-  // specific person rather than describing how the whole warehouse operates.
-  const { data: myUserSettings } = useQuery({
-    queryKey: ["my-user-settings"],
-    queryFn: async () => (await api.get<Record<string, string>>("/users/me/settings")).data,
   });
 
   const { data: testDataResetStatus } = useQuery({
@@ -206,15 +151,6 @@ export default function Settings() {
     setChaserOverdueBody(settings["chaser_overdue_body"] ?? "");
   }, [settings]);
 
-  useEffect(() => {
-    setStatusColors(resolveStatusColors(myUserSettings));
-    setMyEmailUsername(myUserSettings?.["email_username"] ?? "");
-    // email_password deliberately never populated back, same reasoning as
-    // the global smtp_password above.
-    setMyEmailFromAddress(myUserSettings?.["email_from_address"] ?? "");
-    setMyEmailCc(myUserSettings?.["email_cc_address"] ?? "");
-  }, [myUserSettings]);
-
   const saveMutation = useMutation({
     mutationFn: async () =>
       api.put("/settings", {
@@ -279,34 +215,6 @@ export default function Settings() {
       setSaved(true);
       showToast("Saved.");
       setTimeout(() => setSaved(false), 2500);
-    },
-  });
-
-  const saveColorsMutation = useMutation({
-    mutationFn: async () =>
-      api.put("/users/me/settings", Object.fromEntries(ORDER_STATUSES.map((s) => [statusColorSettingKey(s), statusColors[s]]))),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
-      setColorsSaved(true);
-      showToast("Saved.");
-      setTimeout(() => setColorsSaved(false), 2500);
-    },
-  });
-
-  const saveMyEmailMutation = useMutation({
-    mutationFn: async () =>
-      api.put("/users/me/settings", {
-        email_username: myEmailUsername,
-        ...(myEmailPassword ? { email_password: myEmailPassword } : {}),
-        email_from_address: myEmailFromAddress,
-        email_cc_address: myEmailCc,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
-      setMyEmailPassword("");
-      setMyEmailSaved(true);
-      showToast("Saved.");
-      setTimeout(() => setMyEmailSaved(false), 2500);
     },
   });
 
@@ -1198,109 +1106,17 @@ export default function Settings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection
-        title="My Email"
-        description="Just for you - acknowledgement and despatch confirmation emails you send go out through these, not the shared Settings > Email account. Leave any field blank to fall back to the shared account for that part."
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Email username</label>
-            <input value={myEmailUsername} onChange={(e) => setMyEmailUsername(e.target.value)} className="input" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">
-              Email password (leave blank to keep the current one)
-            </label>
-            <input
-              type="password"
-              value={myEmailPassword}
-              onChange={(e) => setMyEmailPassword(e.target.value)}
-              placeholder="••••••••"
-              className="input"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">From address</label>
-          <input
-            value={myEmailFromAddress}
-            onChange={(e) => setMyEmailFromAddress(e.target.value)}
-            placeholder="e.g. dan@bnsdistribution.co.uk"
-            className="input"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">CC (optional)</label>
-          <input
-            value={myEmailCc}
-            onChange={(e) => setMyEmailCc(e.target.value)}
-            placeholder="e.g. orders@bnsdistribution.co.uk"
-            className="input"
-          />
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => saveMyEmailMutation.mutate()}
-            disabled={saveMyEmailMutation.isPending}
-            className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
-          >
-            {saveMyEmailMutation.isPending ? "Saving..." : "Save My Email"}
-          </button>
-          {myEmailSaved && <span className="text-xs text-emerald-600">Saved.</span>}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection
-        title="Customisation"
-        description="Just for you - these follow your login, not shared with anyone else using the system."
-      >
-        <div>
-          <h4 className="text-sm font-medium text-slate-700 mb-2">Order status colours</h4>
-          <p className="text-xs text-slate-500 mb-3">
-            Used for the row colour on Sales Activity, so a screen full of orders is scannable at a glance.
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {ORDER_STATUSES.map((status) => (
-              <div key={status} className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={statusColors[status]}
-                  onChange={(e) => setStatusColors((prev) => ({ ...prev, [status]: e.target.value }))}
-                  className="w-9 h-9 rounded border border-slate-300 cursor-pointer shrink-0"
-                />
-                <span className="text-sm text-slate-600">{statusLabel(status)}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              type="button"
-              onClick={() => setStatusColors(DEFAULT_STATUS_COLORS)}
-              className="text-xs text-slate-500 hover:text-slate-700"
-            >
-              Reset to defaults
-            </button>
-            <button
-              type="button"
-              onClick={() => saveColorsMutation.mutate()}
-              disabled={saveColorsMutation.isPending}
-              className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-700 disabled:opacity-50"
-            >
-              {saveColorsMutation.isPending ? "Saving..." : "Save Colours"}
-            </button>
-            {colorsSaved && <span className="text-xs text-emerald-600">Saved.</span>}
-          </div>
-        </div>
-      </SettingsSection>
-
       {/*
         Floating rather than sitting at the bottom of the page, matching the
         order screen - with every section collapsible you can be anywhere in
         the page when you finish editing, and having to scroll to the end to
-        find Save is exactly the annoyance this removes. Note this saves the
-        shared/global settings only; the "My Email" and "Customisation"
-        sections have their own Save buttons because they're per-user.
+        find Save is exactly the annoyance this removes.
+
+        "My Email" and "Customisation" used to live here as their own
+        per-user sections with their own Save buttons - moved to a dedicated
+        Account Settings page in v0.107 (reached via the settings icon next
+        to your name in the sidebar) so they're not mixed in among shared/
+        global configuration.
       */}
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
         {saved && (
