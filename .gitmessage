@@ -1,31 +1,20 @@
-Replace DPD collection-address toggle with a real whitelabel option, add
-DPD connection reset (v0.109)
+Fix "Reverse to Despatch" button missing on invoice-pending orders (v0.110)
 
-The v0.108 "don't send this address to DPD as the collection address"
-toggle turned out not to achieve anything visible: leaving collectionDetails
-off the request makes DPD fall back to the collection address configured on
-the DPD account itself, which for a real account is still BNS's genuine
-registered address. Confirmed against the full DPD shipping schema that
-there is no API-level "hide the sender" flag at all - true white-labelling
-is an account-level label template only DPD's own Customer Integration Team
-can apply.
+The button on the order screen only ever showed for COMPLETED or
+PARTIALLY_DESPATCHED orders (OrderEdit.tsx). v0.100 added the
+INVOICE_PENDING status - a fully-despatched order on a company/credit
+account, sitting there until Generate Invoices picks it up - and, in the
+same commit, updated OrderReversalService.reverseToDespatch() on the
+backend to allow reversing an INVOICE_PENDING order too (guarded by a check
+that nothing on it has actually been invoiced yet). The frontend visibility
+condition was never updated to match, so the button has been silently
+missing for every credit-account order sitting in INVOICE_PENDING since
+v0.100 - not a redesign, a genuine regression.
 
-Replaced the toggle with "Whitelabel": when on, DPD is sent "-" for street
-and town (the two address fields DPD actually content-validates) and the
-country code is forced to GB, instead of the real Settings > DPD address.
-Contact name/phone are left as configured, since DPD needs a real contact
-for collection queries. As before, this only ever touches the domestic
-collectionDetails block - the customs exporterDetails block on international
-shipments is always sent with the real, complete address, since DPD rejects
-those shipments outright otherwise.
-
-Also added a "Reset DPD connection" button in the same Settings > DPD
-section, after DPD support suggested resetting the connection / getting a
-new bearer token to resolve an unrelated issue. Clears the cached
-access/refresh token pair so the next DPD call re-authenticates from
-scratch with the API key/secret, rather than refreshing or reusing the
-existing session - the bearer token is that cached session token, separate
-from and untouched by the API key/secret above.
+Added INVOICE_PENDING to the button's display condition, and a note under
+it that reversal stops being available once any part of the order has
+actually been invoiced (the existing backend guard - raise a credit note
+through RMA instead at that point, same as before this fix).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

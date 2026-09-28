@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.45] - 2026-09-28 (v0.110)
+
+### Fixed
+- **"Reverse to Despatch" button missing on invoice-pending orders.** The
+  button on the order screen only ever showed for `COMPLETED` or
+  `PARTIALLY_DESPATCHED` orders. Since v0.100 added the `INVOICE_PENDING`
+  status (a fully-despatched order on a company/credit account, sitting
+  there until Generate Invoices picks it up), the backend has allowed
+  reversing an `INVOICE_PENDING` order too (as long as nothing on it has
+  actually been invoiced yet) - but the frontend condition was never updated
+  to match, so the button silently disappeared for every credit-account
+  order in that window. Added `INVOICE_PENDING` to the button's visibility
+  check, with a note under it that reversal stops being available once any
+  part of the order has actually been invoiced (the existing backend guard -
+  raise a credit note through RMA instead at that point).
+
 ## [0.23.44] - 2026-09-28 (v0.109)
 
 ### Changed

@@ -930,7 +930,7 @@ export default function OrderEdit() {
                   {resetOrderDone && <span className="text-xs text-emerald-600 ml-2">Reset.</span>}
                 </div>
               )}
-              {(status === "COMPLETED" || status === "PARTIALLY_DESPATCHED") && (
+              {(status === "COMPLETED" || status === "PARTIALLY_DESPATCHED" || status === "INVOICE_PENDING") && (
                 <div className="w-full border-t border-slate-100 pt-3 mt-1 flex flex-wrap gap-3 items-center">
                   <button
                     onClick={() => {
@@ -949,7 +949,10 @@ export default function OrderEdit() {
                   >
                     {reverseToDespatchMutation.isPending ? "Reversing..." : "Reverse to Despatch"}
                   </button>
-                  <span className="text-xs text-slate-400">For a quantity or address change after despatch</span>
+                  <span className="text-xs text-slate-400">
+                    For a quantity or address change after despatch
+                    {status === "INVOICE_PENDING" && " - not available once any part of this order has been invoiced"}
+                  </span>
                 </div>
               )}
               <div className="w-full flex flex-wrap gap-3 items-center">
