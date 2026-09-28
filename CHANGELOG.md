@@ -5,6 +5,21 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.46] - 2026-09-28 (v0.111)
+
+### Changed
+- **Settings > DPD - "Whitelabel" toggle now sends a real postcode.** The
+  v0.109 version left postcode out entirely alongside the other optional
+  fields, which meant DPD had nothing to sort/route the parcel on besides
+  the dashed-out street/town and country code. Confirmed by the user
+  manually testing with a real depot postcode (the Preston depot,
+  `PR2 5BL`) that DPD needs a genuine postcode even when the rest of the
+  visible address is blanked out. The toggle now sends a postcode from a
+  new "Whitelabel postcode" field (only shown when the toggle is on),
+  defaulting to `PR2 5BL` but editable in Settings if that ever needs to
+  change - organisation/locality/county are still left out entirely, and
+  street/town are still sent as `-`.
+
 ## [0.23.45] - 2026-09-28 (v0.110)
 
 ### Fixed
