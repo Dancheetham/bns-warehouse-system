@@ -5,6 +5,20 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.43] - 2026-09-28 (v0.108)
+
+### Added
+- **Settings > DPD - "Don't send this address to DPD as the collection
+  address"** toggle. Previously the Settings > DPD sender address was always
+  sent on every booking as the `collectionDetails` block, which is what
+  actually determines the collection/return address DPD use. With this on,
+  that block is left off the booking request entirely (not sent blank -
+  genuinely omitted), which is what makes DPD fall back to whatever
+  collection address is configured on the DPD account itself instead.
+  Deliberately doesn't touch the customs `exporterDetails` block on
+  international shipments - DPD rejects those outright without a complete
+  exporter address, so that stays mandatory regardless of this setting.
+
 ## [0.23.42] - 2026-09-28 (v0.107)
 
 ### Added

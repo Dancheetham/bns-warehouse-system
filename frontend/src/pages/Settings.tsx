@@ -49,6 +49,7 @@ export default function Settings() {
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
+  const [dpdOmitCollectionAddress, setDpdOmitCollectionAddress] = useState(false);
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -127,6 +128,7 @@ export default function Settings() {
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
+    setDpdOmitCollectionAddress((settings["dpd_omit_collection_address"] ?? "false") === "true");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -188,6 +190,7 @@ export default function Settings() {
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
         dpd_extended_liability: String(dpdExtendedLiability),
+        dpd_omit_collection_address: String(dpdOmitCollectionAddress),
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -538,6 +541,21 @@ export default function Settings() {
         <p className="text-xs text-slate-400 -mt-3">
           Used as both the collection address and the exporter details on any customs declaration (e.g. for
           shipments to Ireland).
+        </p>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={dpdOmitCollectionAddress}
+            onChange={(e) => setDpdOmitCollectionAddress(e.target.checked)}
+          />
+          Don't send this address to DPD as the collection address - use whatever's configured on the DPD account
+          instead
+        </label>
+        <p className="text-xs text-slate-400 -mt-2 ml-6">
+          When on, the fields below are simply left off the booking request entirely rather than sent blank, which
+          is what makes DPD fall back to the account's own configured collection address. This only affects the
+          domestic collection/label address - it does <b>not</b> affect the customs exporter details below on
+          international shipments, which DPD requires regardless (the shipment is rejected without them).
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div>

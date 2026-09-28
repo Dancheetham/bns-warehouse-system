@@ -1,23 +1,20 @@
-Configurable Docker ports + Account Settings page (v0.107)
+Add DPD "don't send our collection address" toggle (v0.108)
 
-Two independent changes:
+Settings > DPD sender address was always sent as the booking's
+collectionDetails block, which is what actually determines the address DPD
+collect from / return to. Some accounts want DPD's own configured collection
+address used instead (e.g. a different pickup point than the registered
+address in Settings). DPD's API has no explicit "use account default" flag,
+but per the existing comment in DpdShippingService (confirmed when the
+collectionDetails nesting fix was originally made), simply not sending the
+block at all reliably produces that fallback.
 
-1. Docker host ports (api/frontend/postgres) are now read from optional
-   API_PORT/FRONTEND_PORT/POSTGRES_PORT env vars in docker-compose.yml
-   instead of being hardcoded, defaulting to the same 8080/8081/5432 as
-   before if unset. A machine that needs different host ports (a home
-   server already running other services, say) now sets them in its own
-   .env rather than hand-editing docker-compose.yml on every fresh
-   install/update - see the new commented-out examples in .env.example.
-
-2. "My Email" and "Customisation" (order status colours) - both always
-   per-user settings under the hood (/users/me/settings) - moved out of
-   Admin > Settings, where they sat alongside shared/global configuration,
-   into a new Account Settings page reached via a settings icon next to
-   your name at the bottom of the sidebar. The old "Log out" text link
-   became an icon too, sitting next to it. SettingsSection (the
-   collapsible-block component) was split out to its own file so both
-   Settings.tsx and the new AccountSettings.tsx can share it.
+New toggle in Settings > DPD > Sender / collection address: when on,
+buildRequestBody() skips putting collectionDetails on the request entirely,
+rather than sending it with blank fields. Deliberately does NOT touch
+exporterDetails on customs shipments - DPD rejects those outright without a
+complete exporter address, so that block stays mandatory and always sent
+regardless of this setting.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

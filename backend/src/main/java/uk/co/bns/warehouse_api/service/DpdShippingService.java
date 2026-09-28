@@ -373,12 +373,26 @@ public class DpdShippingService {
         // shipments still worked despite this being wrong. Same nesting
         // applies to deliveryDetails (already correct below) and to the
         // customs invoice's exporter/importer blocks further down.
-        ObjectNode collectionDetails = consignment.putObject("collectionDetails");
-        putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
-                senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
-        ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
-        collectionContact.put("contactName", senderContactName);
-        collectionContact.put("telephone", dpdPhone(senderContactPhone));
+        //
+        // dpd_omit_collection_address (v0.108) - some accounts want DPD's own
+        // configured collection address used on every label instead of BNS's
+        // Settings > DPD address (e.g. a different pickup point than the
+        // billing/registered address) - the DPD API has no explicit "use the
+        // account default" flag, but per the note above, simply not sending
+        // collectionDetails at all reliably produces that fallback behaviour.
+        // Deliberately does NOT affect exporterDetails further down - DPD
+        // rejects any customs shipment outright without a complete exporter
+        // address ("Exporter address is mandatory"), so that block stays
+        // mandatory and always sent regardless of this setting.
+        boolean omitCollectionAddress = "true".equals(settingsService.get("dpd_omit_collection_address", "false"));
+        if (!omitCollectionAddress) {
+            ObjectNode collectionDetails = consignment.putObject("collectionDetails");
+            putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
+                    senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
+            ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
+            collectionContact.put("contactName", senderContactName);
+            collectionContact.put("telephone", dpdPhone(senderContactPhone));
+        }
 
         ObjectNode deliveryDetails = consignment.putObject("deliveryDetails");
         ObjectNode deliveryContact = deliveryDetails.putObject("contactDetails");
