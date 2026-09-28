@@ -48,6 +48,10 @@ public class DpdAuthService {
     private volatile String cachedAccessToken;
     private volatile String cachedRefreshToken;
     private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
+    // What dpd_environment/dpd_api_key/dpd_api_secret were set to at the
+    // moment the cached token above was actually issued - see the
+    // credentialsChanged() check in getAccessToken() for why this matters.
+    private volatile String cachedForFingerprint;
 
     public String baseUrl() {
         String env = settingsService.get("dpd_environment", "sandbox");
@@ -63,11 +67,6 @@ public class DpdAuthService {
     }
 
     /**
-     * Returns a currently-valid access token, logging in or refreshing first
-     * if needed. Synchronized so two near-simultaneous shipment requests
-     * don't both trigger their own login/refresh call.
-     */
-    /**
      * Drops the cached access/refresh tokens so the next call re-authenticates
      * from scratch with a fresh Basic-auth login, rather than refreshing the
      * existing session. This is what "reset the connection" / "get a new
@@ -82,9 +81,41 @@ public class DpdAuthService {
         cachedAccessToken = null;
         cachedRefreshToken = null;
         accessTokenExpiresAt = Instant.EPOCH;
+        cachedForFingerprint = null;
     }
 
+    /**
+     * environment + api key + api secret, joined - a cheap way to tell
+     * whether Settings > DPD has changed since the cached token was issued,
+     * without keeping a second, longer-lived copy of the secret anywhere.
+     */
+    private String currentCredentialsFingerprint() {
+        String env = settingsService.get("dpd_environment", "sandbox").toLowerCase();
+        String key = settingsService.get("dpd_api_key", "");
+        String secret = settingsService.get("dpd_api_secret", "");
+        return env + "|" + key + "|" + secret;
+    }
+
+    /**
+     * Returns a currently-valid access token, logging in or refreshing first
+     * if needed. Synchronized so two near-simultaneous shipment requests
+     * don't both trigger their own login/refresh call.
+     */
     public synchronized String getAccessToken() {
+        // Bug fixed in v0.113: this cache used to be keyed only on expiry,
+        // not on which credentials/environment it was actually issued
+        // under. Switching Settings > DPD from sandbox to live (or just
+        // pasting in new live key/secret) without a container restart left
+        // a still-unexpired token from the OLD environment/credentials
+        // being silently reused against the NEW base URL - DPD rejects it,
+        // which surfaced as "live services not showing" with everything
+        // otherwise configured correctly. Now any credentials/environment
+        // change is detected here and forces a fresh login instead of
+        // reusing or refreshing the stale token.
+        if (cachedAccessToken != null && !currentCredentialsFingerprint().equals(cachedForFingerprint)) {
+            log.info("DPD environment/API key/secret changed since the cached token was issued - forcing a fresh login");
+            resetConnection();
+        }
         if (cachedAccessToken != null && Instant.now().isBefore(accessTokenExpiresAt)) {
             return cachedAccessToken;
         }
@@ -142,6 +173,7 @@ public class DpdAuthService {
             cachedRefreshToken = refreshToken;
         }
         accessTokenExpiresAt = Instant.now().plusSeconds(24L * 3600 - EXPIRY_SAFETY_MARGIN_SECONDS);
+        cachedForFingerprint = currentCredentialsFingerprint();
     }
 
     private JsonNode send(HttpRequest request, String actionDescription) {

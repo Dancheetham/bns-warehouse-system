@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.48] - 2026-09-28 (v0.113)
+
+### Fixed
+- **Switching Settings > DPD from sandbox to live (or entering new live
+  credentials) silently kept using the old sandbox session.** DPD bearer
+  tokens are cached in memory for up to 24h to avoid re-authenticating on
+  every call, but the cache was only ever checked against its own expiry -
+  never against whether the environment, API key or secret it was issued
+  under still matched what's currently in Settings. So switching to Live
+  without restarting the container left a still-valid sandbox-issued token
+  being sent to the live API, which DPD rejects - surfacing as live
+  services silently not appearing on the order screen, with everything
+  else (credentials, environment setting) actually configured correctly.
+  `DpdAuthService` now fingerprints the environment/key/secret a token was
+  issued under and forces a fresh login the moment any of them changes,
+  rather than reusing or refreshing the stale one. The "Reset DPD
+  connection" button from v0.109 still works as a manual override, but
+  shouldn't be needed for this specific case any more.
+
 ## [0.23.47] - 2026-09-28 (v0.112)
 
 ### Changed

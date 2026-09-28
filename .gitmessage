@@ -1,17 +1,29 @@
-Blank the collection contact phone number on whitelabelled DPD labels
-(v0.112)
+Fix stale DPD bearer token surviving a sandbox->live switch (v0.113)
 
-The v0.111 Whitelabel toggle dashed out street/town, forced country to GB,
-and sent a real postcode for routing - but still sent the real
-contactDetails.telephone on the collectionDetails block. The user confirmed
-by testing that the real number was still going out on the label.
+DpdAuthService caches the DPD bearer/refresh token pair in memory for up to
+24h to avoid re-authenticating on every call. getAccessToken() only ever
+checked that cache against its own expiry, never against whether the
+environment/API key/secret it was issued under still matched what's
+currently configured in Settings > DPD. So switching Settings from sandbox
+to live (or just pasting in new live credentials) without restarting the
+container left a still-unexpired, sandbox-issued token being sent to the
+live API on every call - DPD rejects it, which surfaced as live services
+silently not appearing on the order screen despite the credentials and
+environment setting both actually being correct.
 
-DPD's telephone field is validated against ^([+]\d{1,14}|\d{0,15})$, which
-accepts zero digits, so sending an empty string for telephone is valid
-rather than being rejected outright. Now sends "" for telephone whenever
-Whitelabel is on. contactName is deliberately left as configured for now -
-only the phone number was reported as still showing through; can blank the
-name too if that's wanted next.
+Added a currentCredentialsFingerprint() (environment + api key + api
+secret, joined) recorded alongside the cached token at the moment it's
+actually issued (login()/refresh() via applyTokenResponse()).
+getAccessToken() now compares the current fingerprint against that before
+trusting the cache, and calls resetConnection() to force a fresh login the
+moment any of the three change, rather than silently reusing or refreshing
+the stale token. The v0.109 "Reset DPD connection" button in Settings still
+exists as a manual override for other cases (e.g. DPD support asking for a
+fresh token after an account-side change), but shouldn't be needed for a
+routine sandbox/live switch any more.
+
+Also tidied up a docblock that had drifted above the wrong method
+(resetConnection() instead of getAccessToken()) from the v0.109 change.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
