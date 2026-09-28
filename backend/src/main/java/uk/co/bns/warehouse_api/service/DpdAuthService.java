@@ -67,6 +67,23 @@ public class DpdAuthService {
      * if needed. Synchronized so two near-simultaneous shipment requests
      * don't both trigger their own login/refresh call.
      */
+    /**
+     * Drops the cached access/refresh tokens so the next call re-authenticates
+     * from scratch with a fresh Basic-auth login, rather than refreshing the
+     * existing session. This is what "reset the connection" / "get a new
+     * bearer token" means on the DPD side - the bearer token is this cached
+     * access token, not the API key/secret (those are the long-lived
+     * credentials under Settings > DPD and are untouched by this). Useful
+     * when DPD support asks for a fresh token because something about the
+     * account/permissions changed and the currently cached one won't reflect
+     * that until it naturally expires (up to 24h) or is manually cleared.
+     */
+    public synchronized void resetConnection() {
+        cachedAccessToken = null;
+        cachedRefreshToken = null;
+        accessTokenExpiresAt = Instant.EPOCH;
+    }
+
     public synchronized String getAccessToken() {
         if (cachedAccessToken != null && Instant.now().isBefore(accessTokenExpiresAt)) {
             return cachedAccessToken;

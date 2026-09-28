@@ -5,6 +5,34 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.44] - 2026-09-28 (v0.109)
+
+### Changed
+- **Settings > DPD - replaced the v0.108 "don't send this address to DPD as
+  the collection address" toggle with a "Whitelabel" toggle.** The old
+  approach made DPD fall back to the collection address configured on the
+  DPD account itself, which for a real business account is still the genuine
+  registered address, so nothing visibly changed on the label. There is no
+  actual "hide the sender" API flag - confirmed against the full DPD shipping
+  schema, true white-labelling is an account-level label template DPD's own
+  Customer Integration Team has to apply. The new toggle instead sends dummy
+  `-` values for the two address fields DPD actually content-validates
+  (street, town) and forces the country code to `GB`, while leaving the
+  contact name/phone as configured (DPD needs a real contact for collection
+  queries). Still deliberately doesn't touch the customs `exporterDetails`
+  block on international shipments - DPD rejects those outright without a
+  complete, genuine exporter address, so that always stays real regardless.
+
+### Added
+- **Settings > DPD - "Reset DPD connection" button.** Forces the next DPD API
+  call to log in from scratch and get a brand new bearer/refresh token pair,
+  instead of reusing the token cached in memory (normally valid 24h,
+  refreshed automatically a couple of minutes before expiry). This is what
+  DPD support mean by "reset the connection" or "get a new bearer code" -
+  the bearer token is the short-lived session token DPD hands back after
+  exchanging the API key/secret, not the key/secret itself, which is
+  untouched by this and doesn't need re-entering.
+
 ## [0.23.43] - 2026-09-28 (v0.108)
 
 ### Added

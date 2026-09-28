@@ -49,7 +49,7 @@ export default function Settings() {
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
-  const [dpdOmitCollectionAddress, setDpdOmitCollectionAddress] = useState(false);
+  const [dpdWhitelabelCollectionAddress, setDpdWhitelabelCollectionAddress] = useState(false);
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -128,7 +128,7 @@ export default function Settings() {
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
-    setDpdOmitCollectionAddress((settings["dpd_omit_collection_address"] ?? "false") === "true");
+    setDpdWhitelabelCollectionAddress((settings["dpd_whitelabel_collection_address"] ?? "false") === "true");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -152,6 +152,13 @@ export default function Settings() {
     setChaserOverdueSubject(settings["chaser_overdue_subject"] ?? "");
     setChaserOverdueBody(settings["chaser_overdue_body"] ?? "");
   }, [settings]);
+
+  const resetDpdConnectionMutation = useMutation({
+    mutationFn: async () => api.post("/settings/dpd/reset-connection"),
+    onSuccess: () =>
+      showToast("DPD connection reset - the next DPD action will log in fresh and get a new bearer token."),
+    onError: () => showToast("Failed to reset the DPD connection - see the console for details."),
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () =>
@@ -190,7 +197,7 @@ export default function Settings() {
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
         dpd_extended_liability: String(dpdExtendedLiability),
-        dpd_omit_collection_address: String(dpdOmitCollectionAddress),
+        dpd_whitelabel_collection_address: String(dpdWhitelabelCollectionAddress),
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -502,6 +509,23 @@ export default function Settings() {
           </select>
         </div>
         <div>
+          <button
+            type="button"
+            onClick={() => resetDpdConnectionMutation.mutate()}
+            disabled={resetDpdConnectionMutation.isPending}
+            className="btn-secondary text-sm"
+          >
+            {resetDpdConnectionMutation.isPending ? "Resetting…" : "Reset DPD connection"}
+          </button>
+          <p className="text-xs text-slate-400 mt-1">
+            Forces the next DPD action (booking a shipment, printing a label, etc.) to log in from scratch and get a
+            brand new bearer token, instead of reusing the one currently cached here (normally valid 24h, refreshed
+            automatically). This is what DPD support mean by "reset the connection" or "get a new bearer code" - the
+            bearer token is separate from the API key/secret above, which are untouched by this and don't need
+            re-entering.
+          </p>
+        </div>
+        <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Preferred service (optional)</label>
           <input
             value={dpdNetworkCode}
@@ -545,17 +569,19 @@ export default function Settings() {
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
-            checked={dpdOmitCollectionAddress}
-            onChange={(e) => setDpdOmitCollectionAddress(e.target.checked)}
+            checked={dpdWhitelabelCollectionAddress}
+            onChange={(e) => setDpdWhitelabelCollectionAddress(e.target.checked)}
           />
-          Don't send this address to DPD as the collection address - use whatever's configured on the DPD account
-          instead
+          Whitelabel - don't show our real address on the collection/return part of the label
         </label>
         <p className="text-xs text-slate-400 -mt-2 ml-6">
-          When on, the fields below are simply left off the booking request entirely rather than sent blank, which
-          is what makes DPD fall back to the account's own configured collection address. This only affects the
-          domestic collection/label address - it does <b>not</b> affect the customs exporter details below on
-          international shipments, which DPD requires regardless (the shipment is rejected without them).
+          When on, DPD is sent "-" for the address lines below instead of the real address (DPD doesn't accept
+          those left blank, and there's no genuine account-level whitelabel flag we can set via the API - only DPD's
+          own Customer Integration Team can do that). The contact name/phone below are still sent as normal, since
+          DPD needs a real contact for collection queries. This only affects the domestic collection/label address -
+          it does <b>not</b> affect the customs exporter details below on international shipments (e.g. Ireland) -
+          those are always sent with the real address regardless of this setting, since DPD rejects any customs
+          shipment outright without a complete, genuine exporter address.
         </p>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
@@ -688,10 +714,6 @@ export default function Settings() {
           A chargeable DPD insurance option - check with DPD whether this is already covered by your account terms
           before turning it on, since it isn't something to enable without knowing that. When on, the insured value
           sent is the order's goods value (capped at DPD's £5,000 maximum), not a separately maintained figure.
-        </p>
-        <p className="text-xs text-slate-400">
-          A white-label/no-return-address label is a DPD account-level template setting, not something this
-          integration can control - ask your DPD account manager to configure it if you need one.
         </p>
         <label className="flex items-center gap-2 text-sm text-slate-700 pt-2 border-t border-slate-100">
           <input type="checkbox" checked={printSampleLabels} onChange={(e) => setPrintSampleLabels(e.target.checked)} />

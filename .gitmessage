@@ -1,20 +1,31 @@
-Add DPD "don't send our collection address" toggle (v0.108)
+Replace DPD collection-address toggle with a real whitelabel option, add
+DPD connection reset (v0.109)
 
-Settings > DPD sender address was always sent as the booking's
-collectionDetails block, which is what actually determines the address DPD
-collect from / return to. Some accounts want DPD's own configured collection
-address used instead (e.g. a different pickup point than the registered
-address in Settings). DPD's API has no explicit "use account default" flag,
-but per the existing comment in DpdShippingService (confirmed when the
-collectionDetails nesting fix was originally made), simply not sending the
-block at all reliably produces that fallback.
+The v0.108 "don't send this address to DPD as the collection address"
+toggle turned out not to achieve anything visible: leaving collectionDetails
+off the request makes DPD fall back to the collection address configured on
+the DPD account itself, which for a real account is still BNS's genuine
+registered address. Confirmed against the full DPD shipping schema that
+there is no API-level "hide the sender" flag at all - true white-labelling
+is an account-level label template only DPD's own Customer Integration Team
+can apply.
 
-New toggle in Settings > DPD > Sender / collection address: when on,
-buildRequestBody() skips putting collectionDetails on the request entirely,
-rather than sending it with blank fields. Deliberately does NOT touch
-exporterDetails on customs shipments - DPD rejects those outright without a
-complete exporter address, so that block stays mandatory and always sent
-regardless of this setting.
+Replaced the toggle with "Whitelabel": when on, DPD is sent "-" for street
+and town (the two address fields DPD actually content-validates) and the
+country code is forced to GB, instead of the real Settings > DPD address.
+Contact name/phone are left as configured, since DPD needs a real contact
+for collection queries. As before, this only ever touches the domestic
+collectionDetails block - the customs exporterDetails block on international
+shipments is always sent with the real, complete address, since DPD rejects
+those shipments outright otherwise.
+
+Also added a "Reset DPD connection" button in the same Settings > DPD
+section, after DPD support suggested resetting the connection / getting a
+new bearer token to resolve an unrelated issue. Clears the cached
+access/refresh token pair so the next DPD call re-authenticates from
+scratch with the API key/secret, rather than refreshing or reusing the
+existing session - the bearer token is that cached session token, separate
+from and untouched by the API key/secret above.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

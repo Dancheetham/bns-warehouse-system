@@ -374,25 +374,36 @@ public class DpdShippingService {
         // applies to deliveryDetails (already correct below) and to the
         // customs invoice's exporter/importer blocks further down.
         //
-        // dpd_omit_collection_address (v0.108) - some accounts want DPD's own
-        // configured collection address used on every label instead of BNS's
-        // Settings > DPD address (e.g. a different pickup point than the
-        // billing/registered address) - the DPD API has no explicit "use the
-        // account default" flag, but per the note above, simply not sending
-        // collectionDetails at all reliably produces that fallback behaviour.
+        // dpd_whitelabel_collection_address (v0.109, replaces the v0.108
+        // "omit collection address" toggle) - that approach just made DPD
+        // fall back to the collection address configured on the DPD account
+        // itself, which in practice is still BNS's real registered address,
+        // so nothing actually changed on the label. DPD has no API-level
+        // "hide the sender" flag at all (confirmed against the full shipping
+        // schema - true white-labelling is an account-level label template
+        // DPD's own Customer Integration Team has to apply), so this instead
+        // sends dummy "-" values in the two address fields DPD actually
+        // enforces content on (street, town) and forces countryCode to GB,
+        // rather than the real Settings > DPD address. countryCode can't be
+        // dashed out - DPD rejects anything that doesn't match ^[A-Z][A-Z]$.
+        // organisation/locality/county/postcode are left out entirely (same
+        // as when unset), and contactDetails (name/phone) is still sent as
+        // configured, since DPD needs a real contact for collection queries.
         // Deliberately does NOT affect exporterDetails further down - DPD
-        // rejects any customs shipment outright without a complete exporter
-        // address ("Exporter address is mandatory"), so that block stays
-        // mandatory and always sent regardless of this setting.
-        boolean omitCollectionAddress = "true".equals(settingsService.get("dpd_omit_collection_address", "false"));
-        if (!omitCollectionAddress) {
-            ObjectNode collectionDetails = consignment.putObject("collectionDetails");
+        // rejects any customs shipment outright without a complete, real
+        // exporter address ("Exporter address is mandatory"), so that block
+        // stays real and always sent regardless of this setting.
+        boolean whitelabelCollectionAddress = "true".equals(settingsService.get("dpd_whitelabel_collection_address", "false"));
+        ObjectNode collectionDetails = consignment.putObject("collectionDetails");
+        if (whitelabelCollectionAddress) {
+            putSenderAddress(collectionDetails.putObject("address"), null, "-", null, "-", null, null, "GB");
+        } else {
             putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
                     senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
-            ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
-            collectionContact.put("contactName", senderContactName);
-            collectionContact.put("telephone", dpdPhone(senderContactPhone));
         }
+        ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
+        collectionContact.put("contactName", senderContactName);
+        collectionContact.put("telephone", dpdPhone(senderContactPhone));
 
         ObjectNode deliveryDetails = consignment.putObject("deliveryDetails");
         ObjectNode deliveryContact = deliveryDetails.putObject("contactDetails");
