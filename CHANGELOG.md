@@ -5,6 +5,17 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.47] - 2026-09-28 (v0.112)
+
+### Changed
+- **Settings > DPD - "Whitelabel" toggle now blanks the collection contact
+  phone number too.** The user confirmed by testing that the real phone
+  number was still going out on a whitelabelled label. DPD's telephone
+  field is validated against `^([+]\d{1,14}|\d{0,15})$`, which accepts zero
+  digits, so an empty string passes rather than being rejected. The contact
+  name is deliberately left as configured for now - only the phone number
+  was reported as leaking through.
+
 ## [0.23.46] - 2026-09-28 (v0.111)
 
 ### Changed

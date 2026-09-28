@@ -582,11 +582,11 @@ export default function Settings() {
           those left blank, and there's no genuine account-level whitelabel flag we can set via the API - only DPD's
           own Customer Integration Team can do that), plus the postcode set below - a real postcode is still needed
           for DPD to sort/route the parcel correctly even with the rest of the address dashed out. The contact
-          name/phone further down are still sent as normal, since DPD needs a real contact for collection queries.
-          This only affects the domestic collection/label address - it does <b>not</b> affect the customs exporter
-          details below on international shipments (e.g. Ireland) - those are always sent with the real address
-          regardless of this setting, since DPD rejects any customs shipment outright without a complete, genuine
-          exporter address.
+          phone number further down is left blank too. The contact name is still sent as normal - let us know if
+          that should be blanked out as well. This only affects the domestic collection/label address - it does
+          <b> not</b> affect the customs exporter details below on international shipments (e.g. Ireland) - those
+          are always sent with the real address regardless of this setting, since DPD rejects any customs shipment
+          outright without a complete, genuine exporter address.
         </p>
         {dpdWhitelabelCollectionAddress && (
           <div className="ml-6 max-w-xs">

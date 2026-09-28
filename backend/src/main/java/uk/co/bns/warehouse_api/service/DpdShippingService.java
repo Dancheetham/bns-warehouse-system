@@ -394,8 +394,13 @@ public class DpdShippingService {
         // the rest of the visible address is dashed out; it's a separate
         // Settings field, not tied to the real sender postcode above, since
         // whitelabelling wants a generic depot postcode rather than BNS's
-        // own). contactDetails (name/phone) is still sent as configured,
-        // since DPD needs a real contact for collection queries.
+        // own). Also blanks contactDetails.telephone (v0.112 - it was still
+        // going out with the real number, which the user confirmed by
+        // testing; DPD's telephone pattern ^([+]\d{1,14}|\d{0,15})$ accepts
+        // zero digits, so an empty string is valid rather than rejected).
+        // contactName is deliberately left as configured, not blanked - only
+        // the phone number was reported as still leaking through; ask if the
+        // name should be blanked too.
         // Deliberately does NOT affect exporterDetails further down - DPD
         // rejects any customs shipment outright without a complete, real
         // exporter address ("Exporter address is mandatory"), so that block
@@ -413,7 +418,7 @@ public class DpdShippingService {
         }
         ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
         collectionContact.put("contactName", senderContactName);
-        collectionContact.put("telephone", dpdPhone(senderContactPhone));
+        collectionContact.put("telephone", whitelabelCollectionAddress ? "" : dpdPhone(senderContactPhone));
 
         ObjectNode deliveryDetails = consignment.putObject("deliveryDetails");
         ObjectNode deliveryContact = deliveryDetails.putObject("contactDetails");

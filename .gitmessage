@@ -1,18 +1,17 @@
-Send a real postcode on whitelabelled DPD collection addresses (v0.111)
+Blank the collection contact phone number on whitelabelled DPD labels
+(v0.112)
 
-The v0.109 Whitelabel toggle sent "-" for street/town, GB for country, and
-left postcode out entirely along with organisation/locality/county. The
-user manually tested against the real DPD API by blanking every sender
-field except street="-", town="-", postcode="PR2 5BL" (the Preston depot)
-and country="GB", and confirmed that's what actually gets a properly
-sorted/routed label - DPD still needs a genuine postcode to route the
-parcel even with the rest of the visible address dashed out or blank.
+The v0.111 Whitelabel toggle dashed out street/town, forced country to GB,
+and sent a real postcode for routing - but still sent the real
+contactDetails.telephone on the collectionDetails block. The user confirmed
+by testing that the real number was still going out on the label.
 
-Added a new dpd_whitelabel_postcode setting, sent as the collection
-address's postcode whenever Whitelabel is on (organisation/locality/county
-are still left out entirely). Defaults to PR2 5BL but is editable in
-Settings > DPD, in a new field that only appears while the Whitelabel
-toggle is checked.
+DPD's telephone field is validated against ^([+]\d{1,14}|\d{0,15})$, which
+accepts zero digits, so sending an empty string for telephone is valid
+rather than being rejected outright. Now sends "" for telephone whenever
+Whitelabel is on. contactName is deliberately left as configured for now -
+only the phone number was reported as still showing through; can blank the
+name too if that's wanted next.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
