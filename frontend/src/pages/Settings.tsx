@@ -49,8 +49,6 @@ export default function Settings() {
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
-  const [dpdWhitelabelCollectionAddress, setDpdWhitelabelCollectionAddress] = useState(false);
-  const [dpdWhitelabelPostcode, setDpdWhitelabelPostcode] = useState("");
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -129,8 +127,6 @@ export default function Settings() {
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
-    setDpdWhitelabelCollectionAddress((settings["dpd_whitelabel_collection_address"] ?? "false") === "true");
-    setDpdWhitelabelPostcode(settings["dpd_whitelabel_postcode"] ?? "PR2 5BL");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -199,8 +195,6 @@ export default function Settings() {
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
         dpd_extended_liability: String(dpdExtendedLiability),
-        dpd_whitelabel_collection_address: String(dpdWhitelabelCollectionAddress),
-        dpd_whitelabel_postcode: dpdWhitelabelPostcode,
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -569,40 +563,6 @@ export default function Settings() {
           Used as both the collection address and the exporter details on any customs declaration (e.g. for
           shipments to Ireland).
         </p>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={dpdWhitelabelCollectionAddress}
-            onChange={(e) => setDpdWhitelabelCollectionAddress(e.target.checked)}
-          />
-          Whitelabel - don't show our real address on the collection/return part of the label
-        </label>
-        <p className="text-xs text-slate-400 -mt-2 ml-6">
-          When on, DPD is sent "-" for the address lines below instead of the real address (DPD doesn't accept
-          those left blank, and there's no genuine account-level whitelabel flag we can set via the API - only DPD's
-          own Customer Integration Team can do that), plus the postcode set below - a real postcode is still needed
-          for DPD to sort/route the parcel correctly even with the rest of the address dashed out. The contact
-          phone number further down is left blank too. The contact name is still sent as normal - let us know if
-          that should be blanked out as well. This only affects the domestic collection/label address - it does
-          <b> not</b> affect the customs exporter details below on international shipments (e.g. Ireland) - those
-          are always sent with the real address regardless of this setting, since DPD rejects any customs shipment
-          outright without a complete, genuine exporter address.
-        </p>
-        {dpdWhitelabelCollectionAddress && (
-          <div className="ml-6 max-w-xs">
-            <label className="block text-xs font-medium text-slate-500 mb-1">Whitelabel postcode</label>
-            <input
-              value={dpdWhitelabelPostcode}
-              onChange={(e) => setDpdWhitelabelPostcode(e.target.value)}
-              placeholder="e.g. PR2 5BL"
-              className="input"
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              A real postcode DPD can sort/route on - e.g. a depot postcode rather than our own registered address.
-              Everything else on the label besides this and the country code is dashed out or left blank.
-            </p>
-          </div>
-        )}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Organisation</label>

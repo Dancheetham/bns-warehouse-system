@@ -374,51 +374,19 @@ public class DpdShippingService {
         // applies to deliveryDetails (already correct below) and to the
         // customs invoice's exporter/importer blocks further down.
         //
-        // dpd_whitelabel_collection_address (v0.109, replaced the v0.108
-        // "omit collection address" toggle, then corrected in v0.111) - the
-        // v0.108 approach just made DPD fall back to the collection address
-        // configured on the DPD account itself, which in practice is still
-        // BNS's real registered address, so nothing actually changed on the
-        // label. DPD has no API-level "hide the sender" flag at all
-        // (confirmed against the full shipping schema - true white-labelling
-        // is an account-level label template DPD's own Customer Integration
-        // Team has to apply), so this instead sends dummy "-" values in the
-        // two address fields DPD actually enforces content on (street, town)
-        // and forces countryCode to GB, rather than the real Settings > DPD
-        // address. countryCode can't be dashed out - DPD rejects anything
-        // that doesn't match ^[A-Z][A-Z]$. organisation/locality/county are
-        // left out entirely, same as when genuinely unset - only postcode is
-        // still sent for real (dpd_whitelabel_postcode, confirmed working
-        // manually by the user against DPD's actual depot sorting: a real
-        // postcode is needed to route/sort the parcel correctly even when
-        // the rest of the visible address is dashed out; it's a separate
-        // Settings field, not tied to the real sender postcode above, since
-        // whitelabelling wants a generic depot postcode rather than BNS's
-        // own). Also blanks contactDetails.telephone (v0.112 - it was still
-        // going out with the real number, which the user confirmed by
-        // testing; DPD's telephone pattern ^([+]\d{1,14}|\d{0,15})$ accepts
-        // zero digits, so an empty string is valid rather than rejected).
-        // contactName is deliberately left as configured, not blanked - only
-        // the phone number was reported as still leaking through; ask if the
-        // name should be blanked too.
-        // Deliberately does NOT affect exporterDetails further down - DPD
-        // rejects any customs shipment outright without a complete, real
-        // exporter address ("Exporter address is mandatory"), so that block
-        // stays real and always sent regardless of this setting.
-        boolean whitelabelCollectionAddress = "true".equals(settingsService.get("dpd_whitelabel_collection_address", "false"));
-        // Defaults to the Preston depot postcode the user confirmed working
-        // by hand - overridable in Settings if that ever changes.
-        String whitelabelPostcode = settingsService.get("dpd_whitelabel_postcode", "PR2 5BL");
+        // A whitelabel toggle briefly lived here in v0.109-v0.112 (dashing
+        // out the address in-request, since DPD had no account-level
+        // whitelabel flag at the time) but was removed in v0.114 once DPD's
+        // own account-level whitelabel template started working correctly -
+        // the v0.113 stale-bearer-token fix turned out to have been masking
+        // it the whole time. The real sender address is always sent here now;
+        // whitelabelling, if wanted, is controlled entirely on DPD's side.
         ObjectNode collectionDetails = consignment.putObject("collectionDetails");
-        if (whitelabelCollectionAddress) {
-            putSenderAddress(collectionDetails.putObject("address"), null, "-", null, "-", null, whitelabelPostcode, "GB");
-        } else {
-            putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
-                    senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
-        }
+        putSenderAddress(collectionDetails.putObject("address"), senderOrganisation, senderStreet,
+                senderLocality, senderTown, senderCounty, senderPostcode, senderCountryCode);
         ObjectNode collectionContact = collectionDetails.putObject("contactDetails");
         collectionContact.put("contactName", senderContactName);
-        collectionContact.put("telephone", whitelabelCollectionAddress ? "" : dpdPhone(senderContactPhone));
+        collectionContact.put("telephone", dpdPhone(senderContactPhone));
 
         ObjectNode deliveryDetails = consignment.putObject("deliveryDetails");
         ObjectNode deliveryContact = deliveryDetails.putObject("contactDetails");

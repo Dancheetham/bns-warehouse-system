@@ -5,6 +5,26 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.49] - 2026-09-28 (v0.114)
+
+### Removed
+- **Settings > DPD - "Whitelabel" toggle and postcode field.** Now that
+  v0.113 fixed the stale-bearer-token bug, DPD's own account-level
+  whitelabel template works correctly as it should have all along - the
+  in-request dashed-address workaround from v0.109-v0.112 isn't needed any
+  more. The real sender address, postcode and contact phone are always sent
+  on the collection details again; whitelabelling is entirely controlled on
+  DPD's side now.
+
+### Changed
+- **Despatch panel - Service dropdown widened and reordered.** The dropdown
+  was fixed at a narrow width regardless of how much space was actually
+  available in the panel, cutting off longer service names/descriptions.
+  It now grows to fill the remaining space in its row instead. The list is
+  also reordered so Expak 1, then Expak 5, then Parcel services are grouped
+  first (BNS's three most-used), with everything else kept in whatever
+  order DPD returned it.
+
 ## [0.23.48] - 2026-09-28 (v0.113)
 
 ### Fixed

@@ -275,6 +275,20 @@ export default function OrderEdit() {
   });
   const dpdServices = dpdServiceResult?.services;
 
+  // Dan's three most-used services first, in this exact order, then
+  // everything else in whatever order DPD returned it - a stable sort
+  // (guaranteed by the spec since ES2019) so the "everything else" group
+  // never gets needlessly reshuffled between renders/updates.
+  const SERVICE_PRIORITY = ["expak1", "expak5", "parcel"];
+  const servicePriority = (networkDesc: string) => {
+    const normalized = networkDesc.toLowerCase().replace(/\s+/g, "");
+    const index = SERVICE_PRIORITY.findIndex((p) => normalized.startsWith(p));
+    return index === -1 ? SERVICE_PRIORITY.length : index;
+  };
+  const sortedDpdServices = dpdServices
+    ? [...dpdServices].sort((a, b) => servicePriority(a.networkDesc) - servicePriority(b.networkDesc))
+    : dpdServices;
+
   const acknowledgeMutation = useMutation({
     mutationFn: async () => (await api.post<AcknowledgementResult>(`/orders/${id}/acknowledge`)).data,
     onSuccess: (data) => {
@@ -784,7 +798,7 @@ export default function OrderEdit() {
                     ))}
                   </select>
                 </div>
-                <div>
+                <div className="flex-1 min-w-[20rem]">
                   <label className="block text-xs text-slate-400 mb-1">Service</label>
                   {dpdServicesError ? (
                     <input
@@ -792,10 +806,10 @@ export default function OrderEdit() {
                       onChange={(e) => setCourierMethod(e.target.value)}
                       placeholder="e.g. DPD Next Day"
                       title="Couldn't look up DPD services for this order - type the service manually."
-                      className="input w-56"
+                      className="input"
                     />
                   ) : (
-                    <div className="relative w-56">
+                    <div className="relative">
                       <select
                         value={dpdNetworkKey}
                         onChange={(e) => {
@@ -804,7 +818,7 @@ export default function OrderEdit() {
                           setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
                         }}
                         disabled={dpdServicesLoading || !dpdServices?.length}
-                        className="input w-56 pr-14"
+                        className="input pr-14"
                       >
                         <option value="">
                           {dpdServicesLoading
@@ -813,7 +827,7 @@ export default function OrderEdit() {
                             ? "Select a service..."
                             : "No services available"}
                         </option>
-                        {dpdServices?.map((s) => (
+                        {sortedDpdServices?.map((s) => (
                           <option key={s.networkKey} value={s.networkKey}>
                             {s.networkDesc} - {s.serviceDesc}
                           </option>

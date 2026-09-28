@@ -1,29 +1,23 @@
-Fix stale DPD bearer token surviving a sandbox->live switch (v0.113)
+Remove Whitelabel toggle, widen and reorder the Service dropdown (v0.114)
 
-DpdAuthService caches the DPD bearer/refresh token pair in memory for up to
-24h to avoid re-authenticating on every call. getAccessToken() only ever
-checked that cache against its own expiry, never against whether the
-environment/API key/secret it was issued under still matched what's
-currently configured in Settings > DPD. So switching Settings from sandbox
-to live (or just pasting in new live credentials) without restarting the
-container left a still-unexpired, sandbox-issued token being sent to the
-live API on every call - DPD rejects it, which surfaced as live services
-silently not appearing on the order screen despite the credentials and
-environment setting both actually being correct.
+Whitelabel toggle removal: the v0.113 fix for the stale-bearer-token bug
+turned out to have been the real blocker on DPD's own account-level
+whitelabel template the whole time - now that it's fixed, whitelabelling
+works correctly from DPD's side without any in-request workaround. Reverted
+DpdShippingService.buildRequestBody() back to always sending the real
+sender address, postcode and contact phone in collectionDetails, and
+removed the Whitelabel checkbox/postcode field and their settings sync from
+Settings.tsx (dpd_whitelabel_collection_address, dpd_whitelabel_postcode -
+left as harmless orphaned rows in Settings if already saved, just no longer
+read or written).
 
-Added a currentCredentialsFingerprint() (environment + api key + api
-secret, joined) recorded alongside the cached token at the moment it's
-actually issued (login()/refresh() via applyTokenResponse()).
-getAccessToken() now compares the current fingerprint against that before
-trusting the cache, and calls resetConnection() to force a fresh login the
-moment any of the three change, rather than silently reusing or refreshing
-the stale token. The v0.109 "Reset DPD connection" button in Settings still
-exists as a manual override for other cases (e.g. DPD support asking for a
-fresh token after an account-side change), but shouldn't be needed for a
-routine sandbox/live switch any more.
-
-Also tidied up a docblock that had drifted above the wrong method
-(resetConnection() instead of getAccessToken()) from the v0.109 change.
+Service dropdown: the "Service" select on the order despatch panel was
+fixed at w-56 (14rem) regardless of how much space was actually free in the
+panel, cutting off longer service names. Its wrapping div is now flex-1
+with a 20rem minimum, so it grows to fill whatever room the row has instead
+of a fixed width. Also reordered the options: Expak 1, then Expak 5, then
+Parcel services (BNS's three most-used) are grouped first via a stable sort
+on networkDesc, with everything else left in DPD's own returned order.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
