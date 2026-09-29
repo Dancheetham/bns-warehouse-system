@@ -5,6 +5,32 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.57] - 2026-09-29 (v0.122)
+
+### Fixed
+- **GDMS channel dropdown showing nothing despite real reseller channels
+  existing on the account.** `/sub/list` was now succeeding (no error, HTTP
+  200) after v0.121, but returned zero channels. Checked the doc's own
+  Success_Response example line by line rather than guessing field names
+  again, and found three mismatches between what the code expected and what
+  GDMS actually sends:
+  - The channel array is nested under `data.result`, not `data` directly,
+    `data.list`, `data.rows`, or `data.content` (none of which GDMS
+    actually uses here) - so the list-parsing fallback never found it.
+  - The channel's display name field is `enterpriseName`, not
+    `subEnterpriseName` - every channel that WAS found (once the array
+    lookup above is fixed) would have shown its own numeric ID as its name.
+  - The business-logic success/failure field GDMS sends is `retCode`, not
+    `code` - checked against the wrong field name meant a non-zero retCode
+    (an actual GDMS-reported failure with HTTP 200) would never have been
+    caught, silently falling through to "field missing, assume success".
+  - Also fixed while in this code: `/assign` can report individual MACs as
+    rejected (`data.result.errorMacList`) even when the batch call itself
+    succeeds (`retCode: 0`) - previously the whole batch was marked
+    synced (`gdmsSyncedAt` set) regardless, so a genuinely-rejected MAC
+    would never be retried. Now only MACs GDMS didn't list as failed are
+    marked synced.
+
 ## [0.23.56] - 2026-09-29 (v0.121)
 
 ### Fixed

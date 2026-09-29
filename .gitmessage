@@ -1,34 +1,48 @@
-Fix GDMS 404 - v0.120 "fixed" a URL segment that wasn't broken (v0.121)
+Fix GDMS channel dropdown parsing - wrong response field names (v0.122)
 
-v0.120 got login working, but the channel calls started 404ing instead
-of the earlier auth error - a sign the URL itself still didn't exist.
+v0.121 got /sub/list succeeding end-to-end (HTTP 200, no error), but
+the channel dropdown still showed nothing, even though the account
+genuinely has reseller channels. The response-parsing code had never
+actually been checked against the doc's own worked example response,
+only written from a plausible-sounding guess - the same mistake that
+caused the last two bugs, just in a different part of the code.
 
-Re-checking the doc more carefully: every sample request/example URL
-for these endpoints only ever shows the unresolved "{version}"
-placeholder, never a literal value. v0.120 filled it in from each
-endpoint's own apiDoc metadata field, "version": "1.0.0" - but that
-field is apiDoc's own internal doc-spec version tag (every entry in
-the whole file has one, unrelated to URLs), not the literal segment.
+Pulling the doc's success.examples field for /sub/list for the first
+time (previously only its parameter names had been checked) shows:
 
-The actual substitution rule is spelled out in plain English on the
-"Get Start" page, which v0.120 didn't re-check once it thought the
-sample-request fields had the answer: "{version} is version number:
-The value is 'v' + current version number, such as v1.0.0, v1.1.0."
-So the segment is "v1.0.0" - exactly what the very first
-implementation used, before v0.120 "corrected" it to "1.0.0" and
-broke it.
+  {
+    "data": {
+      "result": [{ "subEnterpriseId": 212, "enterpriseName": "xyye", ... }],
+      "total": 1, "pages": 1, "pageSize": 20, "pageNum": 1
+    },
+    "msg": "", "retCode": 0
+  }
 
-Reverted GdmsAuthService#baseUrl() back to "/oapi/v1.0.0". The other
-two v0.120 fixes - authBaseUrl() being unversioned for the token
-endpoints, and GdmsChannelService prefixing every path with
-"/channel" - were correct per the doc's sampleRequest fields and are
-unchanged.
+Three mismatches against what the code expected:
 
-gdms-api-findings.md (project doc) updated with this correction and a
-lesson-learned note: when a doc's examples only show an unresolved
-placeholder, resolve it from the prose page that documents the
-substitution rule, not from a same-named metadata field that happens
-to have a plausible value.
+1. The channel array is at data.result, not data directly, and not
+   data.list/data.rows/data.content (the fallback keys checked) - so
+   it was never found, and every lookup silently returned zero
+   channels despite a fully successful call.
+2. The channel name field is "enterpriseName", not
+   "subEnterpriseName" - any channel that WAS found would have shown
+   its own numeric ID as its name.
+3. The success/failure field is "retCode", not "code" - isSuccess()
+   checked the wrong name, so it always fell through to its "field
+   missing, assume success" default. Harmless so far by coincidence,
+   but meant a real GDMS business-logic failure (HTTP 200, retCode
+   non-zero) would never have been caught.
+
+Also checked /assign's own example while in this code and found a
+related issue: its response can report individual MACs as rejected
+(data.result.errorMacList) even when the batch call itself succeeds
+(retCode: 0) - previously ignored entirely, so a rejected MAC would
+still get marked synced and never retried. assignMacsToChannel() now
+excludes those MACs from what it reports as accepted.
+
+gdms-api-findings.md (project doc) updated with the confirmed response
+shape and a repeated lesson: check a doc entry's own example response,
+not just its parameter names, before writing the parsing code.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
