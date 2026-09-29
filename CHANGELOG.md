@@ -5,6 +5,28 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.54] - 2026-09-29 (v0.119)
+
+### Fixed
+- **GDMS login always failing with "signature not exists."** Two mistakes
+  in the request signing, both found by testing against BNS's real GDMS
+  account:
+  1. The signature was sent as a query parameter named `sign` - GDMS's own
+     docs name it `signature`, so it never found the parameter it was
+     looking for, on every GDMS call.
+  2. The "Getting Token"/"Refreshing Token" calls (`/oauth/token`) also
+     need their own `timestamp`+`signature`, which the per-endpoint
+     parameter table doesn't show - a separate sentence on the docs' Common
+     Parameters page says the opposite of what it first reads as: those two
+     endpoints are exactly the ones that need it, signing their own request
+     params (username/password/grant_type/client_id/client_secret, or
+     refresh_token/grant_type/client_id/client_secret) rather than the
+     usual fixed four.
+
+  GDMS logins and the channel lookup/assignment calls should now work
+  end to end - see `gdms-api-findings.md` for the full corrected signing
+  algorithm.
+
 ## [0.23.53] - 2026-09-29 (v0.118)
 
 ### Fixed

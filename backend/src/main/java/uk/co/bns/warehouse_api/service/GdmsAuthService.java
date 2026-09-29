@@ -120,12 +120,30 @@ public class GdmsAuthService {
             throw new ValidationException("GDMS username/password is not configured - set it under Settings > GDMS");
         }
         String encodedPassword = GdmsSignatureUtil.encodePasswordForToken(password);
+        String clientId = clientId();
+        String clientSecret = clientSecret();
+        long timestamp = Instant.now().toEpochMilli();
+
+        // Unlike every other endpoint, Getting Token signs its OWN request
+        // params (there's no access_token yet to sign instead) - see
+        // GdmsSignatureUtil.calculateSignature(SortedMap, String) for the
+        // full reasoning.
+        java.util.SortedMap<String, String> signedParams = new java.util.TreeMap<>();
+        signedParams.put("username", username);
+        signedParams.put("password", encodedPassword);
+        signedParams.put("grant_type", "password");
+        signedParams.put("client_id", clientId);
+        signedParams.put("client_secret", clientSecret);
+        signedParams.put("timestamp", String.valueOf(timestamp));
+        String signature = GdmsSignatureUtil.calculateSignature(signedParams, null);
 
         String query = "grant_type=password"
                 + "&username=" + encode(username)
                 + "&password=" + encode(encodedPassword)
-                + "&client_id=" + encode(clientId())
-                + "&client_secret=" + encode(clientSecret());
+                + "&client_id=" + encode(clientId)
+                + "&client_secret=" + encode(clientSecret)
+                + "&timestamp=" + timestamp
+                + "&signature=" + signature;
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl() + "/oauth/token?" + query))
                 .header("Accept", "application/json")
@@ -137,10 +155,24 @@ public class GdmsAuthService {
     }
 
     private void refresh() {
+        String clientId = clientId();
+        String clientSecret = clientSecret();
+        long timestamp = Instant.now().toEpochMilli();
+
+        java.util.SortedMap<String, String> signedParams = new java.util.TreeMap<>();
+        signedParams.put("refresh_token", cachedRefreshToken);
+        signedParams.put("grant_type", "refresh_token");
+        signedParams.put("client_id", clientId);
+        signedParams.put("client_secret", clientSecret);
+        signedParams.put("timestamp", String.valueOf(timestamp));
+        String signature = GdmsSignatureUtil.calculateSignature(signedParams, null);
+
         String query = "grant_type=refresh_token"
                 + "&refresh_token=" + encode(cachedRefreshToken)
-                + "&client_id=" + encode(clientId())
-                + "&client_secret=" + encode(clientSecret());
+                + "&client_id=" + encode(clientId)
+                + "&client_secret=" + encode(clientSecret)
+                + "&timestamp=" + timestamp
+                + "&signature=" + signature;
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl() + "/oauth/token?" + query))
                 .header("Accept", "application/json")

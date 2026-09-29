@@ -43,7 +43,11 @@ public final class GdmsSignatureUtil {
     private GdmsSignatureUtil() {}
 
     /**
-     * Builds the signature for a JSON-body Channel Management call.
+     * Builds the signature for an already-authenticated JSON-body Channel
+     * Management call, whose signed params are always exactly the four
+     * common ones. For a request with a different param set (the token
+     * endpoints - see {@link #calculateSignature(SortedMap, String)}), use
+     * the more general overload instead.
      *
      * @param accessToken the current access_token
      * @param timestampMillis milliseconds since epoch, generated fresh per request
@@ -58,7 +62,27 @@ public final class GdmsSignatureUtil {
         params.put("timestamp", String.valueOf(timestampMillis));
         params.put("client_id", clientId);
         params.put("client_secret", clientSecret);
+        return calculateSignature(params, jsonBody);
+    }
 
+    /**
+     * The general form of the algorithm: sign whatever params are actually
+     * given (already sorted ascending by the caller via the SortedMap),
+     * joined as key=value pairs separated by "&", wrapped as
+     * "&" + paramsJoined + "&" plus sha256(body) + "&" when there's a body.
+     *
+     * Needed because the "Getting Token"/"Refreshing Token" endpoints sign a
+     * different param set than every other call: per the doc's Common
+     * Parameters table, access_token/timestamp/signature are "not required
+     * to be carried except for Getting Token interface and Refreshing Token
+     * interface" - i.e. those two endpoints are the ones that DO need
+     * timestamp+signature (there's no access_token yet to include), signed
+     * together with their own request params (username/password/grant_type/
+     * client_id/client_secret for Getting Token; refresh_token/grant_type/
+     * client_id/client_secret for Refreshing Token) rather than the fixed
+     * four-param set every other endpoint uses.
+     */
+    public static String calculateSignature(SortedMap<String, String> params, String jsonBody) {
         StringBuilder paramsJoined = new StringBuilder();
         for (Map.Entry<String, String> entry : params.entrySet()) {
             if (paramsJoined.length() > 0) paramsJoined.append("&");

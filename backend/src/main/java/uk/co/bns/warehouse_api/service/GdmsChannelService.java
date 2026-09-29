@@ -127,9 +127,13 @@ public class GdmsChannelService {
         String signature = GdmsSignatureUtil.calculateSignature(accessToken, timestamp,
                 gdmsAuthService.clientId(), gdmsAuthService.clientSecret(), jsonBody);
 
+        // The doc's Common Parameters table names this field "signature",
+        // not "sign" - sending it as "sign" is exactly what produced GDMS's
+        // "signature not exists" error (it never found a parameter by the
+        // name it was actually looking for).
         String query = "access_token=" + encode(accessToken)
                 + "&timestamp=" + timestamp
-                + "&sign=" + signature;
+                + "&signature=" + signature;
 
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(gdmsAuthService.baseUrl() + path + "?" + query))
                 .header("Accept", "application/json")
