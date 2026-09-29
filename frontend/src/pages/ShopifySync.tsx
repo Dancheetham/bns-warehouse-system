@@ -69,10 +69,14 @@ export default function ShopifySync() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shopify-status"] }),
   });
 
-  // The backend's own port (8080), not the nginx-proxied 8081 this page is
-  // served from - keeps the OAuth redirect_uri unambiguous. See
-  // ShopifyOAuthController for why.
-  const connectUrl = `${window.location.protocol}//${window.location.hostname}:8080/api/shopify/oauth/start`;
+  // Fixed in v0.115: this used to hit the backend's own port directly
+  // (hardcoded :8080), bypassing the nginx proxy this page is served
+  // through - broke on anything other than a bare LAN IP with both ports
+  // directly reachable (a custom domain behind a reverse proxy or tunnel
+  // typically only exposes this page's own origin). Now goes through the
+  // same origin as every other API call - see ShopifyOAuthController for
+  // how it resolves the correct external base URL from there.
+  const connectUrl = `${window.location.origin}/api/shopify/oauth/start`;
 
   if (isLoading) return <p className="text-slate-500">Loading...</p>;
 

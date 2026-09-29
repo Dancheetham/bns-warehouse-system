@@ -465,9 +465,11 @@ export default function Settings() {
             className="input"
           />
           <p className="text-xs text-slate-400 mt-1">
-            Used to build the link in password-reset emails. If this system is reachable through a reverse proxy
-            or tunnel (like Cloudflare Tunnel), set this to the address people actually use in their browser -
-            otherwise reset links can come out as plain http:// even when the real site is https://.
+            Used to build the link in password-reset emails, and (v0.115+) the redirect sent to Shopify when
+            connecting Shopify Sync below. If this system is reachable through a reverse proxy or tunnel (like
+            Cloudflare Tunnel), set this to the address people actually use in their browser - otherwise these
+            links/redirects can come out as plain http:// even when the real site is https://, or point at a port
+            that isn't actually reachable from outside.
           </p>
         </div>
       </SettingsSection>

@@ -1,23 +1,40 @@
-Remove Whitelabel toggle, widen and reorder the Service dropdown (v0.114)
+Fix "Connect to Shopify" unreachable behind a reverse proxy/tunnel (v0.115)
 
-Whitelabel toggle removal: the v0.113 fix for the stale-bearer-token bug
-turned out to have been the real blocker on DPD's own account-level
-whitelabel template the whole time - now that it's fixed, whitelabelling
-works correctly from DPD's side without any in-request workaround. Reverted
-DpdShippingService.buildRequestBody() back to always sending the real
-sender address, postcode and contact phone in collectionDetails, and
-removed the Whitelabel checkbox/postcode field and their settings sync from
-Settings.tsx (dpd_whitelabel_collection_address, dpd_whitelabel_postcode -
-left as harmless orphaned rows in Settings if already saved, just no longer
-read or written).
+ShopifySync.tsx built the OAuth start link by hitting the backend's own
+port directly with a hardcoded ":8080" (window.location.hostname + ":8080"),
+bypassing nginx's /api/ proxy that every other request in the app goes
+through. That only ever worked on a bare LAN where both the frontend and
+API ports are separately, directly reachable from the browser - behind a
+reverse proxy, Cloudflare Tunnel, or a custom domain (e.g. a home server
+exposed as wms.dan-cheetham.uk), the raw API port typically isn't exposed
+externally at all, so the browser failed with "this site can't be reached"
+before the app ever got a chance to respond, even though credentials and
+everything else were configured correctly.
 
-Service dropdown: the "Service" select on the order despatch panel was
-fixed at w-56 (14rem) regardless of how much space was actually free in the
-panel, cutting off longer service names. Its wrapping div is now flex-1
-with a 20rem minimum, so it grows to fill whatever room the row has instead
-of a fixed width. Also reordered the options: Expak 1, then Expak 5, then
-Parcel services (BNS's three most-used) are grouped first via a stable sort
-on networkDesc, with everything else left in DPD's own returned order.
+ShopifyOAuthController had a second, separate bug in the same area:
+frontendUrl() (used for the post-callback landing redirect) hardcoded
+":8081" for the frontend's port, which silently broke the moment v0.107
+made that port configurable via FRONTEND_PORT.
+
+Fix: both /start and /callback now go through the same origin as every
+other API call (relative /api/shopify/oauth/start via nginx, instead of a
+separate hardcoded port), and resolve the correct EXTERNAL base URL the
+same way PasswordResetService already does for password-reset emails -
+Settings > Email > "Public URL" (app_public_url) wins when set, since
+request.getScheme() reports "http" even for HTTPS traffic arriving through
+a reverse proxy (nginx.conf doesn't forward X-Forwarded-Proto), falling
+back to guessing from the request only when Public URL is left blank
+(correct for a bare LAN deployment, where the guess matches reality).
+frontendUrl() as a separate method is gone entirely - callback and start
+now share one resolvedBaseUrl() helper, since they're the same origin.
+
+Settings.tsx's Public URL field description updated to mention it now also
+drives the Shopify OAuth redirect, not just password-reset emails.
+
+Practical note for deployments behind a custom domain/tunnel: Public URL
+must be set for this to work, and if it's new or changes, the matching
+redirect URL registered in the Shopify app's own settings needs updating to
+match exactly (Shopify requires an exact match).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

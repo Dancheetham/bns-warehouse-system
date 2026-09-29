@@ -5,6 +5,31 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.50] - 2026-09-29 (v0.115)
+
+### Fixed
+- **"Connect to Shopify" unreachable on anything other than a bare LAN IP.**
+  The button hit the backend's own port directly with a hardcoded `:8080`,
+  bypassing the nginx proxy the rest of the app goes through - fine on a
+  plain LAN where both ports are directly reachable, but behind a reverse
+  proxy, Cloudflare Tunnel, or a custom domain (like a home server exposed
+  as a hostname) the raw API port typically isn't reachable from outside at
+  all, giving a browser-level "this site can't be reached" before the app
+  ever got a chance to respond. The backend's OAuth callback also had a
+  separate, silent bug: `frontendUrl()` hardcoded `:8081` for the post-login
+  redirect, which broke again the moment v0.107 made the frontend port
+  configurable.
+
+  Both `/start` and `/callback` now go through the same origin as every
+  other API call (nginx's `/api/` proxy), and resolve the correct external
+  base URL the same way password-reset emails already do: Settings > Email
+  > "Public URL" (`app_public_url`) wins when set, falling back to guessing
+  from the request only for a bare LAN deployment where the guess is
+  accurate anyway. If this system is reached through a custom domain or
+  tunnel, **make sure Public URL is set** in Settings - and if it changes
+  as a result, the matching redirect URL registered in the Shopify app's
+  own settings (Partner Dashboard / app setup) needs updating to match.
+
 ## [0.23.49] - 2026-09-28 (v0.114)
 
 ### Removed
