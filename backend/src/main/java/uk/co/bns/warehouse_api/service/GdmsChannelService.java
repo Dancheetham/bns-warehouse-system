@@ -135,7 +135,11 @@ public class GdmsChannelService {
                 + "&timestamp=" + timestamp
                 + "&signature=" + signature;
 
-        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(gdmsAuthService.baseUrl() + path + "?" + query))
+        // Every Channel Management endpoint sits under a "/channel" prefix
+        // per the doc's own sample request URLs (e.g. ".../channel/sub/list",
+        // ".../channel/assign") - originally missing entirely, so every call
+        // here was hitting a URL that didn't exist on GDMS's side at all.
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(gdmsAuthService.baseUrl() + "/channel" + path + "?" + query))
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json");
         builder = jsonBody != null

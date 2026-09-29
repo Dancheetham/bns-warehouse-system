@@ -48,16 +48,40 @@ public class GdmsAuthService {
     private volatile Instant accessTokenExpiresAt = Instant.EPOCH;
     private volatile String cachedForFingerprint;
 
+    // Domain depends on which region the BNS GDMS account is registered in
+    // (Settings > GDMS > Region), US (www.gdms.cloud) or EU (eu.gdms.cloud).
+    // Defaults to EU since BNS is a UK distributor.
+    private String domain() {
+        String region = settingsService.get("gdms_region", "eu").toLowerCase();
+        return "us".equals(region) ? "www.gdms.cloud" : "eu.gdms.cloud";
+    }
+
     /**
-     * https://{gdms_domain}/oapi/{version} - domain depends on which region
-     * the BNS GDMS account is registered in (Settings > GDMS > Region), US
-     * (www.gdms.cloud) or EU (eu.gdms.cloud). Defaults to EU since BNS is a
-     * UK distributor.
+     * https://{gdms_domain}/oapi/{version} - for every Channel Management
+     * (and other business) call. {version} is the literal string "1.0.0",
+     * per the doc's own sample request URLs (e.g.
+     * ".../oapi/{version}/channel/sub/list") - NOT "v1.0.0", which is what
+     * this originally used and, combined with the missing "/channel" prefix
+     * GdmsChannelService has separately been fixed to add, meant every
+     * Channel Management call was hitting a URL that simply didn't exist.
      */
     public String baseUrl() {
-        String region = settingsService.get("gdms_region", "eu").toLowerCase();
-        String domain = "us".equals(region) ? "www.gdms.cloud" : "eu.gdms.cloud";
-        return "https://" + domain + "/oapi/v1.0.0";
+        return "https://" + domain() + "/oapi/1.0.0";
+    }
+
+    /**
+     * https://{gdms_domain}/oapi - the Getting Token/Refreshing Token calls
+     * are NOT under the versioned path (the doc's own sample request URL for
+     * /oauth/token is ".../oapi/oauth/token", no {version} segment at all) -
+     * this was also being sent under the versioned baseUrl() above, which
+     * (compounding the wrong version string) meant login never even reached
+     * a real endpoint, and is the most likely cause of the generic Spring
+     * Security "Full authentication is required to access this resource"
+     * 401 - that's the default response for a request that doesn't match
+     * any mapped, unauthenticated endpoint.
+     */
+    private String authBaseUrl() {
+        return "https://" + domain() + "/oapi";
     }
 
     public String clientId() {
@@ -145,7 +169,7 @@ public class GdmsAuthService {
                 + "&timestamp=" + timestamp
                 + "&signature=" + signature;
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl() + "/oauth/token?" + query))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(authBaseUrl() + "/oauth/token?" + query))
                 .header("Accept", "application/json")
                 .GET()
                 .build();
@@ -174,7 +198,7 @@ public class GdmsAuthService {
                 + "&timestamp=" + timestamp
                 + "&signature=" + signature;
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl() + "/oauth/token?" + query))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(authBaseUrl() + "/oauth/token?" + query))
                 .header("Accept", "application/json")
                 .GET()
                 .build();

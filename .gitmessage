@@ -1,36 +1,38 @@
-Fix GDMS request signing - wrong param name, missing token-call signature (v0.119)
+Fix GDMS calls hitting URLs that don't exist (v0.120)
 
-Live testing against BNS's real GDMS account surfaced two separate
-mistakes in the signing implementation, both producing the same
-"signature not exists" error:
+v0.119 fixed the request-signing bugs, but every GDMS call still
+failed - login with the generic Spring Security "Full authentication
+is required to access this resource" 401, which is what you get when
+a request doesn't match any real mapped endpoint at all. That pointed
+at the URLs themselves rather than another signing problem.
 
-1. The signature was sent as a query parameter named "sign" - GDMS's
-   own Common Parameters doc names the field "signature". Every GDMS
-   call (not just login) was sending it under the wrong name, so GDMS
-   never found the parameter it required.
+Checking the doc's actual sample request URLs (rather than just its
+short-form endpoint names in the parameter tables) turned up three
+mistakes, all in how the request path is built:
 
-2. "Getting Token"/"Refreshing Token" (/oauth/token) also need their
-   own timestamp+signature, which their per-endpoint parameter table
-   doesn't show. A separate sentence on the Common Parameters page -
-   "not required to be carried except for Getting Token interface and
-   Refreshing Token interface" - is a double negative meaning those
-   two endpoints are exactly the ones that DO need it, signing their
-   own request params (username/password/grant_type/client_id/
-   client_secret for Getting Token; refresh_token/grant_type/
-   client_id/client_secret for Refreshing Token) plus timestamp,
-   rather than the usual fixed four-param set every other endpoint
-   uses.
+1. The API version path segment is the literal string "1.0.0", not
+   "v1.0.0" - baseUrl() had an extra "v" that doesn't belong.
 
-GdmsSignatureUtil gains a general calculateSignature(SortedMap,
-jsonBody) overload that signs whatever param set is handed to it; the
-original four-common-param version is now a thin wrapper around it.
-GdmsAuthService#login()/refresh() build and sign their own param sets
-and add timestamp/signature to the /oauth/token query string.
-GdmsChannelService#post() corrected to send "signature" instead of
-"sign".
+2. Every Channel Management endpoint sits under a "/channel" prefix
+   (the real path is "/channel/sub/list", not just "/sub/list") that
+   GdmsChannelService wasn't adding at all.
 
-gdms-api-findings.md (project doc) updated with both fixes and the
-corrected algorithm.
+3. "/oauth/token" (Getting Token and Refreshing Token) isn't under
+   the versioned "/oapi/1.0.0" path at all - it's a bare "/oapi"
+   endpoint. GdmsAuthService#login()/refresh() were building the
+   token request under the same versioned baseUrl() as every other
+   call, so login was never reaching a real endpoint - the most
+   likely explanation for the "Full authentication is required"
+   response, since that's Spring Security's default response for an
+   unmapped route.
+
+GdmsAuthService gains a private authBaseUrl() ("https://{domain}/oapi",
+no version segment) used only by login()/refresh(); baseUrl() itself
+just drops the stray "v". GdmsChannelService#post() now prefixes every
+request path with "/channel".
+
+gdms-api-findings.md (project doc) to be updated with this third fix
+once it's confirmed working against BNS's real GDMS account.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

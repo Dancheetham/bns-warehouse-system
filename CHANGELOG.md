@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.55] - 2026-09-29 (v0.120)
+
+### Fixed
+- **GDMS login/API calls hitting URLs that don't exist.** Fixing the
+  signature bugs in v0.119 got further but every call still failed with
+  GDMS's generic "Full authentication is required to access this resource"
+  - actually a sign that the request wasn't hitting a real endpoint at all.
+  Checking the doc's actual sample request URLs (rather than just its
+  short-form endpoint names) turned up two mistakes:
+  - The API version segment is `1.0.0`, not `v1.0.0`.
+  - Every Channel Management endpoint sits under a `/channel/` path prefix
+    (e.g. the real path is `/channel/sub/list`, not just `/sub/list`) that
+    was missing entirely.
+  - `/oauth/token` (Getting/Refreshing Token) turned out to NOT be under
+    the versioned path at all, unlike every other endpoint.
+
+  All three fixed - GDMS login and the channel dropdown/end-of-day
+  assignment should now actually reach GDMS's real API.
+
 ## [0.23.54] - 2026-09-29 (v0.119)
 
 ### Fixed
