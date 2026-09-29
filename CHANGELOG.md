@@ -5,6 +5,21 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.53] - 2026-09-29 (v0.118)
+
+### Fixed
+- **GDMS login failures showing a useless "did not contain an access
+  token" error with no detail.** GDMS can return HTTP 200 with an error
+  body (bad credentials, wrong client ID/secret, wrong region, etc.)
+  rather than a proper non-2xx status - the code only checked the HTTP
+  status before looking for `access_token` in the response, so any
+  credentials problem swallowed GDMS's real reason and surfaced this
+  generic message instead, both in the GDMS channel dropdown's "live
+  lookup failed" text and in the logs. Now surfaces GDMS's own error
+  message when there is one, or the raw response body if there isn't -
+  visible in Companies.tsx's cached-list warning and in `docker logs`
+  without having to guess.
+
 ## [0.23.52] - 2026-09-29 (v0.117)
 
 ### Added

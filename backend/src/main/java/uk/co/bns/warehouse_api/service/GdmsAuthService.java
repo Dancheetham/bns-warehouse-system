@@ -161,7 +161,15 @@ public class GdmsAuthService {
         String refreshToken = data.path("refresh_token").asText(null);
         long expiresIn = data.path("expires_in").asLong(3600);
         if (accessToken == null) {
-            throw new RuntimeException("GDMS auth response did not contain an access token");
+            // GDMS can return HTTP 200 with an error body (bad credentials,
+            // wrong client_id/secret, wrong region, etc.) rather than a
+            // non-2xx status - send() only catches the latter, so this is
+            // the only place that ever sees the former. Without this, every
+            // credentials problem surfaced as the unhelpful "did not contain
+            // an access token" with no indication of what was actually
+            // wrong - surface GDMS's own message (or the raw body, if it
+            // didn't send one) instead.
+            throw new ValidationException("GDMS didn't return an access token - " + describeAuthError(body.toString(), 200));
         }
         cachedAccessToken = accessToken;
         if (refreshToken != null) {
@@ -194,13 +202,26 @@ public class GdmsAuthService {
             if (message == null || message.isBlank()) {
                 message = parsed.path("error_description").asText(null);
             }
+            if (message == null || message.isBlank()) {
+                message = parsed.path("error").asText(null);
+            }
             if (message != null && !message.isBlank()) {
                 return "GDMS said: " + message + " - check the client ID/secret and username/password under Settings > GDMS";
             }
         } catch (Exception ignored) {
             // fall through to the generic message below
         }
-        return "GDMS returned HTTP " + statusCode + " - check the client ID/secret and username/password under Settings > GDMS";
+        // None of the usual message fields were present - better to show the
+        // raw response than nothing, so this doesn't have to be chased
+        // through the container logs every time.
+        return "GDMS returned HTTP " + statusCode + " with no recognisable error message - raw response: "
+                + truncate(responseBody, 500)
+                + " - check the client ID/secret and username/password under Settings > GDMS";
+    }
+
+    private static String truncate(String value, int max) {
+        if (value == null) return "";
+        return value.length() > max ? value.substring(0, max) + "…" : value;
     }
 
     private static String encode(String value) {

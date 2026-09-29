@@ -1,47 +1,23 @@
-Add GDMS end-of-day channel assignment (v0.117)
+Fix unhelpful GDMS auth error message (v0.118)
 
-Replaces the manual end-of-day process of working out what shipped to
-GDMS-enabled customers and assigning those devices' MACs to the right
-GDMS channel by hand.
+GDMS can return HTTP 200 with an error body (bad credentials, wrong
+client_id/secret, wrong region, etc.) rather than a proper non-2xx
+status. GdmsAuthService#send() only treated a non-2xx status as a
+failure, so a 200-with-error-body response sailed through as a
+"successful" call, and applyTokenResponse() then just found no
+access_token and threw a bare "GDMS auth response did not contain an
+access token" with no indication of what GDMS actually said - this is
+exactly what showed up as the unhelpful "Live GDMS channel lookup
+failed" message in Companies.tsx and in the container logs.
 
-Backend:
-- V51 migration: Company.gdmsChannelId/gdmsChannelName (which GDMS
-  channel a company's despatched devices go to) and
-  StockItem.gdmsSyncedAt (idempotency - a device is only ever assigned
-  to GDMS once).
-- GdmsSignatureUtil: GDMS's per-request HMAC-style signature algorithm
-  (materially different from DPD's plain bearer token - see
-  gdms-api-findings.md for the full write-up).
-- GdmsAuthService: OAuth password-grant token caching, mirroring
-  DpdAuthService's credentials-fingerprint pattern.
-- GdmsChannelService: live /sub/list channel lookup with a
-  Settings-cached fallback (same shape as DpdShippingService's Service
-  dropdown), and assignMacsToChannel() batching MACs in groups of 100
-  - a prior manual process reportedly hit a 500-unit limit, so this
-  stays well under that and keeps one failing batch from losing an
-  entire day's despatch.
-- GdmsEndOfDayService: reads "despatched today" from StockMovement
-  (type DESPATCH, one row per item with its own accurate createdAt)
-  rather than Order.despatchedAt, which is set once and never updated
-  on a re-opened/multi-shipment order. Groups despatched,
-  not-yet-synced items by company, skips anything not GDMS-enabled or
-  without a channel set, and assigns each company's devices via
-  GdmsChannelService.
-- Three triggers: a 16:30 scheduled job, a global "run now" button
-  (Settings > GDMS), and a per-order button (Sales Activity) scoped to
-  just that order's despatched-but-unsynced items.
-
-Frontend:
-- Settings > GDMS: credentials (region, client ID/secret,
-  username/password), Reset GDMS connection, and Run GDMS end-of-day
-  now with a result summary.
-- Companies: GDMS channel dropdown (live/cached, mirrors the DPD
-  Service dropdown UX), shown once GDMS is ticked for a company.
-- Sales Activity/OrderEdit: "Assign despatched devices to GDMS"
-  button, shown only for a GDMS-enabled customer with a channel set.
-
-gdms-api-findings.md updated with the final implementation decisions
-(base URL, batch size, idempotency approach).
+applyTokenResponse() now reuses describeAuthError() (previously only
+used by send()'s non-2xx path) to pull GDMS's own msg/
+error_description/error field out of the response body when
+access_token is missing, and describeAuthError() itself now falls back
+to including the raw response body (truncated to 500 chars) rather
+than a bare "GDMS returned HTTP 200" when none of those fields are
+present - so whatever GDMS is actually saying is visible in the UI and
+logs without having to add debug logging and redeploy again.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
