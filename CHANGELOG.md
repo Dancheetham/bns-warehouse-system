@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.56] - 2026-09-29 (v0.121)
+
+### Fixed
+- **GDMS Channel Management calls still 404ing after v0.120.** Login started
+  working in v0.120, but `/sub/list` came back `HTTP 404` - the doc's sample
+  request URLs never show a resolved `{version}` value, only the literal
+  placeholder, and v0.120 misread each endpoint's apiDoc-internal
+  `"version": "1.0.0"` metadata field (apiDoc's own doc-spec version tag) as
+  that literal segment, dropping the `v` that was there before. The "Get
+  Start" page spells out the actual substitution rule in plain English:
+  `{version}` is `"v" + the API version number`, e.g. `v1.0.0` - so the
+  segment was right all along, before v0.120 changed it. Reverted `baseUrl()`
+  back to `/oapi/v1.0.0`; the two other v0.120 fixes (`/oauth/token` being
+  unversioned, and the `/channel` path prefix) were correct and stay as they
+  were.
+
 ## [0.23.55] - 2026-09-29 (v0.120)
 
 ### Fixed

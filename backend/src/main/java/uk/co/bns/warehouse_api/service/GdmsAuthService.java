@@ -58,15 +58,20 @@ public class GdmsAuthService {
 
     /**
      * https://{gdms_domain}/oapi/{version} - for every Channel Management
-     * (and other business) call. {version} is the literal string "1.0.0",
-     * per the doc's own sample request URLs (e.g.
-     * ".../oapi/{version}/channel/sub/list") - NOT "v1.0.0", which is what
-     * this originally used and, combined with the missing "/channel" prefix
-     * GdmsChannelService has separately been fixed to add, meant every
-     * Channel Management call was hitting a URL that simply didn't exist.
+     * (and other business) call. {version} is "v" + the API version number,
+     * i.e. the literal string "v1.0.0" - the doc's own sample request URLs
+     * only ever show the unresolved "{version}" placeholder, but the "Get
+     * Start" page spells out the substitution rule explicitly: "{version} is
+     * version number: The value is 'v' + current version number, such as
+     * v1.0.0, v1.1.0". (A v0.120 change briefly dropped the "v" here, having
+     * misread each endpoint's apiDoc-internal "version": "1.0.0" metadata
+     * field as the literal URL segment - that field is apiDoc's own doc-spec
+     * versioning tag, unrelated to the URL. Reverted in v0.121 once the "v"
+     * turned out to have been correct all along - dropping it is what
+     * produced /sub/list's 404.)
      */
     public String baseUrl() {
-        return "https://" + domain() + "/oapi/1.0.0";
+        return "https://" + domain() + "/oapi/v1.0.0";
     }
 
     /**

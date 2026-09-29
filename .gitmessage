@@ -1,38 +1,34 @@
-Fix GDMS calls hitting URLs that don't exist (v0.120)
+Fix GDMS 404 - v0.120 "fixed" a URL segment that wasn't broken (v0.121)
 
-v0.119 fixed the request-signing bugs, but every GDMS call still
-failed - login with the generic Spring Security "Full authentication
-is required to access this resource" 401, which is what you get when
-a request doesn't match any real mapped endpoint at all. That pointed
-at the URLs themselves rather than another signing problem.
+v0.120 got login working, but the channel calls started 404ing instead
+of the earlier auth error - a sign the URL itself still didn't exist.
 
-Checking the doc's actual sample request URLs (rather than just its
-short-form endpoint names in the parameter tables) turned up three
-mistakes, all in how the request path is built:
+Re-checking the doc more carefully: every sample request/example URL
+for these endpoints only ever shows the unresolved "{version}"
+placeholder, never a literal value. v0.120 filled it in from each
+endpoint's own apiDoc metadata field, "version": "1.0.0" - but that
+field is apiDoc's own internal doc-spec version tag (every entry in
+the whole file has one, unrelated to URLs), not the literal segment.
 
-1. The API version path segment is the literal string "1.0.0", not
-   "v1.0.0" - baseUrl() had an extra "v" that doesn't belong.
+The actual substitution rule is spelled out in plain English on the
+"Get Start" page, which v0.120 didn't re-check once it thought the
+sample-request fields had the answer: "{version} is version number:
+The value is 'v' + current version number, such as v1.0.0, v1.1.0."
+So the segment is "v1.0.0" - exactly what the very first
+implementation used, before v0.120 "corrected" it to "1.0.0" and
+broke it.
 
-2. Every Channel Management endpoint sits under a "/channel" prefix
-   (the real path is "/channel/sub/list", not just "/sub/list") that
-   GdmsChannelService wasn't adding at all.
+Reverted GdmsAuthService#baseUrl() back to "/oapi/v1.0.0". The other
+two v0.120 fixes - authBaseUrl() being unversioned for the token
+endpoints, and GdmsChannelService prefixing every path with
+"/channel" - were correct per the doc's sampleRequest fields and are
+unchanged.
 
-3. "/oauth/token" (Getting Token and Refreshing Token) isn't under
-   the versioned "/oapi/1.0.0" path at all - it's a bare "/oapi"
-   endpoint. GdmsAuthService#login()/refresh() were building the
-   token request under the same versioned baseUrl() as every other
-   call, so login was never reaching a real endpoint - the most
-   likely explanation for the "Full authentication is required"
-   response, since that's Spring Security's default response for an
-   unmapped route.
-
-GdmsAuthService gains a private authBaseUrl() ("https://{domain}/oapi",
-no version segment) used only by login()/refresh(); baseUrl() itself
-just drops the stray "v". GdmsChannelService#post() now prefixes every
-request path with "/channel".
-
-gdms-api-findings.md (project doc) to be updated with this third fix
-once it's confirmed working against BNS's real GDMS account.
+gdms-api-findings.md (project doc) updated with this correction and a
+lesson-learned note: when a doc's examples only show an unresolved
+placeholder, resolve it from the prose page that documents the
+substitution rule, not from a same-named metadata field that happens
+to have a plausible value.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
