@@ -75,6 +75,14 @@ public class StockItem {
     @Column(name = "received_at")
     private LocalDateTime receivedAt;
 
+    // Set once this item's MAC has actually been pushed to GDMS via the
+    // end-of-day channel assignment (or a manual per-order re-run) - see
+    // GdmsEndOfDayService. Null means either it's never been despatched, or
+    // it has but hasn't been synced to GDMS yet (not GDMS-enabled at the
+    // time, no channel configured, or the run simply hasn't happened yet).
+    @Column(name = "gdms_synced_at")
+    private LocalDateTime gdmsSyncedAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

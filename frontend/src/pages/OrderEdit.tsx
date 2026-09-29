@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, InvoiceHistoryView, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
+import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, GdmsRunResult, InvoiceHistoryView, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
 import { dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
@@ -397,6 +397,18 @@ export default function OrderEdit() {
     // button "did nothing" when it had actually failed with a clear reason
     // (e.g. missing DPD credentials or a missing delivery address).
     onError: (err: Error) => setDpdError(err.message),
+  });
+
+  const [gdmsError, setGdmsError] = useState<string | null>(null);
+  const [gdmsResult, setGdmsResult] = useState<GdmsRunResult | null>(null);
+  const gdmsAssignMutation = useMutation({
+    mutationFn: async () => (await api.post<GdmsRunResult>(`/orders/${id}/gdms-assign`)).data,
+    onSuccess: (result) => {
+      setGdmsError(null);
+      setGdmsResult(result);
+      showToast(`${result.devicesAssigned} device(s) assigned to GDMS.`);
+    },
+    onError: (err: Error) => setGdmsError(err.message),
   });
 
   const viewDpdLabel = async () => {
@@ -1040,6 +1052,34 @@ export default function OrderEdit() {
                 )}
               </div>
               {dpdError && <p className="text-sm text-red-600 mt-2">{dpdError}</p>}
+            </div>
+          )}
+
+          {/* Only shown for a GDMS-enabled customer with a channel actually set
+              (Companies page) - otherwise there's nothing to assign devices to,
+              and the button would just fail every time it's clicked. */}
+          {!isNew && existingOrder && existingOrder.company?.gdms && existingOrder.company?.gdmsChannelId && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap gap-3 items-center">
+                <button
+                  onClick={() => gdmsAssignMutation.mutate()}
+                  disabled={gdmsAssignMutation.isPending}
+                  className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200 disabled:opacity-50"
+                >
+                  {gdmsAssignMutation.isPending ? "Assigning..." : "Assign despatched devices to GDMS"}
+                </button>
+                <span className="text-xs text-slate-400">
+                  Normally happens automatically at 16:30 - use this to assign what's gone out on this order right
+                  now instead of waiting.
+                </span>
+              </div>
+              {gdmsResult && (
+                <p className="text-sm text-slate-600 mt-2">
+                  {gdmsResult.devicesAssigned} device(s) assigned.
+                  {gdmsResult.errors.length > 0 && ` ${gdmsResult.errors.join(" ")}`}
+                </p>
+              )}
+              {gdmsError && <p className="text-sm text-red-600 mt-2">{gdmsError}</p>}
             </div>
           )}
 

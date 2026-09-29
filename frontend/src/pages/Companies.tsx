@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { CompanyRequest, CompanyView, InvoiceGrouping, TicketSummaryView } from "../types";
+import { CompanyRequest, CompanyView, GdmsChannelLookupResult, InvoiceGrouping, TicketSummaryView } from "../types";
 import { useToast } from "../components/ToastContext";
 import { talkTimeLabel, TICKET_STATUS_LABEL, TICKET_STATUS_STYLE } from "./Tickets";
 
@@ -23,6 +23,8 @@ function CompanyRow({ company }: { company: CompanyView }) {
   const [doNotUse, setDoNotUse] = useState(company.doNotUse);
   const [gaps, setGaps] = useState(company.gaps);
   const [gdms, setGdms] = useState(company.gdms);
+  const [gdmsChannelId, setGdmsChannelId] = useState(company.gdmsChannelId ?? "");
+  const [gdmsChannelName, setGdmsChannelName] = useState(company.gdmsChannelName ?? "");
   const [invoiceEmail, setInvoiceEmail] = useState(company.invoiceEmail ?? "");
   const [companyVatRate, setCompanyVatRate] = useState(company.vatRate != null ? String(company.vatRate) : "");
   const [invoiceGrouping, setInvoiceGrouping] = useState<InvoiceGrouping>(company.invoiceGrouping);
@@ -46,6 +48,8 @@ function CompanyRow({ company }: { company: CompanyView }) {
         doNotUse,
         gaps,
         gdms,
+        gdmsChannelId: gdmsChannelId || undefined,
+        gdmsChannelName: gdmsChannelName || undefined,
         invoiceEmail: invoiceEmail || undefined,
         vatRate: companyVatRate ? Number(companyVatRate) : undefined,
         invoiceGrouping,
@@ -82,6 +86,15 @@ function CompanyRow({ company }: { company: CompanyView }) {
     queryKey: ["tickets-by-company", company.id],
     queryFn: async () => (await api.get<TicketSummaryView[]>(`/tickets/by-company/${company.id}`)).data,
     enabled: showTickets,
+  });
+
+  // Only looked up once the row is open for editing and GDMS is actually
+  // ticked - same live/cached-fallback dropdown pattern as the DPD Service
+  // dropdown on the order screen, see GdmsChannelService on the backend.
+  const { data: gdmsChannelLookup } = useQuery({
+    queryKey: ["gdms-channels"],
+    queryFn: async () => (await api.get<GdmsChannelLookupResult>("/settings/gdms/channels")).data,
+    enabled: editing && gdms,
   });
 
   return (
@@ -334,6 +347,39 @@ function CompanyRow({ company }: { company: CompanyView }) {
               Auto-hold when overdue on payment terms
             </label>
           </div>
+          {gdms && (
+            <div className="col-span-2 md:col-span-4">
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                GDMS channel - despatched devices are assigned here at end of day
+              </label>
+              <select
+                value={gdmsChannelId}
+                onChange={(e) => {
+                  setGdmsChannelId(e.target.value);
+                  const match = gdmsChannelLookup?.channels.find((c) => c.id === e.target.value);
+                  setGdmsChannelName(match?.name ?? "");
+                }}
+                className="input"
+              >
+                <option value="">— Not set —</option>
+                {/* The currently-saved channel is always offered even if it didn't come back in a live/cached
+                    lookup (e.g. GDMS unreachable right now) - never silently drops what's already saved. */}
+                {gdmsChannelId && !gdmsChannelLookup?.channels.some((c) => c.id === gdmsChannelId) && (
+                  <option value={gdmsChannelId}>{gdmsChannelName || gdmsChannelId}</option>
+                )}
+                {gdmsChannelLookup?.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {gdmsChannelLookup && !gdmsChannelLookup.live && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Showing a cached channel list - live GDMS lookup failed ({gdmsChannelLookup.liveError}).
+                </p>
+              )}
+            </div>
+          )}
           <button
             type="submit"
             disabled={updateMutation.isPending}

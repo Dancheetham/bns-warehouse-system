@@ -115,6 +115,8 @@ public class CompanyService {
         if (request.gdms() != null) {
             company.setGdms(request.gdms());
         }
+        company.setGdmsChannelId(request.gdmsChannelId());
+        company.setGdmsChannelName(request.gdmsChannelName());
         company.setInvoiceEmail(request.invoiceEmail());
         company.setVatRate(request.vatRate());
         if (request.invoiceGrouping() != null) {
@@ -221,6 +223,7 @@ public class CompanyService {
                     company.getShopifyCompanyId(), company.getNotes(),
                     company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                     company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
+                    company.getGdmsChannelId(), company.getGdmsChannelName(),
                     null, null, false,
                     company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping(),
                     company.getPaymentTermsDays(), company.isAutoHoldOnOverdue(), company.isAutoHeld(),
@@ -236,6 +239,7 @@ public class CompanyService {
                 company.getShopifyCompanyId(), company.getNotes(),
                 company.getEoriNumber(), company.getVatNumber(), company.getAccountNumber(),
                 company.isOnHold(), company.isDoNotUse(), company.isGaps(), company.isGdms(),
+                company.getGdmsChannelId(), company.getGdmsChannelName(),
                 used, available, available.compareTo(BigDecimal.ZERO) < 0,
                 company.getInvoiceEmail(), company.getVatRate(), company.getInvoiceGrouping(),
                 company.getPaymentTermsDays(), company.isAutoHoldOnOverdue(), company.isAutoHeld(),

@@ -5,6 +5,36 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.52] - 2026-09-29 (v0.117)
+
+### Added
+- **GDMS end-of-day channel assignment.** Replaces the manual end-of-day
+  process of working out what shipped to GDMS customers and assigning
+  those devices' MACs to the right GDMS channel by hand.
+
+  Every day at 16:30, and on demand from Settings > GDMS ("Run GDMS
+  end-of-day now") or per-order from Sales Activity ("Assign despatched
+  devices to GDMS", shown only for a GDMS-enabled customer with a channel
+  set), the system now looks at what's actually been despatched, works out
+  which of it belongs to a GDMS-enabled company with a channel configured,
+  and assigns those devices' MAC addresses to that company's GDMS channel
+  automatically via Grandstream's GDMS API. "Despatched" is read from the
+  same per-item stock movement record Delivery History uses, not just the
+  order's overall despatch date, so a multi-shipment or re-opened order is
+  still picked up correctly. Each device is only ever sent to GDMS once -
+  re-running the process (the scheduled job on a day that already had a
+  manual run, say) never re-sends an already-synced MAC. MACs are sent to
+  GDMS in batches of 100 rather than one huge call, since a previous manual
+  process reportedly hit a 500-unit limit doing this by hand.
+
+  New Settings > GDMS section for the API credentials (region, client
+  ID/secret, GDMS username/password) plus the manual "run now" button and
+  a "Reset GDMS connection" button matching the existing DPD one. Each
+  company can now be assigned a GDMS channel from a live dropdown on the
+  Companies page (same live/cached-fallback behaviour as the DPD Service
+  dropdown on an order, so it still shows something useful if GDMS is
+  briefly unreachable).
+
 ## [0.23.51] - 2026-09-29 (v0.116)
 
 ### Fixed

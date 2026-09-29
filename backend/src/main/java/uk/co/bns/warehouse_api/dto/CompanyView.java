@@ -17,6 +17,8 @@ public record CompanyView(
         boolean doNotUse,
         boolean gaps,
         boolean gdms,
+        String gdmsChannelId,
+        String gdmsChannelName,
         // Only present when creditLimit is set - the running total of unpaid
         // order value, matching the OrderWise "amount owing" figure.
         BigDecimal creditUsed,

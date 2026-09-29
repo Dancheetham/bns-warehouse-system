@@ -24,6 +24,12 @@ public record CompanyRequest(
         Boolean doNotUse,
         Boolean gaps,
         Boolean gdms,
+        // Which GDMS channel this company's despatched devices go to - see
+        // Company.java. gdmsChannelId is the raw ID from GDMS's own
+        // /sub/list; gdmsChannelName is carried alongside it purely for
+        // display.
+        String gdmsChannelId,
+        String gdmsChannelName,
         // Generate Invoices - see Company.java.
         @Email(message = "That doesn't look like a valid email address") String invoiceEmail,
         BigDecimal vatRate,

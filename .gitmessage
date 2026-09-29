@@ -1,32 +1,47 @@
-Stop the double "Saved." confirmation on Settings, standardise it (v0.116)
+Add GDMS end-of-day channel assignment (v0.117)
 
-Settings > Save Settings was showing two save confirmations at once: a
-small white "Saved." pill next to the button, and the global green corner
-toast (ToastContext) - both fixed to the same bottom-right corner, so they
-landed directly on top of each other. Meanwhile most other Save buttons in
-the app (Sales Activity order edit, tickets, products, account settings)
-only ever showed the green toast, with no pill at all - inconsistent with
-Settings and, per feedback, the less preferred of the two.
+Replaces the manual end-of-day process of working out what shipped to
+GDMS-enabled customers and assigning those devices' MACs to the right
+GDMS channel by hand.
 
-Fix: a new shared SavedBadge component (frontend/src/components/
-SavedBadge.tsx) renders that white pill, and it's now used everywhere a
-Save button's page/form stays on screen after saving - Settings, Account
-Settings, Product, Ticket, and Sales Activity order edit - with the green
-toast call removed from each of those "Saved." confirmations.
+Backend:
+- V51 migration: Company.gdmsChannelId/gdmsChannelName (which GDMS
+  channel a company's despatched devices go to) and
+  StockItem.gdmsSyncedAt (idempotency - a device is only ever assigned
+  to GDMS once).
+- GdmsSignatureUtil: GDMS's per-request HMAC-style signature algorithm
+  (materially different from DPD's plain bearer token - see
+  gdms-api-findings.md for the full write-up).
+- GdmsAuthService: OAuth password-grant token caching, mirroring
+  DpdAuthService's credentials-fingerprint pattern.
+- GdmsChannelService: live /sub/list channel lookup with a
+  Settings-cached fallback (same shape as DpdShippingService's Service
+  dropdown), and assignMacsToChannel() batching MACs in groups of 100
+  - a prior manual process reportedly hit a 500-unit limit, so this
+  stays well under that and keeps one failing batch from losing an
+  entire day's despatch.
+- GdmsEndOfDayService: reads "despatched today" from StockMovement
+  (type DESPATCH, one row per item with its own accurate createdAt)
+  rather than Order.despatchedAt, which is set once and never updated
+  on a re-opened/multi-shipment order. Groups despatched,
+  not-yet-synced items by company, skips anything not GDMS-enabled or
+  without a channel set, and assigns each company's devices via
+  GdmsChannelService.
+- Three triggers: a 16:30 scheduled job, a global "run now" button
+  (Settings > GDMS), and a per-order button (Sales Activity) scoped to
+  just that order's despatched-but-unsynced items.
 
-The green toast is kept only where it's still the right tool:
-- "Order created." (Sales Activity) - creating a new order navigates to
-  its real URL, remounting the page before a local pill would ever be
-  seen, so the toast (which lives above that remount) is the only thing
-  that survives to be shown.
-- "Ticket created.", "Deleted.", "DPD shipment booked.", "Label sent to
-  printer." - none of these are a "Saved." confirmation sitting next to a
-  button that's still on screen.
-- Contacts and Companies inline-edit rows - the edit form collapses the
-  instant the save succeeds, so there's no button left to anchor a pill
-  to; the toast is the only feedback that survives that collapse.
-- Goods In - already had its own on-page "Session saved..." banner, so
-  the toast there was just removed rather than replaced with anything.
+Frontend:
+- Settings > GDMS: credentials (region, client ID/secret,
+  username/password), Reset GDMS connection, and Run GDMS end-of-day
+  now with a result summary.
+- Companies: GDMS channel dropdown (live/cached, mirrors the DPD
+  Service dropdown UX), shown once GDMS is ticked for a company.
+- Sales Activity/OrderEdit: "Assign despatched devices to GDMS"
+  button, shown only for a GDMS-enabled customer with a channel set.
+
+gdms-api-findings.md updated with the final implementation decisions
+(base URL, batch size, idempotency approach).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

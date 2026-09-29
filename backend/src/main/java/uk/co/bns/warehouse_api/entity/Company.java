@@ -66,6 +66,20 @@ public class Company {
     @Column(nullable = false)
     private boolean gdms = false;
 
+    // Which GDMS "channel" (a subordinate reseller account under BNS's own
+    // GDMS account) this company's despatched devices should be assigned to
+    // - see GdmsEndOfDayService. id is the raw channel ID GDMS itself uses
+    // (sent back to GDMS on /assign); name is only kept so the dropdown on
+    // this page can show something readable without a live lookup every
+    // time the company list loads. Both null until someone picks a channel
+    // from the dropdown - gdms=true with no channel set is a valid "not
+    // finished setting this company up yet" state, not an error.
+    @Column(name = "gdms_channel_id")
+    private String gdmsChannelId;
+
+    @Column(name = "gdms_channel_name")
+    private String gdmsChannelName;
+
     // Where Generate Invoices emails the PDF (InvoiceService) - separate from
     // any Contact's email since it's specifically who in the customer's
     // finance/AP team should receive invoices, which isn't always the same

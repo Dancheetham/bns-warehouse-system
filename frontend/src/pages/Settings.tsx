@@ -6,6 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastContext";
 import SettingsSection from "../components/SettingsSection";
 import SavedBadge from "../components/SavedBadge";
+import { GdmsRunResult } from "../types";
 
 interface UserView {
   id: number;
@@ -50,6 +51,13 @@ export default function Settings() {
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
+  const [gdmsRegion, setGdmsRegion] = useState<"eu" | "us">("eu");
+  const [gdmsClientId, setGdmsClientId] = useState("");
+  const [gdmsClientSecret, setGdmsClientSecret] = useState("");
+  const [gdmsUsername, setGdmsUsername] = useState("");
+  const [gdmsPassword, setGdmsPassword] = useState("");
+  const [gdmsRunResult, setGdmsRunResult] = useState<GdmsRunResult | null>(null);
+  const [gdmsRunError, setGdmsRunError] = useState<string | null>(null);
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -128,6 +136,11 @@ export default function Settings() {
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
+    setGdmsRegion((settings["gdms_region"] as "eu" | "us") ?? "eu");
+    setGdmsClientId(settings["gdms_client_id"] ?? "");
+    // gdms_client_secret/gdms_password deliberately never populated back,
+    // same reasoning as smtp_password/dpd_api_secret above.
+    setGdmsUsername(settings["gdms_username"] ?? "");
     setPrintSampleLabels((settings["print_sample_labels"] ?? "true") === "true");
     setAutoAcknowledge((settings["auto_acknowledge_on_release"] ?? "true") === "true");
     setAutoPrintPickingNote((settings["auto_print_picking_note_on_release"] ?? "true") === "true");
@@ -157,6 +170,23 @@ export default function Settings() {
     onSuccess: () =>
       showToast("DPD connection reset - the next DPD action will log in fresh and get a new bearer token."),
     onError: () => showToast("Failed to reset the DPD connection - see the console for details."),
+  });
+
+  const resetGdmsConnectionMutation = useMutation({
+    mutationFn: async () => api.post("/settings/gdms/reset-connection"),
+    onSuccess: () =>
+      showToast("GDMS connection reset - the next GDMS action will log in fresh and get a new access token."),
+    onError: () => showToast("Failed to reset the GDMS connection - see the console for details."),
+  });
+
+  const runGdmsEndOfDayMutation = useMutation({
+    mutationFn: async () => (await api.post<GdmsRunResult>("/settings/gdms/run-end-of-day")).data,
+    onMutate: () => {
+      setGdmsRunResult(null);
+      setGdmsRunError(null);
+    },
+    onSuccess: (result) => setGdmsRunResult(result),
+    onError: (err: Error) => setGdmsRunError(err.message),
   });
 
   const saveMutation = useMutation({
@@ -196,6 +226,11 @@ export default function Settings() {
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
         dpd_extended_liability: String(dpdExtendedLiability),
+        gdms_region: gdmsRegion,
+        gdms_client_id: gdmsClientId,
+        ...(gdmsClientSecret ? { gdms_client_secret: gdmsClientSecret } : {}),
+        gdms_username: gdmsUsername,
+        ...(gdmsPassword ? { gdms_password: gdmsPassword } : {}),
         print_sample_labels: String(printSampleLabels),
         auto_acknowledge_on_release: String(autoAcknowledge),
         auto_print_picking_note_on_release: String(autoPrintPickingNote),
@@ -705,6 +740,106 @@ export default function Settings() {
           Turn this off once DPD is fully set up, so a despatch never accidentally prints an old test label instead
           of failing loudly - "Confirm Despatch" will simply not offer a label to print if DPD wasn't booked.
         </p>
+      </SettingsSection>
+
+      <SettingsSection
+        title="GDMS"
+        description="Grandstream's GDMS API credentials, and the end-of-day process that assigns every device despatched to a GDMS-enabled customer to their GDMS channel automatically - runs on its own every day at 16:30, or can be run on demand here. Each company's channel is set on the Companies page."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Region</label>
+            <select value={gdmsRegion} onChange={(e) => setGdmsRegion(e.target.value as "eu" | "us")} className="input w-48">
+              <option value="eu">EU (eu.gdms.cloud)</option>
+              <option value="us">US (www.gdms.cloud)</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Client ID</label>
+            <input value={gdmsClientId} onChange={(e) => setGdmsClientId(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Client secret (leave blank to keep the current one)
+            </label>
+            <input
+              type="password"
+              value={gdmsClientSecret}
+              onChange={(e) => setGdmsClientSecret(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">GDMS username</label>
+            <input value={gdmsUsername} onChange={(e) => setGdmsUsername(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              GDMS password (leave blank to keep the current one)
+            </label>
+            <input
+              type="password"
+              value={gdmsPassword}
+              onChange={(e) => setGdmsPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={() => resetGdmsConnectionMutation.mutate()}
+            disabled={resetGdmsConnectionMutation.isPending}
+            className="btn-secondary text-sm"
+          >
+            {resetGdmsConnectionMutation.isPending ? "Resetting…" : "Reset GDMS connection"}
+          </button>
+          <p className="text-xs text-slate-400 mt-1">
+            Forces the next GDMS action to log in from scratch and get a brand new access token, instead of reusing
+            the one currently cached here. The client ID/secret and username/password above are untouched by this.
+          </p>
+        </div>
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => runGdmsEndOfDayMutation.mutate()}
+            disabled={runGdmsEndOfDayMutation.isPending}
+            className="btn-secondary text-sm"
+          >
+            {runGdmsEndOfDayMutation.isPending ? "Running…" : "Run GDMS end-of-day now"}
+          </button>
+          <p className="text-xs text-slate-400 mt-1">
+            Assigns every device despatched today to a GDMS-enabled customer (that hasn't already been synced) to
+            that company's GDMS channel, right now - the same thing the 16:30 scheduled run does. Safe to run more
+            than once a day: anything already synced is skipped.
+          </p>
+          {gdmsRunResult && (
+            <div className="mt-2 text-sm bg-slate-50 border border-slate-200 rounded p-3">
+              <p className="text-slate-700">
+                {gdmsRunResult.devicesAssigned} device(s) assigned across {gdmsRunResult.companiesProcessed} compan
+                {gdmsRunResult.companiesProcessed === 1 ? "y" : "ies"}.
+                {gdmsRunResult.companiesSkippedNoChannel > 0 &&
+                  ` ${gdmsRunResult.companiesSkippedNoChannel} compan${
+                    gdmsRunResult.companiesSkippedNoChannel === 1 ? "y" : "ies"
+                  } skipped - GDMS-enabled but no channel set.`}
+              </p>
+              {gdmsRunResult.errors.length > 0 && (
+                <ul className="mt-1 list-disc list-inside text-red-600">
+                  {gdmsRunResult.errors.map((e, i) => (
+                    <li key={i}>{e}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {gdmsRunError && <p className="mt-2 text-sm text-red-600">{gdmsRunError}</p>}
+        </div>
       </SettingsSection>
 
       <SettingsSection title="Despatch & Packing">

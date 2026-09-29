@@ -467,6 +467,10 @@ export interface CompanyRef {
   creditLimit?: number;
   shopifyCompanyId?: string;
   notes?: string;
+  // Order embeds the raw Company entity, so these come along with it -
+  // used to decide whether to show the per-order GDMS trigger button.
+  gdms?: boolean;
+  gdmsChannelId?: string;
 }
 
 export type InvoiceGrouping = "PER_ORDER" | "CONSOLIDATED";
@@ -489,6 +493,11 @@ export interface CompanyView {
   doNotUse: boolean;
   gaps: boolean;
   gdms: boolean;
+  // Which GDMS channel this company's despatched devices are assigned to -
+  // see GdmsEndOfDayService on the backend. Both null until someone picks a
+  // channel on the Companies page.
+  gdmsChannelId?: string;
+  gdmsChannelName?: string;
   creditUsed?: number;
   creditAvailable?: number;
   overLimit: boolean;
@@ -518,6 +527,8 @@ export interface CompanyRequest {
   doNotUse?: boolean;
   gaps?: boolean;
   gdms?: boolean;
+  gdmsChannelId?: string;
+  gdmsChannelName?: string;
   // Where Generate Invoices emails the PDF - separate from any Contact.
   invoiceEmail?: string;
   // Overrides the default VAT rate (Settings > Invoicing) for this company
@@ -732,6 +743,30 @@ export interface DpdServiceLookupResult {
   services: DpdServiceOption[];
   live: boolean;
   liveError?: string;
+}
+
+// One GDMS "channel" (subordinate reseller account under BNS's own GDMS
+// account) - id is what's sent to GDMS on /assign, name is what's shown.
+export interface GdmsChannelOption {
+  id: string;
+  name: string;
+}
+
+// Response for the GDMS channel dropdown on Companies.tsx - same live/cached
+// shape as DpdServiceLookupResult.
+export interface GdmsChannelLookupResult {
+  channels: GdmsChannelOption[];
+  live: boolean;
+  liveError?: string;
+}
+
+// Summary of a GdmsEndOfDayService run (scheduled, global manual, or
+// per-order) - see the backend for the fuller reasoning.
+export interface GdmsRunResult {
+  companiesProcessed: number;
+  devicesAssigned: number;
+  companiesSkippedNoChannel: number;
+  errors: string[];
 }
 
 export interface AcknowledgementResult {

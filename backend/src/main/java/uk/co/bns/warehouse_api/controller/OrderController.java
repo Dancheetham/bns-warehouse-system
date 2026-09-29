@@ -16,9 +16,11 @@ import uk.co.bns.warehouse_api.dto.OrderRequest;
 import uk.co.bns.warehouse_api.dto.PaymentRequest;
 import uk.co.bns.warehouse_api.dto.PaymentView;
 import uk.co.bns.warehouse_api.dto.ReleaseForDespatchRequest;
+import uk.co.bns.warehouse_api.dto.GdmsRunResult;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.service.AcknowledgementService;
 import uk.co.bns.warehouse_api.service.DpdShippingService;
+import uk.co.bns.warehouse_api.service.GdmsEndOfDayService;
 import uk.co.bns.warehouse_api.service.OrderService;
 import uk.co.bns.warehouse_api.service.PaymentService;
 import uk.co.bns.warehouse_api.service.PickingNoteService;
@@ -35,6 +37,7 @@ public class OrderController {
     private final AcknowledgementService acknowledgementService;
     private final PaymentService paymentService;
     private final DpdShippingService dpdShippingService;
+    private final GdmsEndOfDayService gdmsEndOfDayService;
 
     @GetMapping
     public List<Order> getAll() {
@@ -70,6 +73,15 @@ public class OrderController {
     @GetMapping("/{id}/dpd-services")
     public uk.co.bns.warehouse_api.dto.DpdServiceLookupResult dpdServices(@PathVariable Long id) {
         return dpdShippingService.listAvailableServices(orderService.findById(id));
+    }
+
+    // Per-order manual GDMS trigger, shown in Sales Activity only for
+    // GDMS-enabled customers - assigns whatever's been despatched on this
+    // order (and not already synced) to the company's GDMS channel right
+    // now, rather than waiting for the 16:30 scheduled run.
+    @PostMapping("/{id}/gdms-assign")
+    public GdmsRunResult gdmsAssign(@PathVariable Long id) {
+        return gdmsEndOfDayService.runForOrder(id);
     }
 
     @GetMapping("/{id}/credit-status")
