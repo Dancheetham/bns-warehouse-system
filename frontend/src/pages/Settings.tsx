@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastContext";
 import SettingsSection from "../components/SettingsSection";
+import SavedBadge from "../components/SavedBadge";
 
 interface UserView {
   id: number;
@@ -220,7 +221,6 @@ export default function Settings() {
       }),
     onSuccess: () => {
       setSaved(true);
-      showToast("Saved.");
       setTimeout(() => setSaved(false), 2500);
     },
   });
@@ -1141,11 +1141,7 @@ export default function Settings() {
         global configuration.
       */}
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
-        {saved && (
-          <span className="text-sm text-emerald-700 bg-white border border-emerald-200 px-3 py-1.5 rounded-full shadow-sm">
-            Saved.
-          </span>
-        )}
+        <SavedBadge show={saved} />
         <button
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending}

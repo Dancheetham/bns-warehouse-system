@@ -1,40 +1,32 @@
-Fix "Connect to Shopify" unreachable behind a reverse proxy/tunnel (v0.115)
+Stop the double "Saved." confirmation on Settings, standardise it (v0.116)
 
-ShopifySync.tsx built the OAuth start link by hitting the backend's own
-port directly with a hardcoded ":8080" (window.location.hostname + ":8080"),
-bypassing nginx's /api/ proxy that every other request in the app goes
-through. That only ever worked on a bare LAN where both the frontend and
-API ports are separately, directly reachable from the browser - behind a
-reverse proxy, Cloudflare Tunnel, or a custom domain (e.g. a home server
-exposed as wms.dan-cheetham.uk), the raw API port typically isn't exposed
-externally at all, so the browser failed with "this site can't be reached"
-before the app ever got a chance to respond, even though credentials and
-everything else were configured correctly.
+Settings > Save Settings was showing two save confirmations at once: a
+small white "Saved." pill next to the button, and the global green corner
+toast (ToastContext) - both fixed to the same bottom-right corner, so they
+landed directly on top of each other. Meanwhile most other Save buttons in
+the app (Sales Activity order edit, tickets, products, account settings)
+only ever showed the green toast, with no pill at all - inconsistent with
+Settings and, per feedback, the less preferred of the two.
 
-ShopifyOAuthController had a second, separate bug in the same area:
-frontendUrl() (used for the post-callback landing redirect) hardcoded
-":8081" for the frontend's port, which silently broke the moment v0.107
-made that port configurable via FRONTEND_PORT.
+Fix: a new shared SavedBadge component (frontend/src/components/
+SavedBadge.tsx) renders that white pill, and it's now used everywhere a
+Save button's page/form stays on screen after saving - Settings, Account
+Settings, Product, Ticket, and Sales Activity order edit - with the green
+toast call removed from each of those "Saved." confirmations.
 
-Fix: both /start and /callback now go through the same origin as every
-other API call (relative /api/shopify/oauth/start via nginx, instead of a
-separate hardcoded port), and resolve the correct EXTERNAL base URL the
-same way PasswordResetService already does for password-reset emails -
-Settings > Email > "Public URL" (app_public_url) wins when set, since
-request.getScheme() reports "http" even for HTTPS traffic arriving through
-a reverse proxy (nginx.conf doesn't forward X-Forwarded-Proto), falling
-back to guessing from the request only when Public URL is left blank
-(correct for a bare LAN deployment, where the guess matches reality).
-frontendUrl() as a separate method is gone entirely - callback and start
-now share one resolvedBaseUrl() helper, since they're the same origin.
-
-Settings.tsx's Public URL field description updated to mention it now also
-drives the Shopify OAuth redirect, not just password-reset emails.
-
-Practical note for deployments behind a custom domain/tunnel: Public URL
-must be set for this to work, and if it's new or changes, the matching
-redirect URL registered in the Shopify app's own settings needs updating to
-match exactly (Shopify requires an exact match).
+The green toast is kept only where it's still the right tool:
+- "Order created." (Sales Activity) - creating a new order navigates to
+  its real URL, remounting the page before a local pill would ever be
+  seen, so the toast (which lives above that remount) is the only thing
+  that survives to be shown.
+- "Ticket created.", "Deleted.", "DPD shipment booked.", "Label sent to
+  printer." - none of these are a "Saved." confirmation sitting next to a
+  button that's still on screen.
+- Contacts and Companies inline-edit rows - the edit form collapses the
+  instant the save succeeds, so there's no button left to anchor a pill
+  to; the toast is the only feedback that survives that collapse.
+- Goods In - already had its own on-page "Session saved..." banner, so
+  the toast there was just removed rather than replaced with anything.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

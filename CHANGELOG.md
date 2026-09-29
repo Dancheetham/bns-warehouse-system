@@ -5,6 +5,32 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.51] - 2026-09-29 (v0.116)
+
+### Fixed
+- **Save confirmations popping up twice, overlapping.** Settings > Save
+  Settings showed a small white "Saved." pill next to the button *and* the
+  global green corner toast at the same time - both are fixed to the same
+  bottom-right corner, so they landed directly on top of each other. Most
+  other Save buttons in the app (Sales Activity orders, tickets, products,
+  account settings) only ever showed the green toast, with no pill.
+
+  Standardised on the white pill everywhere a Save button's page/form stays
+  on screen after saving - Settings, Account Settings, Product, Ticket, and
+  Sales Activity order edit - and dropped the green toast for all of these
+  "Saved." confirmations. The green toast still fires for things that
+  aren't a save confirmation next to a visible button: "Order created."
+  (the page navigates/remounts before a local pill would ever be seen),
+  "Ticket created.", "Deleted.", "DPD shipment booked.", "Label sent to
+  printer.", and the two inline-edit rows on Contacts and Companies (the
+  edit form closes the instant it saves, so there's no button left to put
+  a pill next to - the toast is the only feedback left there). Goods In's
+  own on-page "Session saved..." banner already covered this, so the toast
+  there was just removed outright rather than replaced.
+
+  New shared `SavedBadge` component so this stays one look everywhere
+  instead of each page rolling its own.
+
 ## [0.23.50] - 2026-09-29 (v0.115)
 
 ### Fixed

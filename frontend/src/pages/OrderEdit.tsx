@@ -6,6 +6,7 @@ import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, InvoiceHist
 import { printPdf, printRaw } from "../utils/printAgent";
 import { dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
+import SavedBadge from "../components/SavedBadge";
 
 // COMPLETED, PARTIALLY_DESPATCHED and INVOICE_PENDING are deliberately left
 // out - the backend (OrderService.update) now rejects picking any of these
@@ -75,6 +76,7 @@ export default function OrderEdit() {
   const [error, setError] = useState<string | null>(null);
   const [errorIsConflict, setErrorIsConflict] = useState(false);
   const [ackResult, setAckResult] = useState<AcknowledgementResult | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const { data: existingOrder } = useQuery({
     queryKey: ["order", id],
@@ -229,11 +231,22 @@ export default function OrderEdit() {
       queryClient.invalidateQueries({ queryKey: ["order", String(data.id)] });
       queryClient.invalidateQueries({ queryKey: ["dpd-services", String(data.id)] });
       setError(null);
-      showToast(isNew ? "Order created." : "Saved.");
+      if (isNew) {
+        // navigate() below takes this from /sales-activity/new to the real
+        // /sales-activity/<id> - a different route, so this component
+        // remounts and any local state set here would be wiped before it's
+        // ever seen. The toast lives above that remount (in ToastProvider),
+        // so it's the one case that still needs it.
+        showToast("Order created.");
+      } else {
+        // Same route, no remount - navigate() below just re-points the URL
+        // at itself (see the comment on that call), so the badge next to
+        // Save Order is visible the whole time.
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
       // Set only when this order originated from Shopify and something
-      // changed that needed pushing back there - shown as a second toast
-      // rather than replacing the "Saved." one, since the save itself always
-      // succeeds locally regardless of whether the Shopify push did.
+      // changed that needed pushing back there.
       if (data.shopifyAmendStatus) {
         showToast(data.shopifyAmendStatus);
       }
@@ -1097,13 +1110,16 @@ export default function OrderEdit() {
           details, lines, payments, DPD section etc. z-50 keeps it above
           everything else on the page; shadow-lg gives it visual separation
           from whatever's scrolling underneath it. */}
-      <button
-        onClick={() => saveMutation.mutate()}
-        disabled={saveMutation.isPending || !customerName}
-        className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg hover:bg-emerald-500 disabled:opacity-50"
-      >
-        {saveMutation.isPending ? "Saving..." : isNew ? "Create Order" : "Save Order"}
-      </button>
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        <SavedBadge show={saved} />
+        <button
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending || !customerName}
+          className="bg-emerald-600 text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg hover:bg-emerald-500 disabled:opacity-50"
+        >
+          {saveMutation.isPending ? "Saving..." : isNew ? "Create Order" : "Save Order"}
+        </button>
+      </div>
 
       <style>{`.input { width: 100%; border: 1px solid #cbd5e1; border-radius: 0.375rem; padding: 0.5rem 0.75rem; font-size: 0.875rem; }`}</style>
     </div>

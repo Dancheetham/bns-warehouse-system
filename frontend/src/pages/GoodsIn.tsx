@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { PurchaseOrder, Location, ScanCartonResult, GoodsInSession } from "../types";
 import BinSelect from "../components/BinSelect";
-import { useToast } from "../components/ToastContext";
 
 interface ScanLogEntry extends ScanCartonResult {
   batchCode: string;
@@ -12,7 +11,6 @@ interface ScanLogEntry extends ScanCartonResult {
 
 export default function GoodsIn() {
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [locationId, setLocationId] = useState("");
   const [session, setSession] = useState<GoodsInSession | null>(null);
@@ -83,7 +81,6 @@ export default function GoodsIn() {
     mutationFn: async () => (await api.post<GoodsInSession>(`/goods-in/sessions/${session?.id}/save`)).data,
     onSuccess: () => {
       setSavedMessage("Session saved. Stock has been booked in.");
-      showToast("Saved.");
       setSession(null);
       setLog([]);
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });

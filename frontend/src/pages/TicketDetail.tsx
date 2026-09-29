@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { CompanyView, ContactView, Order, TicketRequest, TicketStatus, TicketView } from "../types";
 import { useToast } from "../components/ToastContext";
+import SavedBadge from "../components/SavedBadge";
 import { talkTimeLabel, TICKET_STATUSES, TICKET_STATUS_LABEL } from "./Tickets";
 
 // Simple type-to-filter link picker (matches the client-side filtering
@@ -101,6 +102,7 @@ export default function TicketDetail() {
   const [contactDropdownOpen, setContactDropdownOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const { data: existingTicket } = useQuery({
     queryKey: ["ticket", id],
@@ -196,7 +198,8 @@ export default function TicketDetail() {
         navigate(`/tickets/${response.data.id}`);
       } else {
         queryClient.invalidateQueries({ queryKey: ["ticket", id] });
-        showToast("Saved.");
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
       }
     },
     onError: (err: Error) => setError(err.message),
@@ -399,13 +402,16 @@ export default function TicketDetail() {
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
-        <button
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending || !title}
-          className="bg-emerald-600 text-white text-sm font-medium px-5 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
-        >
-          {saveMutation.isPending ? "Saving..." : isNew ? "Create Ticket" : "Save Changes"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending || !title}
+            className="bg-emerald-600 text-white text-sm font-medium px-5 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {saveMutation.isPending ? "Saving..." : isNew ? "Create Ticket" : "Save Changes"}
+          </button>
+          <SavedBadge show={saved} />
+        </div>
       </div>
 
       {!isNew && existingTicket && (

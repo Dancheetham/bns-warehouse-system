@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { DEFAULT_STATUS_COLORS, ORDER_STATUSES, resolveStatusColors, statusColorSettingKey, statusLabel } from "../utils/statusColors";
 import { OrderStatus } from "../types";
-import { useToast } from "../components/ToastContext";
 import SettingsSection from "../components/SettingsSection";
+import SavedBadge from "../components/SavedBadge";
 
 /**
  * Just-for-you settings, split out of the main Settings page in v0.107 -
@@ -25,7 +25,6 @@ export default function AccountSettings() {
   const [myEmailCc, setMyEmailCc] = useState("");
   const [myEmailSaved, setMyEmailSaved] = useState(false);
   const queryClient = useQueryClient();
-  const { showToast } = useToast();
 
   const { data: myUserSettings } = useQuery({
     queryKey: ["my-user-settings"],
@@ -47,7 +46,6 @@ export default function AccountSettings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
       setColorsSaved(true);
-      showToast("Saved.");
       setTimeout(() => setColorsSaved(false), 2500);
     },
   });
@@ -64,7 +62,6 @@ export default function AccountSettings() {
       queryClient.invalidateQueries({ queryKey: ["my-user-settings"] });
       setMyEmailPassword("");
       setMyEmailSaved(true);
-      showToast("Saved.");
       setTimeout(() => setMyEmailSaved(false), 2500);
     },
   });
@@ -127,7 +124,7 @@ export default function AccountSettings() {
           >
             {saveMyEmailMutation.isPending ? "Saving..." : "Save My Email"}
           </button>
-          {myEmailSaved && <span className="text-xs text-emerald-600">Saved.</span>}
+          <SavedBadge show={myEmailSaved} />
         </div>
       </SettingsSection>
 
@@ -166,7 +163,7 @@ export default function AccountSettings() {
             >
               {saveColorsMutation.isPending ? "Saving..." : "Save Colours"}
             </button>
-            {colorsSaved && <span className="text-xs text-emerald-600">Saved.</span>}
+            <SavedBadge show={colorsSaved} />
           </div>
         </div>
       </SettingsSection>
