@@ -55,6 +55,7 @@ public class GdmsChannelService {
     private final GdmsAuthService gdmsAuthService;
     private final SettingsService settingsService;
     private final GdmsSyncLogService gdmsSyncLogService;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -129,6 +130,7 @@ public class GdmsChannelService {
             throw new ValidationException("No GDMS channel is set for this company");
         }
         List<String> assigned = new ArrayList<>();
+        int failedCount = 0;
         for (int start = 0; start < macs.size(); start += ASSIGN_BATCH_SIZE) {
             List<String> batch = macs.subList(start, Math.min(start + ASSIGN_BATCH_SIZE, macs.size()));
             ObjectNode body = objectMapper.createObjectNode();
@@ -151,6 +153,7 @@ public class GdmsChannelService {
                     gdmsSyncLogService.recordFailure("ASSIGN", source, macToOrderNumber.get(mac), mac,
                             channelId, channelName, e.getMessage());
                 }
+                notifyFailure("ASSIGN", source, batch.size(), channelName);
                 throw e;
             }
 
@@ -164,7 +167,16 @@ public class GdmsChannelService {
                             channelId, channelName, errorMessageFor(errorList, mac));
                 }
             }
+            failedCount += batch.size() - acceptedInBatch.size();
             assigned.addAll(acceptedInBatch);
+        }
+        // One notification per call (not per internal 100-MAC batch) - the
+        // "shipped before Grandstream could assign it to our channel" case
+        // Dan raised this feature for typically fails a handful of MACs at
+        // once, not the whole day's despatch, so this stays a single bell
+        // entry per run rather than spamming one per chunk.
+        if (failedCount > 0) {
+            notifyFailure("ASSIGN", source, failedCount, channelName);
         }
         return assigned;
     }
@@ -183,6 +195,7 @@ public class GdmsChannelService {
      */
     public List<String> reclaimMacs(List<String> macs, Map<String, String> macToOrderNumber, String source) {
         List<String> recalled = new ArrayList<>();
+        int failedCount = 0;
         for (int start = 0; start < macs.size(); start += ASSIGN_BATCH_SIZE) {
             List<String> batch = macs.subList(start, Math.min(start + ASSIGN_BATCH_SIZE, macs.size()));
             ObjectNode body = objectMapper.createObjectNode();
@@ -197,6 +210,7 @@ public class GdmsChannelService {
                     gdmsSyncLogService.recordFailure("RECALL", source, macToOrderNumber.get(mac), mac,
                             null, null, e.getMessage());
                 }
+                notifyFailure("RECALL", source, batch.size(), null);
                 throw e;
             }
 
@@ -210,9 +224,30 @@ public class GdmsChannelService {
                             null, null, errorMessageFor(errorList, mac));
                 }
             }
+            failedCount += batch.size() - acceptedInBatch.size();
             recalled.addAll(acceptedInBatch);
         }
+        if (failedCount > 0) {
+            notifyFailure("RECALL", source, failedCount, null);
+        }
         return recalled;
+    }
+
+    /**
+     * Creates one bell notification summarising a failed GDMS assign/recall
+     * attempt, linking straight to the GDMS Log page pre-filtered to today
+     * and FAILURE status - the whole point being that a failure (e.g. new
+     * stock despatched before Grandstream had assigned it to our channel
+     * yet) is surfaced immediately rather than only discoverable by someone
+     * thinking to go check the log.
+     */
+    private void notifyFailure(String operation, String source, int failedCount, String channelName) {
+        String today = java.time.LocalDate.now().toString();
+        String verb = "ASSIGN".equals(operation) ? "assign" : "recall";
+        String channelPart = channelName != null && !channelName.isBlank() ? " on " + channelName : "";
+        String message = String.format("GDMS %s failed for %d device(s)%s (%s)", verb, failedCount, channelPart, source);
+        String link = "/gdms-log?from=" + today + "&to=" + today + "&status=FAILURE";
+        notificationService.create("GDMS_FAILURE", message, link);
     }
 
     /**

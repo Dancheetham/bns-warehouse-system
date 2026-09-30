@@ -2,6 +2,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { APP_VERSION } from "../version";
+import NotificationBell from "./NotificationBell";
 
 const dashboardLink = { to: "/", label: "Dashboard", end: true };
 
@@ -115,6 +116,7 @@ export default function Layout() {
 
   return (
     <div className="h-screen flex overflow-hidden">
+      <NotificationBell />
       <aside className="w-56 bg-slate-900 text-slate-100 flex flex-col shrink-0 h-full overflow-y-auto">
         <div className="px-4 py-5 border-b border-slate-700">
           <h1 className="text-lg font-semibold">BNS Warehouse</h1>

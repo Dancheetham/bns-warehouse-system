@@ -5,6 +5,38 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.60] - 2026-09-30 (v0.125)
+
+### Added
+- **Notification bell** (top-right, floating - this app's layout has no top
+  header bar to live in). Number badge shows the unread count, polled every
+  30s; clicking it opens a dropdown of recent notifications and clears the
+  badge immediately, and clicking a notification navigates to its target
+  page. New general-purpose `notifications` table (migration V53) and
+  `NotificationService`/`NotificationController` - deliberately not
+  GDMS-specific, so another feature (or the reminder system idea for later)
+  can create notifications through the same table without rework.
+  `GdmsChannelService` now raises one `GDMS_FAILURE` notification per
+  assign/recall call that has any failed MAC (not one per 100-MAC batch),
+  linking straight to the GDMS Log pre-filtered to that day and FAILURE
+  status - directly answers the gap Dan raised: new stock sometimes gets
+  despatched before Grandstream has assigned it to our channel yet, and
+  until now that failure was only visible if someone thought to check the
+  log.
+- **Date picker on "Run GDMS end-of-day now"** (Settings > GDMS). Defaults
+  to today, same as before; picking an earlier date lets a whole bad day
+  (GDMS down, or a batch that failed for the reason above) be backfilled in
+  one go once things clear, instead of only ever re-running *today's*
+  despatches. Source on the sync log reads "Manual" for today, "Manual
+  (backfill 2026-09-29)" for a picked-back date.
+
+### Confirmed (no code change needed)
+- Retry behaviour for a failed GDMS assign was already correct:
+  `StockItem.gdmsSyncedAt` is only set on success, so a failed device is
+  picked up fresh by the next per-order button click, global run, or
+  scheduled run - nothing needs manually unflagging. Confirmed by reading
+  the code with Dan rather than changing anything.
+
 ## [0.23.59] - 2026-09-30 (v0.124)
 
 ### Added

@@ -64,12 +64,18 @@ public class SettingsController {
 
     /**
      * The global "run GDMS end-of-day now" button on Settings > GDMS -
-     * everything despatched today (across every GDMS-enabled company) that
-     * hasn't already been synced, run on demand instead of waiting for the
-     * 16:30 scheduled job.
+     * everything despatched on the given date (across every GDMS-enabled
+     * company) that hasn't already been synced, run on demand instead of
+     * waiting for the 16:30 scheduled job. Defaults to today when no date is
+     * given. The optional date lets a whole bad day (GDMS down, or a batch
+     * of stock despatched before Grandstream had assigned it to our channel
+     * yet) be backfilled once things clear, rather than waiting on the next
+     * scheduled run to pick up only *today's* despatches.
      */
     @PostMapping("/gdms/run-end-of-day")
-    public GdmsRunResult runGdmsEndOfDay() {
-        return gdmsEndOfDayService.runForDate(LocalDate.now(), "Manual");
+    public GdmsRunResult runGdmsEndOfDay(@RequestParam(required = false) LocalDate date) {
+        LocalDate target = date != null ? date : LocalDate.now();
+        String source = target.equals(LocalDate.now()) ? "Manual" : "Manual (backfill " + target + ")";
+        return gdmsEndOfDayService.runForDate(target, source);
     }
 }

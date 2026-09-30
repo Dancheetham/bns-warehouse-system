@@ -1,73 +1,55 @@
-Add GDMS recall-on-return and a per-MAC sync log (v0.124)
+Add a notification bell for GDMS failures + a backfill date picker (v0.125)
 
-Dan's next three asks after confirming the GDMS assign flow works
-end-to-end:
+Dan tested v0.124's recall/log feature and it worked as expected, then
+raised a real problem: sometimes new stock gets despatched before
+Grandstream has finished assigning it to our channel on their side, so
+our /assign call fails for it - and until now that failure was only
+visible if someone thought to go check the GDMS log. His two ideas:
 
-1. Recall a unit from GDMS whenever it moves back into stock - RMA
-   received, an order reversed to despatch, or an order cancelled and
-   returned to stock (and, later, a stock-adjustment feature not yet
-   built) - and reset gdmsSyncedAt so a future re-despatch resyncs it
-   fresh rather than being silently skipped as "already synced".
+1. A notification bell (top-right, number bubble) that surfaces "GDMS
+   Error" and takes you straight to the filtered log when clicked.
+2. A date picker next to "Run GDMS end-of-day now" so a bad day (GDMS
+   down, or a batch that failed for the reason above) can be backfilled
+   once it clears, rather than only ever re-running today's despatches.
 
-2. A GDMS sync log, similar to the existing Bug Reports log but with a
-   search bar, date range picker and status filter - one row per MAC
-   attempted (not per batch/company), showing date, source (scheduled/
-   manual/manual+order number/auto+reason), order number, MAC, channel
-   and status (success/failure + reason).
-
-3. Whether to send /assign one MAC at a time instead of batches of 100,
-   so one bad MAC can't hold up the rest of a batch - flagged alongside
-   a concern about GDMS mistaking rapid individual calls for a DDoS.
+He also asked me to confirm an assumption: that retrying via the
+per-order button would pick up a previously-failed device. Confirmed,
+no code change needed - StockItem.gdmsSyncedAt is only ever set on
+success, so a failed device is naturally picked up fresh by the next
+run of any kind.
 
 Implemented:
 
-- New `gdms_sync_log` table (migration V52) and `GdmsSyncLogService`,
-  written exclusively by `GdmsChannelService` immediately after every
-  /assign or /recycle batch call. A batch call that fails outright
-  (network/auth/GDMS error, before GDMS ever looked at individual MACs)
-  now writes a FAILURE row for every MAC in that batch before the
-  exception is rethrown - previously such a failure left no record of
-  the attempt at all.
+- New general-purpose `notifications` table (migration V53) -
+  deliberately not GDMS-specific, so it can back other notification
+  types later (Dan's mentioned wanting a reminder system at some
+  point) without rework. `NotificationService`/`NotificationController`:
+  GET /notifications (recent 30), GET /notifications/unread-count
+  (polled every 30s for the badge), POST /notifications/mark-all-read.
 
-- `GdmsChannelService.assignMacsToChannel()` now also takes the channel
-  name, a MAC-to-order-number map and a free-text "source", purely so
-  each log row is readable. `GdmsEndOfDayService` threads that source
-  through: "Scheduled" from the 16:30 job, "Manual" from the Settings
-  button, "Manual (Order BNS-1234)" from the per-order button (looked
-  up from the order's own despatch movements).
+- `GdmsChannelService` now raises one GDMS_FAILURE notification per
+  assign/recall call that has any failed MAC - once per call, not once
+  per internal 100-MAC batch, so a whole failed run doesn't spam the
+  bell. The notification links to /gdms-log?from=<today>&to=<today>&
+  status=FAILURE. Confirmed via two design questions with Dan: the
+  notifications table is general-purpose (not GDMS-only), and the
+  badge clears the instant the bell is opened rather than only once a
+  specific failure has actually been viewed.
 
-- New `GdmsChannelService.reclaimMacs()`, calling GDMS's /channel/recycle
-  (confirmed live via the doc's own api_data.js: request field is
-  "macs", not "macList" like /assign - a genuinely different field name,
-  not a typo carried over - same batching/per-MAC-logging shape).
+- New floating NotificationBell component (fixed top-right - this
+  app's Layout has no header bar to live in, sidebar-only) - badge,
+  dropdown of recent notifications, click-to-navigate, click-outside
+  to close.
 
-- New `GdmsRecallService`, shared by `OrderReversalService`
-  (reverseToDespatch/cancelAndReturnToStock) and `RmaService#receive()`.
-  Collects every already-synced StockItem being returned, reclaims all
-  of them from GDMS in one batched call, and always resets
-  gdmsSyncedAt afterwards regardless of whether the GDMS call itself
-  succeeded - a recall failure must never block the underlying RMA/
-  reversal/cancellation, since the stock is physically back in the
-  warehouse either way. The failed/skipped attempt is still visible on
-  the new log page even though it didn't stop anything.
+- GdmsLog.tsx now reads its initial from/to/status filters from the
+  URL query string on mount, so a notification's link lands already
+  filtered to the right day and FAILURE status.
 
-- New GDMS Log page (Admin nav), mirroring PaymentTracking.tsx's shape:
-  search input, status/operation filters, DateRangePicker, everything
-  filtered client-side against a plain unfiltered GET - the same
-  pattern every other log/history page in this codebase already uses,
-  confirmed via research there's no exception to deviate from.
-
-Decided against switching /assign to one-MAC-per-call: GDMS's own
-errorMacList already isolates individually-rejected MACs within an
-otherwise-successful batch (confirmed from the doc's own example
-response), so today's design already stops one bad MAC from blocking
-the rest of its batch. Going to one-per-call would multiply the number
-of signed API calls roughly a hundredfold for no real benefit, and
-directly increases the rate-limiting/DDoS-detection risk that was the
-actual worry behind the question - kept batches of 100.
-
-gdms-api-findings.md (project doc) to be updated with the /recycle
-field-name finding.
+- SettingsController's run-end-of-day endpoint now takes an optional
+  `date` param (defaults to today); Settings.tsx grew a date input
+  next to the button. Sync log source reads "Manual" for today,
+  "Manual (backfill <date>)" for a picked-back date, so it's obvious
+  on the log which runs were a live catch-up versus a backfill.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { formatDateTime, inDateRange } from "../utils/format";
 import DateRangePicker from "../components/DateRangePicker";
@@ -9,11 +10,18 @@ type StatusFilter = "" | "SUCCESS" | "FAILURE";
 type OperationFilter = "" | "ASSIGN" | "RECALL";
 
 export default function GdmsLog() {
+  // Pre-filled from a notification bell link (?from=...&to=...&status=FAILURE)
+  // when arriving that way - read once on mount, not kept in sync afterwards
+  // (changing the filters in the UI doesn't rewrite the URL).
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const status = searchParams.get("status");
+    return status === "SUCCESS" || status === "FAILURE" ? status : "";
+  });
   const [operationFilter, setOperationFilter] = useState<OperationFilter>("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [from, setFrom] = useState(() => searchParams.get("from") ?? "");
+  const [to, setTo] = useState(() => searchParams.get("to") ?? "");
 
   const { data: entries, isLoading } = useQuery({
     queryKey: ["gdms-sync-log"],

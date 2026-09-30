@@ -437,6 +437,15 @@ export interface BugReport {
   context?: string;
 }
 
+export interface Notification {
+  id: number;
+  type: string;
+  message: string;
+  link?: string;
+  createdAt: string;
+  read: boolean;
+}
+
 export interface GdmsSyncLog {
   id: number;
   attemptedAt: string;

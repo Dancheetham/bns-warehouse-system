@@ -58,6 +58,10 @@ export default function Settings() {
   const [gdmsPassword, setGdmsPassword] = useState("");
   const [gdmsRunResult, setGdmsRunResult] = useState<GdmsRunResult | null>(null);
   const [gdmsRunError, setGdmsRunError] = useState<string | null>(null);
+  // Defaults to today (yyyy-mm-dd, matching a plain <input type="date">) -
+  // only changed when backfilling a day GDMS was down or a batch shipped
+  // before Grandstream had assigned it to our channel yet.
+  const [gdmsRunDate, setGdmsRunDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [printSampleLabels, setPrintSampleLabels] = useState(true);
   const [autoAcknowledge, setAutoAcknowledge] = useState(true);
   const [autoPrintPickingNote, setAutoPrintPickingNote] = useState(true);
@@ -180,7 +184,8 @@ export default function Settings() {
   });
 
   const runGdmsEndOfDayMutation = useMutation({
-    mutationFn: async () => (await api.post<GdmsRunResult>("/settings/gdms/run-end-of-day")).data,
+    mutationFn: async () =>
+      (await api.post<GdmsRunResult>("/settings/gdms/run-end-of-day", null, { params: { date: gdmsRunDate } })).data,
     onMutate: () => {
       setGdmsRunResult(null);
       setGdmsRunError(null);
@@ -806,18 +811,31 @@ export default function Settings() {
           </p>
         </div>
         <div className="pt-2 border-t border-slate-100">
-          <button
-            type="button"
-            onClick={() => runGdmsEndOfDayMutation.mutate()}
-            disabled={runGdmsEndOfDayMutation.isPending}
-            className="btn-secondary text-sm"
-          >
-            {runGdmsEndOfDayMutation.isPending ? "Running…" : "Run GDMS end-of-day now"}
-          </button>
+          <div className="flex items-end gap-2">
+            <button
+              type="button"
+              onClick={() => runGdmsEndOfDayMutation.mutate()}
+              disabled={runGdmsEndOfDayMutation.isPending}
+              className="btn-secondary text-sm"
+            >
+              {runGdmsEndOfDayMutation.isPending ? "Running…" : "Run GDMS end-of-day now"}
+            </button>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">For date</label>
+              <input
+                type="date"
+                value={gdmsRunDate}
+                onChange={(e) => setGdmsRunDate(e.target.value)}
+                className="input"
+              />
+            </div>
+          </div>
           <p className="text-xs text-slate-400 mt-1">
-            Assigns every device despatched today to a GDMS-enabled customer (that hasn't already been synced) to
-            that company's GDMS channel, right now - the same thing the 16:30 scheduled run does. Safe to run more
-            than once a day: anything already synced is skipped.
+            Assigns every device despatched on the selected date to a GDMS-enabled customer (that hasn't already been
+            synced) to that company's GDMS channel, right now - the same thing the 16:30 scheduled run does for
+            today. Defaults to today; pick an earlier date to backfill a day GDMS was down or a batch shipped before
+            Grandstream had assigned it to our channel yet. Safe to run more than once for the same date: anything
+            already synced is skipped.
           </p>
           {gdmsRunResult && (
             <div className="mt-2 text-sm bg-slate-50 border border-slate-200 rounded p-3">
