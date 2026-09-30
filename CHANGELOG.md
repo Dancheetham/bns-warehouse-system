@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.58] - 2026-09-30 (v0.123)
+
+### Fixed
+- **GDMS assign reporting more devices than actually despatched.**
+  `GdmsEndOfDayService` collected a `StockItem` for every matching
+  `DESPATCH` movement row without deduplicating - one item can genuinely
+  have more than one `DESPATCH` movement (despatched, reversed to despatch,
+  despatched again), and `reverseToDespatch()` deliberately never touches
+  `gdmsSyncedAt`. So a single physical device could get queued twice, its
+  MAC sent to GDMS's `/assign` twice in the same batch, and both the
+  on-screen count and GDMS's own numbers reported it assigned twice over.
+  Confirmed on a real test order (one HT801 V2, reported as "2 device(s)
+  assigned"). Now deduplicates by `StockItem` id before building the batch.
+- Confirmed (no code change needed): untracked (`TrackingType.NONE`)
+  items - e.g. the RJ11 BT adaptor that ships alongside an HT801 V2 - are
+  already correctly skipped before ever reaching GDMS (no MAC address to
+  send), and being skipped never affects the tracked items in the same
+  order/batch.
+
 ## [0.23.57] - 2026-09-29 (v0.122)
 
 ### Fixed

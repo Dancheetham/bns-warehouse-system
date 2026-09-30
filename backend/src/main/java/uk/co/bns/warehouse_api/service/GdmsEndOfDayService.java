@@ -84,7 +84,19 @@ public class GdmsEndOfDayService {
         // Group the despatched, not-yet-synced, GDMS-enabled-and-channelled
         // items by company, so each company's devices go to GDMS in one
         // (possibly batched) call rather than one call per device.
+        //
+        // One StockItem can legitimately have more than one DESPATCH movement
+        // against it - e.g. despatched, then OrderReversalService#reverseToDespatch
+        // put it back to ALLOCATED (which deliberately never touches
+        // gdmsSyncedAt - see that class), then despatched again. Without
+        // deduplicating by item here, that single physical device's MAC would
+        // be added to the batch once per DESPATCH movement found, so GDMS (and
+        // our own devicesAssigned count) would report it assigned multiple
+        // times over for what's actually one device - confirmed happening on
+        // a real test order (1 device despatched-then-redespatched during
+        // testing, reported as "2 device(s) assigned").
         Map<Company, List<StockItem>> itemsByCompany = new LinkedHashMap<>();
+        java.util.Set<Long> seenItemIds = new java.util.HashSet<>();
         int skippedNoChannel = 0;
 
         for (StockMovement movement : movements) {
@@ -92,6 +104,7 @@ public class GdmsEndOfDayService {
             if (item == null || item.getGdmsSyncedAt() != null) continue;
             if (item.getMacAddress() == null || item.getMacAddress().isBlank()) continue; // nothing to send GDMS for a serial-only item
             if (item.getOrderLine() == null || item.getOrderLine().getOrder() == null) continue;
+            if (!seenItemIds.add(item.getId())) continue; // already queued from an earlier DESPATCH movement on this same item
             Company company = item.getOrderLine().getOrder().getCompany();
             if (company == null || !company.isGdms()) continue;
             if (company.getGdmsChannelId() == null || company.getGdmsChannelId().isBlank()) {

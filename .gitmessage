@@ -1,48 +1,33 @@
-Fix GDMS channel dropdown parsing - wrong response field names (v0.122)
+Fix GDMS double-counting a redespatched device (v0.123)
 
-v0.121 got /sub/list succeeding end-to-end (HTTP 200, no error), but
-the channel dropdown still showed nothing, even though the account
-genuinely has reseller channels. The response-parsing code had never
-actually been checked against the doc's own worked example response,
-only written from a plausible-sounding guess - the same mistake that
-caused the last two bugs, just in a different part of the code.
+Dan tested the per-order manual GDMS assign again today and got
+"2 device(s) assigned" for an order with only one device on it (an
+HT801 V2). GdmsEndOfDayService#runForMovements() built its batch by
+iterating every matching DESPATCH StockMovement and adding that
+movement's StockItem to the list, with no deduplication - but a
+single StockItem can genuinely have more than one DESPATCH movement
+against it: despatch, OrderReversalService#reverseToDespatch() (which
+deliberately never touches gdmsSyncedAt - see that class's own
+comments), despatch again. Both DESPATCH movements point at the same
+StockItem, so its one real MAC address went into the /assign batch
+twice, and both our own devicesAssigned count and GDMS's own success
+count reflected that duplicate.
 
-Pulling the doc's success.examples field for /sub/list for the first
-time (previously only its parameter names had been checked) shows:
+Fixed by deduplicating on StockItem id (a HashSet of seen ids) before
+a StockItem is ever added to a company's batch, regardless of how
+many DESPATCH movements reference it.
 
-  {
-    "data": {
-      "result": [{ "subEnterpriseId": 212, "enterpriseName": "xyye", ... }],
-      "total": 1, "pages": 1, "pageSize": 20, "pageNum": 1
-    },
-    "msg": "", "retCode": 0
-  }
+Also confirmed, while looking at this, that untracked items (e.g. the
+RJ11 BT adaptor that ships alongside an HT801 V2) are already handled
+correctly and needed no change: DespatchService still creates a
+StockMovement/StockItem for a NONE-tracking product (PickingService's
+quantity-pick path), but it has no macAddress, and
+runForMovements() already skips any item with a blank/null MAC before
+it's ever added to a batch - so an untracked item is silently excluded
+and never blocks or fails the assign for the tracked items in the same
+order.
 
-Three mismatches against what the code expected:
-
-1. The channel array is at data.result, not data directly, and not
-   data.list/data.rows/data.content (the fallback keys checked) - so
-   it was never found, and every lookup silently returned zero
-   channels despite a fully successful call.
-2. The channel name field is "enterpriseName", not
-   "subEnterpriseName" - any channel that WAS found would have shown
-   its own numeric ID as its name.
-3. The success/failure field is "retCode", not "code" - isSuccess()
-   checked the wrong name, so it always fell through to its "field
-   missing, assume success" default. Harmless so far by coincidence,
-   but meant a real GDMS business-logic failure (HTTP 200, retCode
-   non-zero) would never have been caught.
-
-Also checked /assign's own example while in this code and found a
-related issue: its response can report individual MACs as rejected
-(data.result.errorMacList) even when the batch call itself succeeds
-(retCode: 0) - previously ignored entirely, so a rejected MAC would
-still get marked synced and never retried. assignMacsToChannel() now
-excludes those MACs from what it reports as accepted.
-
-gdms-api-findings.md (project doc) updated with the confirmed response
-shape and a repeated lesson: check a doc entry's own example response,
-not just its parameter names, before writing the parsing code.
+gdms-api-findings.md (project doc) updated with both confirmations.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
