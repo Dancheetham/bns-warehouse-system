@@ -1,31 +1,26 @@
-Surface the print agent's real error instead of a blanket "not
-reachable", show APC's short consignment number (v0.131)
+Fix APC label fetch always throwing "no label" (v0.132)
 
-Dan tested Print Label on a real APC order right after v0.130 and saw
-nothing happen - no tab, no print, matching what's *supposed* to happen
-when the print agent (print-agent/agent.py, a small local Python/Windows-
-tray tool BNS already built for exactly this - not QZ Tray, which came up
-as something used with APC in the past but isn't what this app talks to)
-isn't reachable. Its ZPL handling is already generic (any courier's raw
-bytes, not DPD-specific), so no backend change was needed there - but
-digging into the actual failure path in printAgent.ts found a real bug:
-when the agent IS running and reachable but the print itself fails inside
-it (pywin32 not installed, the printer name in Settings not matching what
-Windows calls it, SumatraPDF missing, the printer offline, ...), the agent
-already replies with its own {"status":"error","message":"..."} body
-explaining exactly why - but the frontend discarded that response entirely
-and reported the same generic "Print agent not reachable" message either
-way, so a real, fixable problem looked identical to "the agent just isn't
-running". printPdf/printRaw now read that body back out when the agent did
-respond (just not with 2xx) and both DPD and APC's Print Label, plus Print
-Picking Note, surface the agent's own reason - the generic message is now
-only shown for a genuine connection failure.
+Dan confirmed the print agent is fine (DPD labels still print 100%) and
+tried Print Label on an APC order again - got "APC didn't return a label
+for this waybill - not printed, to avoid sending garbage to the label
+printer" both on screen and in the bug report (500), on every attempt.
 
-Also: Dan found the "consignment number" APC's own portal shows
-(0007051) is simply the last 7 digits of the full 22-digit Hypaship
-WayBill this app stores - now shown alongside the waybill on the order
-screen so it doesn't need re-deriving by hand every time it's needed for
-a phone call or the portal.
+Re-checked the integration guide's own literal JSON response example for
+GET Orders/{waybill}.json?labelformat=ZPL&labels=True (section 4.2) and
+found the actual shape: the label is NOT at Order.Label as the code
+assumed - it's nested under each shipment piece,
+Order.ShipmentDetails.Items.Item.Label.Content. So
+ApcShippingService.getLabel() was looking in the wrong place on literally
+every call, regardless of whether APC ever sent a label back at all - this
+bug has been there since the very first APC integration in v0.126, just
+invisible until this test actually got far enough to hit it.
+
+getLabel() now reads Items.Item (object for one piece, array for several,
+same shape as the request body) and pulls Label.Content from each Item,
+concatenating them for a multi-carton order - the same approach
+DpdShippingService.joinLabelStrings already uses for DPD's multi-parcel
+labels, since each is a self-contained ZPL block safe to print back to
+back in one raw job.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

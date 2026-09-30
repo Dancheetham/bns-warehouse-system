@@ -5,6 +5,21 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.67] - 2026-09-30 (v0.132)
+
+### Fixed
+
+- **APC labels always failed with "APC didn't return a label for this
+  waybill"**: `getLabel()` was looking for the label at `Order.Label`, but
+  APC's actual response nests it under each shipment piece -
+  `Order.ShipmentDetails.Items.Item.Label.Content` (confirmed from the
+  integration guide's own literal JSON response example) - so the check
+  always found nothing and always threw, on every APC order, regardless of
+  whether the print agent was reachable. Now reads the label from where APC
+  actually puts it, and (matching how DPD's multi-parcel labels are
+  already handled) concatenates one label per shipment piece for a
+  multi-carton order rather than assuming there's always exactly one.
+
 ## [0.23.66] - 2026-09-30 (v0.131)
 
 ### Fixed

@@ -154,24 +154,53 @@ public class ApcShippingService {
                 .build();
 
         JsonNode responseBody = send(request, "fetch the APC label");
+
+        // Label isn't at Order.Label (that was the bug - always threw "APC
+        // didn't return a label" regardless of whether APC actually sent
+        // one) - it's nested under each shipment piece:
+        // Order.ShipmentDetails.Items.Item.Label.Content, confirmed from the
+        // guide's own literal JSON response example (section 4.2). Items can
+        // be a single object (one piece) or an array (several, one Label
+        // each - same "For Multi-Items" shape as the request body). Every
+        // piece's label is collected and concatenated, same approach
+        // DpdShippingService.joinLabelStrings already uses for a multi-
+        // parcel DPD shipment - each is a self-contained ^XA...^XZ block, so
+        // printing them back to back in one raw job is standard for ZPL.
         JsonNode orderNode = responseBody.findPath("Order");
         JsonNode data = !orderNode.isMissingNode() ? orderNode : responseBody;
-        JsonNode label = data.has("Label") ? data.get("Label") : data.path("Labels").isArray() && data.path("Labels").size() > 0
-                ? data.path("Labels").get(0) : data.path("Label");
+        JsonNode itemsWrapper = data.findPath("Items");
+        List<JsonNode> itemNodes = new java.util.ArrayList<>();
+        JsonNode itemNode = itemsWrapper.path("Item");
+        if (itemNode.isArray()) {
+            itemNode.forEach(itemNodes::add);
+        } else if (itemNode.isObject() && !itemNode.isMissingNode()) {
+            itemNodes.add(itemNode);
+        } else if (itemsWrapper.isArray()) {
+            // Defensive fallback in case a future response ever comes back
+            // with Items itself as a bare array rather than {"Item": ...} -
+            // not expected per the guide, but cheap to handle.
+            itemsWrapper.forEach(itemNodes::add);
+        }
 
-        String content = firstNonBlank(label, "Content", "content");
-        String format = firstNonBlank(label, "Format", "format");
-        if (content == null) {
-            log.error("APC's label response for order {} had no Label.Content: {}", order.getOrderNumber(), responseBody);
+        java.io.ByteArrayOutputStream combined = new java.io.ByteArrayOutputStream();
+        String format = null;
+        for (JsonNode item : itemNodes) {
+            JsonNode label = item.path("Label");
+            String content = firstNonBlank(label, "Content", "content");
+            if (content == null) continue;
+            if (format == null) format = firstNonBlank(label, "Format", "format");
+            try {
+                combined.writeBytes(Base64.getDecoder().decode(content));
+            } catch (IllegalArgumentException e) {
+                throw new RuntimeException("APC's label response couldn't be decoded: " + e.getMessage(), e);
+            }
+        }
+
+        if (combined.size() == 0) {
+            log.error("APC's label response for order {} had no Item.Label.Content anywhere: {}", order.getOrderNumber(), responseBody);
             throw new RuntimeException("APC didn't return a label for this waybill - not printed, to avoid sending garbage to the label printer");
         }
-        byte[] decoded;
-        try {
-            decoded = Base64.getDecoder().decode(content);
-        } catch (IllegalArgumentException e) {
-            throw new RuntimeException("APC's label response couldn't be decoded: " + e.getMessage(), e);
-        }
-        return new ApcLabelResult(decoded, format != null ? format : "ZPL");
+        return new ApcLabelResult(combined.toByteArray(), format != null ? format : "ZPL");
     }
 
     private static final DateTimeFormatter APC_TRACK_DATETIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
