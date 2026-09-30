@@ -796,6 +796,27 @@ export interface ApcServiceLookupResult {
   liveError?: string;
 }
 
+// One scan/status event from APC's Tracks.json - dateTime is exactly as APC
+// returns it (dd/MM/yyyy HH:mm:ss), left as a string since it's display-only.
+export interface ApcTrackingEvent {
+  statusCode?: string;
+  description: string;
+  dateTime?: string;
+  location?: string;
+}
+
+// Result of GET /orders/{id}/apc-tracking. Unlike DPD (a plain public
+// tracking-page link built client-side, see dpdTrackingUrl), APC has no
+// equivalent unauthenticated consumer tracker confirmed to accept a
+// Hypaship WayBill, so this comes from APC's own authenticated Tracks API
+// via the backend and is rendered inside the app. `events` is every scan
+// across every piece of the shipment, newest first.
+export interface ApcTrackingResult {
+  events: ApcTrackingEvent[];
+  latestStatus?: string;
+  latestDateTime?: string;
+}
+
 // One DPD service actually available right now for an order's delivery
 // address and weight, per DPD's live "validate outbound services" lookup -
 // networkKey is what's sent back to DPD as the shipment's networkCode.

@@ -1,37 +1,27 @@
-Fix APC's malformed request bodies, move the Service Live/Cached badge
-above the dropdown (v0.129)
+Add APC tracking (v0.130)
 
-Dan reported that on v0.128, picking an APC service showed "Not live for
-this address: Failed to check APC service availability - APC said:
-UNEXPECTED ERROR" - and that whatever changed was blocking every live
-APC service lookup, not just this one address.
+Dan confirmed v0.129's APC booking fix worked end to end and asked for
+tracking wired up "the same way as DPD" - i.e. a Track button on the order
+screen.
 
-Re-read the APC Hypaship API v3 integration guide's own literal JSON/XML
-request examples (booking and service-availability calls both use the
-same envelope). Root cause: ApcShippingService built its request bodies
-as flat JSON at the root, but APC's actual schema requires the whole
-payload wrapped as {"Orders": {"Order": {...}}}. ShipmentDetails.Items
-was also the wrong shape - a bare array - where APC wants
-{"Items": {"Item": {...}}} for a single item or
-{"Items": {"Item": [{...}, {...}]}} for several, with the array nested
-one level inside "Item", not "Items" itself being an array.
+DPD's Track button is just a plain link to DPD's public tracking site
+(track.dpd.co.uk), built client-side from the consignment number - no API
+call needed. APC has no confirmed equivalent: the closest public tracker
+found (APC Choice, apcchoice.apc-overnight.com) asks for a "7-digit
+consignment number", which doesn't match the 22-digit Hypaship WayBill
+this app stores, so there was no way to be confident a plain link would
+actually work.
 
-This had been silently wrong since the very first APC integration in
-v0.126 - APC was rejecting every booking and service-availability call
-outright with an "UNEXPECTED ERROR" the whole time. It only became
-visible once v0.128's Messages.Code check started actually surfacing
-APC's real response instead of treating HTTP 200 as success regardless
-of body content. Both buildRequestBody() and buildServiceAvailabilityBody()
-now wrap the payload correctly via a shared wrapAsOrder() helper; booking
-and label response parsing were loosened from checking one fixed nesting
-level to searching the whole response (findPath), in case APC's replies
-use the same wrapper.
-
-Also moved the Service dropdown's small "Live"/"Cached" badge (APC and
-DPD both use the same pattern) from an absolutely-positioned overlay on
-top of the select box to its own row just above it, next to the
-"Service" label, per Dan's request - it no longer sits over the
-dropdown text and doesn't push any surrounding layout around.
+Used APC's own authenticated Tracks.json endpoint instead (documented in
+section 5 of the integration guide): GET
+Tracks/{waybill}.json?searchtype=CarrierWaybill&history=Yes, same
+remote-user auth as every other APC call. ApcShippingService.trackShipment
+walks the response's nested Items/Item/Activity/Status structure (one
+Activity array per shipment piece), flattens every scan into a single
+list, and sorts it newest-first. A "Track" button on the order screen
+calls this through the backend and shows the latest status inline, with
+the full scan history tucked under a "Full scan history" toggle so it
+doesn't dominate the page for the common case.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

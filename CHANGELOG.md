@@ -5,6 +5,17 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.65] - 2026-09-30 (v0.130)
+
+### Added
+
+- **APC tracking**: a "Track →" button next to Print Label on an APC order,
+  alongside DPD's. APC doesn't have a confirmed public tracking page that
+  accepts a Hypaship WayBill the way DPD's does with a DPD consignment
+  number, so this calls APC's own authenticated `Tracks.json` endpoint
+  through the backend instead of linking out - shows the latest scan status
+  right away, with the full scan history available underneath.
+
 ## [0.23.64] - 2026-09-30 (v0.129)
 
 ### Fixed

@@ -12,6 +12,8 @@ import uk.co.bns.warehouse_api.dto.ApcLabelResult;
 import uk.co.bns.warehouse_api.dto.ApcOrderResult;
 import uk.co.bns.warehouse_api.dto.ApcServiceLookupResult;
 import uk.co.bns.warehouse_api.dto.ApcServiceOption;
+import uk.co.bns.warehouse_api.dto.ApcTrackingEvent;
+import uk.co.bns.warehouse_api.dto.ApcTrackingResult;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
@@ -170,6 +172,93 @@ public class ApcShippingService {
             throw new RuntimeException("APC's label response couldn't be decoded: " + e.getMessage(), e);
         }
         return new ApcLabelResult(decoded, format != null ? format : "ZPL");
+    }
+
+    private static final DateTimeFormatter APC_TRACK_DATETIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+
+    /**
+     * Tracking, via APC's own authenticated Tracks.json (GET
+     * Tracks/{waybill}.json?searchtype=CarrierWaybill&history=Yes) - unlike
+     * DPD, which is just a public tracking-page link the frontend builds
+     * itself (see dpdTrackingUrl), APC has no equivalent unauthenticated
+     * consumer tracker confirmed to accept a Hypaship WayBill, so this is
+     * surfaced inside the app instead of linked out to. Every scan across
+     * every piece of the shipment is collected (a multi-carton order has one
+     * Activity[] per Item) and sorted newest-first; events whose date/time
+     * doesn't parse are still included, just sorted to the end, so a format
+     * surprise in APC's response never hides scan history that did arrive.
+     */
+    public ApcTrackingResult trackShipment(Order order) {
+        if (order.getApcWaybill() == null) {
+            throw new ValidationException("Order " + order.getOrderNumber() + " has no APC shipment booked yet");
+        }
+        String url = apcAuthService.baseUrl() + "Tracks/" + order.getApcWaybill()
+                + ".json?searchtype=CarrierWaybill&history=Yes";
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .header("remote-user", apcAuthService.authHeader())
+                .header("Accept", "application/json")
+                .GET()
+                .build();
+
+        JsonNode responseBody = send(request, "track the APC shipment");
+        JsonNode trackNode = responseBody.findPath("Track");
+        List<JsonNode> tracks = new java.util.ArrayList<>();
+        if (trackNode.isArray()) {
+            trackNode.forEach(tracks::add);
+        } else if (trackNode.isObject() && !trackNode.isMissingNode()) {
+            // A single result can come back as one object rather than a
+            // one-item array, same quirk as ServiceAvailability's Service.
+            tracks.add(trackNode);
+        }
+
+        List<ApcTrackingEvent> events = new java.util.ArrayList<>();
+        for (JsonNode track : tracks) {
+            JsonNode items = track.findPath("Items");
+            List<JsonNode> itemNodes = new java.util.ArrayList<>();
+            if (items.isArray()) {
+                items.forEach(itemNodes::add);
+            } else if (items.isObject() && !items.isMissingNode()) {
+                itemNodes.add(items);
+            }
+            for (JsonNode itemWrapper : itemNodes) {
+                JsonNode item = itemWrapper.has("Item") ? itemWrapper.get("Item") : itemWrapper;
+                JsonNode activity = item.path("Activity");
+                if (!activity.isArray()) continue;
+                for (JsonNode activityEntry : activity) {
+                    JsonNode statusNode = activityEntry.has("Status") ? activityEntry.get("Status") : activityEntry;
+                    String description = firstNonBlank(statusNode, "StatusDescription", "statusDescription");
+                    if (description == null) continue;
+                    events.add(new ApcTrackingEvent(
+                            firstNonBlank(statusNode, "StatusCode", "statusCode"),
+                            description,
+                            firstNonBlank(statusNode, "DateTime", "dateTime"),
+                            firstNonBlank(statusNode, "Location", "location")));
+                }
+            }
+        }
+
+        events.sort((a, b) -> {
+            LocalDateTime dtA = parseTrackDateTime(a.dateTime());
+            LocalDateTime dtB = parseTrackDateTime(b.dateTime());
+            if (dtA == null && dtB == null) return 0;
+            if (dtA == null) return 1;
+            if (dtB == null) return -1;
+            return dtB.compareTo(dtA);
+        });
+
+        String latestStatus = events.isEmpty() ? null : events.get(0).description();
+        String latestDateTime = events.isEmpty() ? null : events.get(0).dateTime();
+        return new ApcTrackingResult(events, latestStatus, latestDateTime);
+    }
+
+    private LocalDateTime parseTrackDateTime(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(value, APC_TRACK_DATETIME);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

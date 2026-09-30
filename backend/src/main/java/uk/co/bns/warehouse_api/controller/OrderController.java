@@ -12,6 +12,7 @@ import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
 import uk.co.bns.warehouse_api.dto.ApcLabelResult;
 import uk.co.bns.warehouse_api.dto.ApcOrderResult;
 import uk.co.bns.warehouse_api.dto.ApcServiceLookupResult;
+import uk.co.bns.warehouse_api.dto.ApcTrackingResult;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
@@ -161,5 +162,13 @@ public class OrderController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"apc-label-" + id + ".zpl\"")
                 .contentType(MediaType.valueOf("application/x-zpl"))
                 .body(result.labelData());
+    }
+
+    // APC's tracking (see ApcShippingService.trackShipment's doc comment for
+    // why this is an authenticated in-app lookup rather than a plain public
+    // link like DPD's Track button).
+    @GetMapping("/{id}/apc-tracking")
+    public ApcTrackingResult apcTracking(@PathVariable Long id) {
+        return apcShippingService.trackShipment(orderService.findById(id));
     }
 }
