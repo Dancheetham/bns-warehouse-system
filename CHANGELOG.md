@@ -5,6 +5,43 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.68] - 2026-09-30 (v0.133)
+
+### Fixed
+
+- **APC shipments were inflated to double their real weight**: every APC
+  Item sent a hardcoded 30x20x20cm parcel size regardless of what was
+  actually shipped, and APC calculates volumetric weight from those
+  dimensions - so a genuine 1kg mailpack/courier pack was rated as ~2kg,
+  risking the wrong product tier. Whether Length/Width/Height are even
+  mandatory is account-specific per APC's own integration guide ("can be
+  mandatory or optional depending on customer account settings"), so
+  rather than guess, APC bookings and service-availability checks now omit
+  dimensions entirely by default; if a live booking is ever rejected for
+  missing dimensions, that's remembered (Settings) and every later call
+  sends `1` in each box instead of a made-up "plausible" size, never
+  another value that could pull volumetric weight back up.
+- **APC tracking link missing from Delivery History**: the Track column
+  there only ever checked for `courier === "DPD"`, so APC orders never
+  got a tracking link at all, on any order status - not specifically
+  "Invoice Pending" as first suspected, that was just the status the
+  affected order happened to be in. Delivery History now has its own
+  Track → for APC orders too, calling the same authenticated APC Tracks
+  API the order screen uses (APC has no confirmed public tracking page
+  the way DPD does) and showing the latest scan status inline.
+
+### Changed
+
+- **Shipping label printer settings moved under Couriers**: "Shipping
+  label printer" and "Label printer DPI" have moved out of the top-level
+  Printing section into Settings > Couriers > DPD, and APC now has its
+  own separate "Shipping label printer" field (no DPI option - APC's
+  integration guide doesn't expose one, unlike DPD) under Settings >
+  Couriers > APC. This lets DPD and APC labels print to two different
+  physical printers, since their label sizes can differ. Print agent URL
+  and Picking note printer stay in Printing, since those apply to every
+  courier alike.
+
 ## [0.23.67] - 2026-09-30 (v0.132)
 
 ### Fixed

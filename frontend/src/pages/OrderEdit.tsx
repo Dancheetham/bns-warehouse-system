@@ -541,7 +541,7 @@ export default function OrderEdit() {
     try {
       const response = await api.get(`/orders/${id}/apc-labels`, { responseType: "text" });
       const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
-      const printerName = settings?.["label_printer"] || "";
+      const printerName = settings?.["apc_label_printer"] || "";
       const printResult = await printRaw(response.data, agentUrl, printerName);
       if (printResult.printed) {
         showToast("Label sent to printer.");

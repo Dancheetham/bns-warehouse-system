@@ -1,26 +1,33 @@
-Fix APC label fetch always throwing "no label" (v0.132)
+APC volumetric weight fix, separate label printers, Delivery History APC tracking (v0.133)
 
-Dan confirmed the print agent is fine (DPD labels still print 100%) and
-tried Print Label on an APC order again - got "APC didn't return a label
-for this waybill - not printed, to avoid sending garbage to the label
-printer" both on screen and in the bug report (500), on every attempt.
+Three fixes from Dan's latest round of APC testing:
 
-Re-checked the integration guide's own literal JSON response example for
-GET Orders/{waybill}.json?labelformat=ZPL&labels=True (section 4.2) and
-found the actual shape: the label is NOT at Order.Label as the code
-assumed - it's nested under each shipment piece,
-Order.ShipmentDetails.Items.Item.Label.Content. So
-ApcShippingService.getLabel() was looking in the wrong place on literally
-every call, regardless of whether APC ever sent a label back at all - this
-bug has been there since the very first APC integration in v0.126, just
-invisible until this test actually got far enough to hit it.
+1. Volumetric weight: APC Item blocks always sent a hardcoded 30x20x20cm
+   parcel size, and APC computes volumetric weight from Length/Width/
+   Height - so a genuine 1kg mailpack/courier pack was rated as ~2kg,
+   risking the wrong product tier. Whether dimensions are even mandatory
+   is account-specific per the integration guide's own optional-fields
+   table, so ApcShippingService now omits dimensions by default and only
+   starts sending 1cm placeholders (never a "plausible" size) if a live
+   booking is ever actually rejected for missing them, remembering that
+   via Settings so it doesn't have to rediscover it every time.
 
-getLabel() now reads Items.Item (object for one piece, array for several,
-same shape as the request body) and pulls Label.Content from each Item,
-concatenating them for a multi-carton order - the same approach
-DpdShippingService.joinLabelStrings already uses for DPD's multi-parcel
-labels, since each is a self-contained ZPL block safe to print back to
-back in one raw job.
+2. Delivery History never showed an APC tracking link on any order,
+   because its Track column only checked courier === "DPD" - not specific
+   to "Invoice Pending" status as first suspected, that was just what the
+   one order Dan was looking at happened to be in. Delivery History now
+   has its own Track -> for APC too, calling the same authenticated APC
+   Tracks API OrderEdit already uses (APC has no confirmed public tracker
+   like DPD's), showing the latest scan status inline per row.
+
+3. Dan uses different label printers per courier (different label
+   sizes), so "Shipping label printer" and "Label printer DPI" have moved
+   out of the shared Printing section into Settings > Couriers > DPD, and
+   APC gets its own separate label-printer field under Couriers > APC (no
+   DPI option there - confirmed via the full integration guide text that
+   DPI is never mentioned anywhere in it, unlike DPD's explicit dpi
+   parameter). Print agent URL and picking note printer stay in Printing
+   since they're shared across every courier.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { downloadFile } from "../components/ReportCard";
 import { formatDateTime } from "../utils/format";
-import { DeliveryHistoryView } from "../types";
+import { ApcTrackingResult, DeliveryHistoryView } from "../types";
 import { dpdTrackingUrl } from "../utils/tracking";
 
 const STATUS_STYLES: Record<string, string> = {
@@ -20,6 +20,31 @@ export default function DeliveryHistory() {
   const [to, setTo] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // APC has no confirmed public tracking link the way DPD does (see
+  // dpdTrackingUrl / utils/tracking.ts) - Track → here calls the same
+  // authenticated APC Tracks API endpoint OrderEdit uses and shows the
+  // latest status inline, per order row, fetched on click rather than for
+  // every row up front since it's a live call out to APC each time.
+  const [apcTracking, setApcTracking] = useState<
+    Record<number, { loading: boolean; error?: string; result?: ApcTrackingResult }>
+  >({});
+  const trackApc = async (orderId: number) => {
+    setApcTracking((prev) => ({ ...prev, [orderId]: { loading: true } }));
+    try {
+      const response = await api.get<ApcTrackingResult>(`/orders/${orderId}/apc-tracking`);
+      setApcTracking((prev) => ({
+        ...prev,
+        [orderId]: {
+          loading: false,
+          result: response.data,
+          error: response.data.events.length ? undefined : "No scans recorded yet",
+        },
+      }));
+    } catch (err) {
+      setApcTracking((prev) => ({ ...prev, [orderId]: { loading: false, error: (err as Error).message } }));
+    }
+  };
 
   const { data: deliveries, isLoading } = useQuery({
     queryKey: ["delivery-history", from, to],
@@ -156,6 +181,25 @@ export default function DeliveryHistory() {
                     >
                       Track
                     </a>
+                  )}
+                  {d.consignmentNumber && d.courier === "APC" && (
+                    <div className="inline-block text-left">
+                      <button
+                        onClick={() => trackApc(d.orderId)}
+                        disabled={apcTracking[d.orderId]?.loading}
+                        className="text-emerald-600 hover:underline text-xs disabled:opacity-50"
+                      >
+                        {apcTracking[d.orderId]?.loading ? "Tracking…" : "Track"}
+                      </button>
+                      {apcTracking[d.orderId]?.error && (
+                        <p className="text-xs text-red-600 whitespace-nowrap">{apcTracking[d.orderId]?.error}</p>
+                      )}
+                      {apcTracking[d.orderId]?.result && apcTracking[d.orderId]!.result!.events.length > 0 && (
+                        <p className="text-xs text-slate-500 whitespace-nowrap">
+                          {apcTracking[d.orderId]!.result!.latestStatus}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </td>
               </tr>

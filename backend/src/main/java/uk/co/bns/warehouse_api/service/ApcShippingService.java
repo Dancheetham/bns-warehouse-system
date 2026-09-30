@@ -55,15 +55,6 @@ public class ApcShippingService {
 
     static final String DEFAULT_GOODS_DESCRIPTION = "Telecoms and networking equipment";
 
-    // No per-product/per-carton dimensions exist anywhere in this system
-    // (Product/Carton only ever capture weight) - APC's Item block requires
-    // Length/Width/Height regardless, so a configurable default parcel size
-    // is used for every item rather than inventing per-product dimensions
-    // that don't exist. See Settings > Couriers > APC.
-    private static final String DEFAULT_PARCEL_LENGTH_CM = "30";
-    private static final String DEFAULT_PARCEL_WIDTH_CM = "20";
-    private static final String DEFAULT_PARCEL_HEIGHT_CM = "20";
-
     // Last-resort fallback if APC has never once returned a live service list
     // for this account (freshly configured, or Training/Live both
     // unreachable) - see checkServiceAvailability()/loadLastKnownServices().
@@ -99,16 +90,7 @@ public class ApcShippingService {
     public ApcOrderResult createOrder(Order order) {
         validateOrder(order);
 
-        ObjectNode body = buildRequestBody(order);
-
-        HttpRequest request = HttpRequest.newBuilder(URI.create(apcAuthService.baseUrl() + "Orders.json"))
-                .header("remote-user", apcAuthService.authHeader())
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                .build();
-
-        JsonNode responseBody = send(request, "book the APC shipment");
+        JsonNode responseBody = postWithDimensionRetry("Orders.json", this::buildRequestBody, order, "book the APC shipment");
         // findPath digs into whichever wrapper the response actually uses
         // (e.g. {"Orders":{"Order":{...}}}, mirroring the request shape)
         // without needing to know the exact nesting up front - same
@@ -309,15 +291,8 @@ public class ApcShippingService {
             throw new ValidationException("This order needs a delivery postcode and country before APC services can be looked up");
         }
         try {
-            ObjectNode body = buildServiceAvailabilityBody(order);
-            HttpRequest request = HttpRequest.newBuilder(URI.create(apcAuthService.baseUrl() + "ServiceAvailability.json"))
-                    .header("remote-user", apcAuthService.authHeader())
-                    .header("Content-Type", "application/json")
-                    .header("Accept", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                    .build();
-
-            JsonNode responseBody = send(request, "check APC service availability");
+            JsonNode responseBody = postWithDimensionRetry(
+                    "ServiceAvailability.json", this::buildServiceAvailabilityBody, order, "check APC service availability");
             JsonNode serviceList = responseBody.path("ServiceAvailability").path("Services").path("Service");
             List<ApcServiceOption> options = new java.util.ArrayList<>();
             if (serviceList.isArray()) {
@@ -391,9 +366,7 @@ public class ApcShippingService {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("Type", "ALL");
         item.put("Weight", weight.doubleValue());
-        item.put("Length", settingsService.get("apc_default_parcel_length_cm", DEFAULT_PARCEL_LENGTH_CM));
-        item.put("Width", settingsService.get("apc_default_parcel_width_cm", DEFAULT_PARCEL_WIDTH_CM));
-        item.put("Height", settingsService.get("apc_default_parcel_height_cm", DEFAULT_PARCEL_HEIGHT_CM));
+        addDimensionsIfRequired(item);
         item.put("Value", customsValue(order).doubleValue());
         // "Items" is not itself an array - APC's schema is {"Items":{"Item": {...} } }
         // for a single item, or {"Items":{"Item": [ {...}, {...} ]}} for several
@@ -505,30 +478,32 @@ public class ApcShippingService {
         }
 
         // One APC "piece" per physical carton already packed - same idea as
-        // DpdShippingService.buildRequestBody's per-carton parcels, but
-        // without per-product dimensions to draw on (see the class-level
-        // comment), so every piece uses the configured default parcel size.
-        // Falls back to a single piece covering the whole order's weight
-        // when packing hasn't happened yet, exactly like DPD's own fallback.
+        // DpdShippingService.buildRequestBody's per-carton parcels. No real
+        // per-product/per-carton dimensions exist anywhere in this system
+        // (Product/Carton only ever capture weight), and APC's own docs say
+        // Length/Width/Height are only mandatory on some accounts - so
+        // dimensions are only sent once this account is known to actually
+        // need them (see addDimensionsIfRequired), rather than making up a
+        // plausible-looking box size that skews APC's volumetric-weight
+        // calculation and can bump a genuinely light item into a pricier
+        // product tier. Falls back to a single piece covering the whole
+        // order's weight when packing hasn't happened yet, exactly like
+        // DPD's own fallback.
         List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
         ObjectNode shipmentDetails = root.putObject("ShipmentDetails");
         List<ObjectNode> items = new java.util.ArrayList<>();
         BigDecimal goodsValue = customsValue(order);
 
-        String lengthCm = settingsService.get("apc_default_parcel_length_cm", DEFAULT_PARCEL_LENGTH_CM);
-        String widthCm = settingsService.get("apc_default_parcel_width_cm", DEFAULT_PARCEL_WIDTH_CM);
-        String heightCm = settingsService.get("apc_default_parcel_height_cm", DEFAULT_PARCEL_HEIGHT_CM);
-
         if (!cartons.isEmpty()) {
             for (Carton carton : cartons) {
                 BigDecimal weight = carton.getWeightKg() != null ? carton.getWeightKg() : totalWeightKg(order).divide(
                         BigDecimal.valueOf(cartons.size()), 3, java.math.RoundingMode.HALF_UP);
-                items.add(buildItem(weight, lengthCm, widthCm, heightCm,
+                items.add(buildItem(weight,
                         goodsValue.divide(BigDecimal.valueOf(cartons.size()), 2, java.math.RoundingMode.HALF_UP)));
             }
             shipmentDetails.put("NumberOfPieces", cartons.size());
         } else {
-            items.add(buildItem(totalWeightKg(order), lengthCm, widthCm, heightCm, goodsValue));
+            items.add(buildItem(totalWeightKg(order), goodsValue));
             shipmentDetails.put("NumberOfPieces", 1);
         }
 
@@ -555,12 +530,10 @@ public class ApcShippingService {
         return wrapAsOrder(root);
     }
 
-    private ObjectNode buildItem(BigDecimal weight, String lengthCm, String widthCm, String heightCm, BigDecimal value) {
+    private ObjectNode buildItem(BigDecimal weight, BigDecimal value) {
         ObjectNode item = objectMapper.createObjectNode();
         item.put("Weight", weight.doubleValue());
-        item.put("Length", lengthCm);
-        item.put("Width", widthCm);
-        item.put("Height", heightCm);
+        addDimensionsIfRequired(item);
         item.put("Value", value.doubleValue());
         return item;
     }
@@ -603,6 +576,83 @@ public class ApcShippingService {
             }
         }
         return null;
+    }
+
+    // Whether this APC account's own settings actually require
+    // Item/Length/Width/Height on every call - the guide itself says this
+    // "can be mandatory or optional depending on customer account settings"
+    // (section 4, optional-fields table), so it can't be known up front.
+    // Discovered automatically the first time it matters (see
+    // postWithDimensionRetry) and remembered here from then on, so it's
+    // only ever figured out once per account rather than on every call.
+    private static final String DIMENSIONS_REQUIRED_KEY = "apc_dimensions_required";
+
+    private boolean dimensionsRequired() {
+        return "true".equals(settingsService.get(DIMENSIONS_REQUIRED_KEY, ""));
+    }
+
+    /**
+     * Sends dimensions only once this account is known to need them -
+     * before that's known, Length/Width/Height are omitted from every Item
+     * entirely (see addDimensionsIfRequired). Sending them by default was
+     * the previous behaviour, and it was actively wrong: a made-up default
+     * parcel size (e.g. 30x20x20cm) makes APC calculate a volumetric weight
+     * from those dimensions and bill/rate against whichever of actual vs
+     * volumetric weight is higher - so a genuine 1kg MailPack was coming
+     * out volumetric-rated at ~2kg purely from an invented box size, wrongly
+     * pushing it toward a bigger, pricier product tier. Once this account is
+     * confirmed to actually require the fields, 1cm is sent in each (not a
+     * "plausible" box size) - enough to satisfy a mandatory-field check
+     * without materially affecting volumetric weight.
+     */
+    private void addDimensionsIfRequired(ObjectNode item) {
+        if (dimensionsRequired()) {
+            item.put("Length", "1");
+            item.put("Width", "1");
+            item.put("Height", "1");
+        }
+    }
+
+    private boolean looksLikeDimensionError(String message) {
+        if (message == null) return false;
+        String lower = message.toLowerCase();
+        return lower.contains("length") || lower.contains("width") || lower.contains("height") || lower.contains("dimension");
+    }
+
+    /**
+     * POSTs a dimension-sensitive body (booking or service availability) and,
+     * if APC rejects it in a way that looks like a missing-dimension
+     * complaint and dimensions weren't sent, remembers that this account
+     * needs them (DIMENSIONS_REQUIRED_KEY) and retries once with them
+     * included. Any other failure (or a second failure after the retry) is
+     * thrown as-is - this only ever adds one extra round trip, and only the
+     * very first time it's needed for a given account.
+     */
+    private JsonNode postWithDimensionRetry(
+            String endpoint, java.util.function.Function<Order, ObjectNode> bodyBuilder, Order order, String actionDescription) {
+        ObjectNode body = bodyBuilder.apply(order);
+        try {
+            return send(buildPostRequest(endpoint, body), actionDescription);
+        } catch (ValidationException e) {
+            if (dimensionsRequired() || !looksLikeDimensionError(e.getMessage())) {
+                throw e;
+            }
+            log.info("APC rejected a request without item dimensions ({}) - this account appears to require " +
+                    "Length/Width/Height, so retrying with 1cm placeholder dimensions and remembering this for future calls.",
+                    e.getMessage());
+            settingsService.set(DIMENSIONS_REQUIRED_KEY, "true");
+            ObjectNode retryBody = bodyBuilder.apply(order);
+            return send(buildPostRequest(endpoint, retryBody), actionDescription);
+        }
+    }
+
+    private HttpRequest buildPostRequest(String endpoint, ObjectNode body) {
+        return HttpRequest.newBuilder(URI.create(apcAuthService.baseUrl() + endpoint))
+                .header("remote-user", apcAuthService.authHeader())
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
     }
 
     private JsonNode send(HttpRequest request, String actionDescription) {

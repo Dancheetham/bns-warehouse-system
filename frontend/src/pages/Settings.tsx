@@ -25,6 +25,7 @@ export default function Settings() {
   const [printerName, setPrinterName] = useState("");
   const [labelPrinterName, setLabelPrinterName] = useState("");
   const [labelPrinterDpi, setLabelPrinterDpi] = useState("203");
+  const [apcLabelPrinterName, setApcLabelPrinterName] = useState("");
   const [printAgentUrl, setPrintAgentUrl] = useState("");
   const [smtpHost, setSmtpHost] = useState("");
   const [smtpPort, setSmtpPort] = useState("587");
@@ -126,6 +127,7 @@ export default function Settings() {
     setPrinterName(settings["picking_note_printer"] ?? "");
     setLabelPrinterName(settings["label_printer"] ?? "");
     setLabelPrinterDpi(settings["dpd_label_printer_dpi"] ?? "203");
+    setApcLabelPrinterName(settings["apc_label_printer"] ?? "");
     setPrintAgentUrl(settings["print_agent_url"] ?? "http://localhost:9191/print");
     setSmtpHost(settings["smtp_host"] ?? "");
     setSmtpPort(settings["smtp_port"] ?? "587");
@@ -277,6 +279,7 @@ export default function Settings() {
         picking_note_printer: printerName,
         label_printer: labelPrinterName,
         dpd_label_printer_dpi: labelPrinterDpi,
+        apc_label_printer: apcLabelPrinterName,
         print_agent_url: printAgentUrl,
         smtp_host: smtpHost,
         smtp_port: smtpPort,
@@ -488,9 +491,10 @@ export default function Settings() {
           <>
             Requires the local print agent running on the warehouse PC - see{" "}
             <code className="bg-slate-100 px-1 rounded">print-agent/README.md</code> in the project for setup.
-            Without it, printing falls back to opening the PDF in a new tab instead. Picking notes and shipping
-            labels can go to two different printers - most warehouses have a label printer right at the despatch
-            bench, separate from wherever picking notes come out.
+            Without it, printing falls back to opening the PDF in a new tab instead. The shipping label printer
+            (and its DPI, for DPD) is set separately per courier under Couriers below, since DPD and APC labels
+            often need to go to two physically different label printers - this Print Agent URL is shared by all
+            of them.
           </>
         }
       >
@@ -504,37 +508,6 @@ export default function Settings() {
             placeholder="e.g. Office Printer"
             className="input"
           />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">
-            Shipping label printer (leave blank to use the PC's default printer)
-          </label>
-          <input
-            value={labelPrinterName}
-            onChange={(e) => setLabelPrinterName(e.target.value)}
-            placeholder="e.g. Despatch Label Printer"
-            className="input"
-          />
-          <p className="text-xs text-slate-400 mt-1">
-            DPD shipping labels print as raw ZPL straight to this printer via the print agent (Print Agent URL
-            below) - needs a ZPL-compatible thermal printer (e.g. Zebra) and pywin32 installed alongside the
-            agent. See the print-agent README for setup.
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 mb-1">Label printer DPI</label>
-          <select
-            value={labelPrinterDpi}
-            onChange={(e) => setLabelPrinterDpi(e.target.value)}
-            className="input w-32"
-          >
-            <option value="203">203 dpi</option>
-            <option value="300">300 dpi</option>
-          </select>
-          <p className="text-xs text-slate-400 mt-1">
-            Must match the shipping label printer's actual resolution (check the printer or its datasheet) -
-            a mismatch here can throw off barcode scaling on the printed label.
-          </p>
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-500 mb-1">Print agent URL</label>
@@ -748,6 +721,45 @@ export default function Settings() {
           </p>
         </div>
 
+        <h4 className="text-sm font-medium text-slate-700 pt-2">Label printer</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          Kept separate from APC's label printer below so DPD and APC labels - which can be different sizes - can
+          be sent to two different physical printers.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Shipping label printer (leave blank to use the PC's default printer)
+            </label>
+            <input
+              value={labelPrinterName}
+              onChange={(e) => setLabelPrinterName(e.target.value)}
+              placeholder="e.g. Despatch Label Printer"
+              className="input"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              DPD shipping labels print as raw ZPL straight to this printer via the print agent (Print Agent URL,
+              under Printing above) - needs a ZPL-compatible thermal printer (e.g. Zebra) and pywin32 installed
+              alongside the agent. See the print-agent README for setup.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Label printer DPI</label>
+            <select
+              value={labelPrinterDpi}
+              onChange={(e) => setLabelPrinterDpi(e.target.value)}
+              className="input w-32"
+            >
+              <option value="203">203 dpi</option>
+              <option value="300">300 dpi</option>
+            </select>
+            <p className="text-xs text-slate-400 mt-1">
+              Must match the shipping label printer's actual resolution (check the printer or its datasheet) - a
+              mismatch here can throw off barcode scaling on the printed label.
+            </p>
+          </div>
+        </div>
+
         <h4 className="text-sm font-medium text-slate-700 pt-2">Sender / collection address</h4>
         <p className="text-xs text-slate-400 -mt-3">
           Used as both the collection address and the exporter details on any customs declaration (e.g. for
@@ -955,6 +967,28 @@ export default function Settings() {
             placeholder="e.g. Telecoms and networking equipment"
             className="input"
           />
+        </div>
+
+        <h4 className="text-sm font-medium text-slate-700 pt-2">Label printer</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          Separate from DPD's label printer above, so APC labels can go to a different physical printer if its
+          label size differs from DPD's. There's no DPI setting here - APC's integration guide doesn't expose a
+          DPI option, unlike DPD.
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">
+            Shipping label printer (leave blank to use the PC's default printer)
+          </label>
+          <input
+            value={apcLabelPrinterName}
+            onChange={(e) => setApcLabelPrinterName(e.target.value)}
+            placeholder="e.g. Despatch Label Printer 2"
+            className="input"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            APC shipping labels print as raw ZPL straight to this printer via the print agent (Print Agent URL,
+            under Printing above).
+          </p>
         </div>
 
         <h5 className="text-sm font-medium text-slate-700 pt-2">Collection address override (optional)</h5>
