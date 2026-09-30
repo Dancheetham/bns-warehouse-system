@@ -5,6 +5,25 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.62] - 2026-09-30 (v0.127)
+
+### Fixed
+
+- **APC's Service dropdown is now a live, weight-aware lookup** against
+  APC's `ServiceAvailability.json`, instead of a fixed guessed list of
+  Parcel-only codes. A sub-1kg order now correctly offers MailPack,
+  CourierPack and Parcel together (APC's own weight rules: MailPack max
+  1kg, CourierPack max 5kg, Standard Parcel max 30kg), matching what the
+  Hypaship website itself would show - and a heavier order correctly
+  narrows down to just what actually fits it. Falls back to the last
+  successfully-fetched list (cached in Settings, same pattern as DPD's
+  cached fallback) if APC can't be reached, and shows a Live/Cached badge
+  exactly like DPD's dropdown already does.
+- Picking a service now also saves its human description (e.g. "1600
+  Parcel") as the order's Service text, not just the raw product code - so
+  the order summary and picking note read properly instead of showing a
+  bare code like "ND16".
+
 ## [0.23.61] - 2026-09-30 (v0.126)
 
 ### Added

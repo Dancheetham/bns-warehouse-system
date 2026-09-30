@@ -777,11 +777,23 @@ export interface CollectionCourierOption {
 }
 
 // One APC Overnight product code offered on the order screen's Service
-// dropdown when courierType === "APC" - a static list (see
-// ApcShippingService.STANDARD_SERVICES), paired with a free-text override.
+// dropdown when courierType === "APC" - normally APC's own live,
+// weight/size-aware answer (see ApcServiceLookupResult), paired with a
+// free-text override for anything not listed.
 export interface ApcServiceOption {
   code: string;
   description: string;
+}
+
+// Response for the APC "Service" dropdown - mirrors DpdServiceLookupResult:
+// `live` true means this came straight from APC's ServiceAvailability.json
+// just now for this order's actual address/weight (already correctly
+// filtered to what fits, e.g. MailPack+CourierPack+Parcel for a sub-1kg
+// item); false means it's a fallback list and `liveError` says why.
+export interface ApcServiceLookupResult {
+  services: ApcServiceOption[];
+  live: boolean;
+  liveError?: string;
 }
 
 // One DPD service actually available right now for an order's delivery

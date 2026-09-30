@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
 import uk.co.bns.warehouse_api.dto.ApcLabelResult;
 import uk.co.bns.warehouse_api.dto.ApcOrderResult;
-import uk.co.bns.warehouse_api.dto.ApcServiceOption;
+import uk.co.bns.warehouse_api.dto.ApcServiceLookupResult;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
@@ -137,12 +137,14 @@ public class OrderController {
                 .body(result.rawLabelData().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    // APC equivalents of the dpd-services/dpd-shipment/dpd-labels endpoints
-    // above - see ApcShippingService for why the service list is a static
-    // fallback rather than a live lookup in this first version.
+    // APC equivalent of the dpd-services endpoint above - a live,
+    // weight/size-aware lookup against this order's actual delivery address
+    // and weight (see ApcShippingService.checkServiceAvailability), so a
+    // sub-1kg order correctly offers MailPack/CourierPack/Parcel rather than
+    // always showing every product regardless of what actually fits.
     @GetMapping("/{id}/apc-services")
-    public List<ApcServiceOption> apcServices(@PathVariable Long id) {
-        return apcShippingService.listAvailableServices();
+    public ApcServiceLookupResult apcServices(@PathVariable Long id) {
+        return apcShippingService.checkServiceAvailability(orderService.findById(id));
     }
 
     @PostMapping("/{id}/apc-shipment")

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import uk.co.bns.warehouse_api.dto.ApcLabelResult;
 import uk.co.bns.warehouse_api.dto.ApcOrderResult;
+import uk.co.bns.warehouse_api.dto.ApcServiceLookupResult;
 import uk.co.bns.warehouse_api.dto.ApcServiceOption;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.Order;
@@ -61,12 +62,11 @@ public class ApcShippingService {
     private static final String DEFAULT_PARCEL_WIDTH_CM = "20";
     private static final String DEFAULT_PARCEL_HEIGHT_CM = "20";
 
-    // A reasonable starting point for the most common APC Overnight weekday
-    // product codes - not fetched live (ServiceAvailability.json wasn't
-    // implemented for this first version), so the order screen pairs this
-    // with a free-text override for anything not listed here, mirroring
-    // DPD's own free-text fallback pattern. Worth revisiting against your
-    // actual APC account's enabled products.
+    // Last-resort fallback if APC has never once returned a live service list
+    // for this account (freshly configured, or Training/Live both
+    // unreachable) - see checkServiceAvailability()/loadLastKnownServices().
+    // Deliberately small and generic; the live lookup and the cache above it
+    // are what actually drive the dropdown day to day.
     public static final List<ApcServiceOption> STANDARD_SERVICES = List.of(
             new ApcServiceOption("ND10", "Next Day by 10:00"),
             new ApcServiceOption("ND12", "Next Day by 12:00"),
@@ -74,6 +74,12 @@ public class ApcShippingService {
             new ApcServiceOption("NDSAT", "Next Day Saturday"),
             new ApcServiceOption("ECO48", "Economy (2-3 day)")
     );
+
+    // Where the last successfully-fetched live service list is cached (as
+    // JSON), so the dropdown still has real, previously-offered options when
+    // a later live lookup fails - mirrors DPD_LAST_KNOWN_SERVICES_KEY in
+    // DpdShippingService exactly.
+    private static final String LAST_KNOWN_SERVICES_KEY = "apc_last_known_services";
 
     private final ApcAuthService apcAuthService;
     private final SettingsService settingsService;
@@ -160,8 +166,135 @@ public class ApcShippingService {
         return new ApcLabelResult(decoded, format != null ? format : "ZPL");
     }
 
-    public List<ApcServiceOption> listAvailableServices() {
-        return STANDARD_SERVICES;
+    /**
+     * The services APC actually has available right now for this order's
+     * delivery address and item weight/size - via ServiceAvailability.json
+     * with Item/Type=ALL, so the response is already correctly filtered to
+     * (for example) MailPack + CourierPack + Parcel for a sub-1kg item, or
+     * just Parcel for anything over CourierPack's 5kg cap - same weight
+     * rules APC's own Hypaship website applies (see the Service Product
+     * Codes table: MailPack max 1kg, CourierPack max 5kg, Standard Parcel
+     * max 30kg). Mirrors DpdShippingService.listAvailableServices(order)
+     * exactly: falls back to the last successfully-fetched list (cached in
+     * Settings) if the live call fails, and further to STANDARD_SERVICES if
+     * nothing's ever been cached.
+     */
+    public ApcServiceLookupResult checkServiceAvailability(Order order) {
+        if (order.getDeliveryPostcode() == null || order.getDeliveryPostcode().isBlank()
+                || order.getDeliveryCountryCode() == null || order.getDeliveryCountryCode().isBlank()) {
+            throw new ValidationException("This order needs a delivery postcode and country before APC services can be looked up");
+        }
+        try {
+            ObjectNode body = buildServiceAvailabilityBody(order);
+            HttpRequest request = HttpRequest.newBuilder(URI.create(apcAuthService.baseUrl() + "ServiceAvailability.json"))
+                    .header("remote-user", apcAuthService.authHeader())
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                    .build();
+
+            JsonNode responseBody = send(request, "check APC service availability");
+            JsonNode serviceList = responseBody.path("ServiceAvailability").path("Services").path("Service");
+            List<ApcServiceOption> options = new java.util.ArrayList<>();
+            if (serviceList.isArray()) {
+                for (JsonNode service : serviceList) {
+                    String code = firstNonBlank(service, "ProductCode", "productCode");
+                    String name = firstNonBlank(service, "ServiceName", "serviceName");
+                    if (code == null) continue;
+                    options.add(new ApcServiceOption(code, name != null ? name : code));
+                }
+            } else if (serviceList.isObject() && !serviceList.isMissingNode()) {
+                // A single result comes back as one object rather than a one-item array.
+                String code = firstNonBlank(serviceList, "ProductCode", "productCode");
+                String name = firstNonBlank(serviceList, "ServiceName", "serviceName");
+                if (code != null) {
+                    options.add(new ApcServiceOption(code, name != null ? name : code));
+                }
+            }
+            if (!options.isEmpty()) {
+                cacheLastKnownServices(options);
+            }
+            return new ApcServiceLookupResult(options, true, null);
+        } catch (Exception e) {
+            log.warn("Live APC service availability check failed for order {}: {}", order.getOrderNumber(), e.getMessage());
+            List<ApcServiceOption> cached = loadLastKnownServices();
+            return new ApcServiceLookupResult(cached.isEmpty() ? STANDARD_SERVICES : cached, false, e.getMessage());
+        }
+    }
+
+    /**
+     * Same shape as buildRequestBody's Delivery/Collection/GoodsInfo/Items
+     * blocks, minus CollectionDate's role in actually booking anything -
+     * ServiceAvailability.json needs the same fields to know what's
+     * deliverable to this address at this weight, but Item/Type=ALL so APC
+     * returns every product family that fits rather than validating one.
+     */
+    private ObjectNode buildServiceAvailabilityBody(Order order) {
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("CollectionDate", LocalDate.now().format(APC_DATE));
+        root.put("ReadyAt", settingsService.get("apc_ready_at", "09:00"));
+        root.put("ClosedAt", settingsService.get("apc_closed_at", "17:00"));
+
+        String collectionPostcode = settingsService.get("apc_collection_postcode", "");
+        if (!collectionPostcode.isBlank()) {
+            ObjectNode collection = root.putObject("Collection");
+            collection.put("PostalCode", collectionPostcode);
+            collection.put("CountryCode", settingsService.get("apc_collection_country_code", "GB"));
+        }
+
+        ObjectNode delivery = root.putObject("Delivery");
+        delivery.put("PostalCode", order.getDeliveryPostcode());
+        delivery.put("CountryCode", order.getDeliveryCountryCode().toUpperCase());
+
+        ObjectNode goodsInfo = root.putObject("GoodsInfo");
+        goodsInfo.put("GoodsValue", customsValue(order).doubleValue());
+        goodsInfo.put("Fragile", false);
+
+        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
+        BigDecimal weight = cartons.isEmpty() ? totalWeightKg(order) : cartons.stream()
+                .map(c -> c.getWeightKg() != null ? c.getWeightKg() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (weight.compareTo(BigDecimal.ZERO) <= 0) {
+            // A zero/unset weight would make APC reject the call outright
+            // (and every product tier would trivially "fit" it, which isn't
+            // useful) - 1g is enough to get a real, weight-aware answer
+            // without claiming the order actually weighs nothing.
+            weight = new BigDecimal("0.01");
+        }
+
+        ObjectNode shipmentDetails = root.putObject("ShipmentDetails");
+        shipmentDetails.put("NumberOfPieces", Math.max(cartons.size(), 1));
+        ArrayNode items = shipmentDetails.putArray("Items");
+        ObjectNode item = items.addObject();
+        item.put("Type", "ALL");
+        item.put("Weight", weight.doubleValue());
+        item.put("Length", settingsService.get("apc_default_parcel_length_cm", DEFAULT_PARCEL_LENGTH_CM));
+        item.put("Width", settingsService.get("apc_default_parcel_width_cm", DEFAULT_PARCEL_WIDTH_CM));
+        item.put("Height", settingsService.get("apc_default_parcel_height_cm", DEFAULT_PARCEL_HEIGHT_CM));
+        item.put("Value", customsValue(order).doubleValue());
+        return root;
+    }
+
+    private void cacheLastKnownServices(List<ApcServiceOption> options) {
+        try {
+            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(options));
+        } catch (Exception e) {
+            log.warn("Failed to cache last-known APC services: {}", e.getMessage());
+        }
+    }
+
+    private List<ApcServiceOption> loadLastKnownServices() {
+        String cached = settingsService.get(LAST_KNOWN_SERVICES_KEY, "");
+        if (cached.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(cached,
+                    objectMapper.getTypeFactory().constructCollectionType(List.class, ApcServiceOption.class));
+        } catch (Exception e) {
+            log.warn("Failed to read cached APC services: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private void validateOrder(Order order) {

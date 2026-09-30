@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import {
   AcknowledgementResult,
-  ApcServiceOption,
+  ApcServiceLookupResult,
   CollectionCourierOption,
   CompanyView,
   CourierType,
@@ -323,14 +323,21 @@ export default function OrderEdit() {
   });
   const dpdServices = dpdServiceResult?.services;
 
-  // APC's service list is a static fallback (see ApcShippingService), so no
-  // live/cached distinction like DPD's - just fetched once per order screen
-  // visit while APC is the selected courier.
-  const { data: apcServices } = useQuery({
+  // Live, weight/size-aware lookup against APC's ServiceAvailability.json for
+  // this order's actual delivery address and weight - mirrors the DPD lookup
+  // above exactly, including the cached-fallback-on-failure behaviour, so a
+  // sub-1kg order correctly offers MailPack/CourierPack/Parcel rather than
+  // always showing every product regardless of what actually fits.
+  const {
+    data: apcServiceResult,
+    isLoading: apcServicesLoading,
+  } = useQuery({
     queryKey: ["apc-services", id],
-    queryFn: async () => (await api.get<ApcServiceOption[]>(`/orders/${id}/apc-services`)).data,
+    queryFn: async () => (await api.get<ApcServiceLookupResult>(`/orders/${id}/apc-services`)).data,
     enabled: !isNew && courierType === "APC" && !existingOrder?.shippingInvoiced,
+    retry: false,
   });
+  const apcServices = apcServiceResult?.services;
 
   // Active-only Collection courier list for the Collection dropdown - not
   // scoped to this order at all (unlike DPD/APC services), so it's fetched
@@ -1011,31 +1018,73 @@ export default function OrderEdit() {
                 {courierType === "APC" && (
                   <div className="flex-1 min-w-[20rem]">
                     <label className="block text-xs text-slate-400 mb-1">Service</label>
-                    <div className="flex gap-2">
+                    <div className="relative">
                       <select
                         value={apcServices?.some((s) => s.code === apcServiceCode) ? apcServiceCode : ""}
-                        onChange={(e) => setApcServiceCode(e.target.value)}
-                        className="input"
+                        onChange={(e) => {
+                          const selected = apcServices?.find((s) => s.code === e.target.value);
+                          setApcServiceCode(e.target.value);
+                          // Store the human description too (e.g. "1600 Parcel") -
+                          // this is what shows on the read-only summary, picking
+                          // note, etc, rather than the bare product code.
+                          setCourierMethod(selected ? selected.description : "");
+                        }}
+                        disabled={apcServicesLoading || !apcServices?.length}
+                        className="input pr-14"
                       >
-                        <option value="">Select or type below...</option>
+                        <option value="">
+                          {apcServicesLoading
+                            ? "Looking up services..."
+                            : apcServices?.length
+                            ? "Select a service..."
+                            : "No services available"}
+                        </option>
                         {apcServices?.map((s) => (
                           <option key={s.code} value={s.code}>
-                            {s.code} - {s.description}
+                            {s.description} ({s.code})
                           </option>
                         ))}
                       </select>
+                      {/* Live = APC's own ServiceAvailability.json just now, for this
+                          order's actual address/weight (so it's already correctly
+                          filtered to what fits - e.g. MailPack/CourierPack/Parcel
+                          all showing for a sub-1kg item). Cached = the last list APC
+                          gave us for anything, kept as a fallback - see
+                          apcServiceResult.liveError below for why it isn't live. */}
+                      {!apcServicesLoading && apcServiceResult && (
+                        <span
+                          title={
+                            apcServiceResult.live
+                              ? "Live - checked against APC just now for this address and weight"
+                              : `Not live - showing the last services APC offered. ${apcServiceResult.liveError ?? ""}`
+                          }
+                          className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
+                            apcServiceResult.live ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {apcServiceResult.live ? "Live" : "Cached"}
+                        </span>
+                      )}
+                    </div>
+                    {apcServiceResult && !apcServiceResult.live && apcServiceResult.liveError && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Not live for this address: {apcServiceResult.liveError}
+                      </p>
+                    )}
+                    <details className="mt-1">
+                      <summary className="text-xs text-slate-400 cursor-pointer">
+                        Type a product code manually instead
+                      </summary>
                       <input
                         value={apcServiceCode}
-                        onChange={(e) => setApcServiceCode(e.target.value)}
+                        onChange={(e) => {
+                          setApcServiceCode(e.target.value);
+                          setCourierMethod(e.target.value);
+                        }}
                         placeholder="e.g. ND16"
-                        title="Type an APC product code directly, or pick one from the list."
-                        className="input"
+                        className="input mt-1"
                       />
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      A static list of common APC product codes - type one directly if it's not listed. Leave blank
-                      to let APC fall back to your account's default product.
-                    </p>
+                    </details>
                   </div>
                 )}
                 {status === "ON_HOLD" && (

@@ -1,61 +1,30 @@
-Add No Courier/Collection couriers, a Couriers settings section, and
-APC Overnight integration (v0.126)
+Make APC's Service dropdown a live, weight-aware lookup (v0.127)
 
-Dan asked for three things together: a "No Courier" option that hides
-the service box entirely, an admin-extensible "Collection" courier
-category (Customer/UKI/InXpress/Seabridge to start) for external
-couriers BNS neither books nor labels, and full APC Overnight
-integration via the Hypaship Booking Platform API v3 (docs attached),
-with its settings living alongside DPD's in a new Couriers section.
+Dan set an order to ND16 and noticed the Service dropdown only ever
+offered Parcel-tier codes, even for a sub-1kg item where APC's own
+rules also allow MailPack and CourierPack (cheaper products, same
+next-day-by-16:00 slot). The v0.126 APC integration used a small
+hand-picked list of Parcel codes as a placeholder rather than the
+live ServiceAvailability.json lookup, explicitly flagged as a
+follow-up in that release.
 
-The underlying gap this closes: courier was never actually a
-persisted field on Order - "DPD" was hardcoded as the only option in
-the frontend dropdown, and which courier had shipped was only ever
-inferred from whether a DPD shipment existed. That worked while DPD
-was the only integration, but couldn't hold a second one. Order now
-has a real `courierType` (NONE/DPD/APC/COLLECTION), backfilled on
-existing orders from their DPD data.
+Implemented `ApcShippingService.checkServiceAvailability(order)`:
+POSTs the order's actual delivery address + weight to
+ServiceAvailability.json with Item/Type=ALL, so APC itself returns
+every product family that genuinely fits (MailPack max 1kg,
+CourierPack max 5kg, Standard Parcel max 30kg, per the guide's
+Service Product Codes table) - exactly what the Hypaship website
+shows. Mirrors DpdShippingService.listAvailableServices(order)
+exactly, including the fallback shape: if the live call fails, falls
+back to the last successfully-fetched list (cached in Settings as
+apc_last_known_services), and only as a last resort to a small
+static list. The order screen shows a Live/Cached badge, same as
+DPD's dropdown already does.
 
-Implemented:
-
-- `CourierType` enum + `Order.courierType`/`collectionCourierName`,
-  mirrored onto `Shipment` so archived shipments (Reverse to Despatch,
-  additional part-shipments) keep their courier data too.
-- `collection_courier_options` table + admin CRUD (Settings >
-  Couriers > Collection Services, saves immediately per change) and a
-  public active-only endpoint for the order screen's dropdown.
-- New "Couriers" Settings section: the Collection Services list, then
-  DPD's existing settings moved in unchanged, then a new APC block
-  (email/password login - APC's auth is a simple Basic-style header,
-  not DPD's OAuth token exchange - environment, account number,
-  optional override collection address, default product code/goods
-  description).
-- `ApcAuthService`/`ApcShippingService`, structured like
-  `DpdAuthService`/`DpdShippingService`: book an order (`Orders.json`)
-  and fetch its label live on demand (ZPL, so it goes through the same
-  print-agent flow as DPD labels), both best-effort and deliberately
-  not `@Transactional` so a courier-side failure never blocks the
-  despatch it's attached to.
-- `DespatchService` books an APC shipment automatically at despatch
-  time under the same conditions DPD already does (courier selected +
-  credentials configured), and the despatch-confirmation status/colour
-  coding now reflects whichever courier actually applies.
-- OrderEdit's Despatch panel is now a real 4-way branch on
-  `courierType`: nothing for No Courier, DPD unchanged, a plain
-  dropdown with no booking/label UI for Collection, and an APC block
-  mirroring DPD's (service picker with free-text fallback, book
-  button, then waybill + print label).
-- Delivery History's Courier column now reads the explicit
-  `courierType` instead of guessing "DPD or nothing" from a
-  consignment number - the same implicit-inference bug the rest of
-  this change was fixing, so worth closing here too.
-
-Deliberately out of scope for this first APC pass: tracking, amending
-and cancelling a booked order, and a live product-code lookup
-(APC's optional Service Availability call) - booking + label is what
-despatch actually needs, matching what DPD parity requires. A short
-static list of common product codes (ND10/ND12/ND16/NDSAT/ECO48) with
-a free-text override covers the rest for now.
+Also: picking a service now saves its human description (e.g. "1600
+Parcel") into the order's Service text, not just the raw product
+code - previously only the code was stored, which is presumably
+what read back as "ND-16" rather than "Next Day by 16:00".
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

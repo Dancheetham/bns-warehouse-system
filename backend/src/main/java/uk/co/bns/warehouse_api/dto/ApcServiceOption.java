@@ -1,10 +1,12 @@
 package uk.co.bns.warehouse_api.dto;
 
 // One APC Overnight product code offered on the order screen's Service
-// dropdown when courierType == APC. Unlike DPD's live-looked-up services,
-// this is a static list of the most common weekday product codes (see
-// ApcShippingService.STANDARD_SERVICES) - APC's ServiceAvailability.json
-// live lookup wasn't implemented for this first version, so the dropdown is
+// dropdown when courierType == APC - normally APC's own live, weight/size-
+// aware answer from ServiceAvailability.json (see
+// ApcShippingService.checkServiceAvailability), so a sub-1kg order
+// correctly offers MailPack/CourierPack/Parcel while a 10kg order only
+// offers Parcel, same as APC's own weight rules. Falls back to a cached or
+// static list (see ApcServiceLookupResult) if the live call fails, always
 // paired with a free-text override on the order screen for anything not
-// listed here, mirroring DPD's own free-text fallback pattern.
+// listed.
 public record ApcServiceOption(String code, String description) {}
