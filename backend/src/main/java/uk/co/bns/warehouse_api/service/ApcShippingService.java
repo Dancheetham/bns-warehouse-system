@@ -452,11 +452,30 @@ public class ApcShippingService {
     private JsonNode send(HttpRequest request, String actionDescription) {
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                return objectMapper.readTree(response.body());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.error("Failed to {} - APC returned {}: {}", actionDescription, response.statusCode(), response.body());
+                throw new ValidationException("Failed to " + actionDescription + " - " + describeApcError(response.body(), response.statusCode()));
             }
-            log.error("Failed to {} - APC returned {}: {}", actionDescription, response.statusCode(), response.body());
-            throw new ValidationException("Failed to " + actionDescription + " - " + describeApcError(response.body(), response.statusCode()));
+            JsonNode parsed = objectMapper.readTree(response.body());
+            // Every APC response envelope (ServiceAvailability/Orders/Tracks/
+            // CancelOrder/...) carries its own Messages.Code/Description
+            // nested under whichever wrapper key that endpoint uses - APC
+            // can (and does) return HTTP 200 with a non-SUCCESS Messages.Code
+            // (e.g. an auth or account problem), which previously sailed
+            // through as a "successful" empty response - the actual cause of
+            // an empty/"No services available" Service dropdown with no
+            // error shown anywhere. findPath digs into whichever wrapper key
+            // is present without needing to know it up front.
+            JsonNode messages = parsed.findPath("Messages");
+            if (!messages.isMissingNode()) {
+                String code = messages.path("Code").asText("");
+                if (!code.isBlank() && !"SUCCESS".equalsIgnoreCase(code)) {
+                    String description = messages.path("Description").asText(code);
+                    log.error("APC rejected the request to {} - Messages.Code={}: {}", actionDescription, code, description);
+                    throw new ValidationException("Failed to " + actionDescription + " - APC said: " + description);
+                }
+            }
+            return parsed;
         } catch (java.io.IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();

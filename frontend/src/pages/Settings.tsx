@@ -610,13 +610,10 @@ export default function Settings() {
         title="Couriers"
         description="Which couriers are available on the order screen's Despatch panel (No Courier / DPD / APC / Collection), and the settings each one needs."
       >
-        <div>
-          <h4 className="text-sm font-medium text-slate-700">Collection Services</h4>
-          <p className="text-xs text-slate-400 mb-3">
-            The options offered on the order screen when Courier = Collection - external couriers (a customer's own
-            courier, a local courier, etc.) BNS neither books nor labels itself, just records which one was used.
-            Each change here saves immediately, rather than waiting for the page's Save button below.
-          </p>
+        <SettingsSection
+          title="Collection Services"
+          description="The options offered on the order screen when Courier = Collection - external couriers (a customer's own courier, a local courier, etc.) BNS neither books nor labels itself, just records which one was used. Each change here saves immediately, rather than waiting for the page's Save button below."
+        >
           <div className="space-y-1.5 mb-3">
             {collectionCouriers?.map((option) => (
               <div key={option.id} className="flex items-center gap-3 text-sm bg-slate-50 border border-slate-200 rounded px-3 py-1.5">
@@ -663,14 +660,12 @@ export default function Settings() {
               {addCollectionCourierMutation.isPending ? "Adding…" : "Add"}
             </button>
           </div>
-        </div>
+        </SettingsSection>
 
-        <h4 className="text-sm font-medium text-slate-700 pt-4 border-t border-slate-100">DPD</h4>
-        <p className="text-xs text-slate-400 -mt-3">
-          API credentials and sender details for creating DPD shipments and printing labels directly from an order.
-          The API key/secret pair comes from your DPD developer account (My DPD &gt; API Access), not your normal
-          DPD login.
-        </p>
+        <SettingsSection
+          title="DPD"
+          description="API credentials and sender details for creating DPD shipments and printing labels directly from an order. The API key/secret pair comes from your DPD developer account (My DPD > API Access), not your normal DPD login."
+        >
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">API key (Client-Id)</label>
@@ -898,13 +893,12 @@ export default function Settings() {
           Turn this off once DPD is fully set up, so a despatch never accidentally prints an old test label instead
           of failing loudly - "Confirm Despatch" will simply not offer a label to print if DPD wasn't booked.
         </p>
+        </SettingsSection>
 
-        <h4 className="text-sm font-medium text-slate-700 pt-4 border-t border-slate-100">APC</h4>
-        <p className="text-xs text-slate-400 -mt-3">
-          Login and default settings for creating APC Overnight (Hypaship) shipments and printing labels directly
-          from an order. Unlike DPD, there's no separate API key - just the email/password for your APC Hypaship
-          login.
-        </p>
+        <SettingsSection
+          title="APC"
+          description="Login and default settings for creating APC Overnight (Hypaship) shipments and printing labels directly from an order. Unlike DPD, there's no separate API key - just the email/password for your APC Hypaship login."
+        >
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
@@ -1009,6 +1003,7 @@ export default function Settings() {
             />
           </div>
         </div>
+        </SettingsSection>
       </SettingsSection>
 
       <SettingsSection

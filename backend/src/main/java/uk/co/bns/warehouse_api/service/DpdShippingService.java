@@ -159,7 +159,15 @@ public class DpdShippingService {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 log.error("Failed to fetch DPD labels for order {} - DPD returned {}: {}",
                         order.getOrderNumber(), response.statusCode(), response.body());
-                throw new RuntimeException("Failed to fetch DPD labels - DPD returned HTTP " + response.statusCode());
+                // Previously just "DPD returned HTTP 400" with the actual reason
+                // only visible in the server log - not much use from a bug report
+                // when nobody can go check that. DPD's error body for this
+                // endpoint doesn't always match the shipment-booking error shape
+                // (error[].message/fieldName), so this tries that first and
+                // falls back to including the raw body verbatim rather than
+                // silently dropping it.
+                throw new RuntimeException("Failed to fetch DPD labels - DPD returned HTTP " + response.statusCode()
+                        + ": " + describeDpdLabelError(response.body()));
             }
             return new DpdLabelResult(joinLabelStrings(response.body(), order));
         } catch (java.io.IOException | InterruptedException e) {
@@ -1026,6 +1034,39 @@ public class DpdShippingService {
      * since these are almost always a fixable data problem (missing field,
      * bad postcode format, etc).
      */
+    /**
+     * Same idea as describeDpdError below, but for the labels endpoint,
+     * which doesn't always use the same error[]/message/fieldName shape as
+     * shipment booking - so this tries that shape first, then a bare
+     * message/error field, and only falls back to the raw truncated body if
+     * neither parses, rather than losing the detail entirely.
+     */
+    private String describeDpdLabelError(String responseBody) {
+        try {
+            JsonNode parsed = objectMapper.readTree(responseBody);
+            JsonNode errors = parsed.path("error");
+            if (errors.isArray() && errors.size() > 0) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < errors.size(); i++) {
+                    if (i > 0) sb.append("; ");
+                    JsonNode err = errors.get(i);
+                    sb.append(err.path("message").asText(err.toString()));
+                    if (!err.path("fieldName").isMissingNode() && !err.path("fieldName").asText().isBlank()) {
+                        sb.append(" (").append(err.path("fieldName").asText()).append(")");
+                    }
+                }
+                return sb.toString();
+            }
+            String message = parsed.path("message").asText(parsed.path("error").asText(null));
+            if (message != null && !message.isBlank()) {
+                return message;
+            }
+        } catch (Exception ignored) {
+            // fall through to the raw body below
+        }
+        return truncate(responseBody, 500);
+    }
+
     private String describeDpdError(String responseBody, int statusCode) {
         try {
             JsonNode parsed = objectMapper.readTree(responseBody);

@@ -1,30 +1,37 @@
-Make APC's Service dropdown a live, weight-aware lookup (v0.127)
+Fix silent APC failures and DPD label error messages, collapse the
+Couriers sub-sections (v0.128)
 
-Dan set an order to ND16 and noticed the Service dropdown only ever
-offered Parcel-tier codes, even for a sub-1kg item where APC's own
-rules also allow MailPack and CourierPack (cheaper products, same
-next-day-by-16:00 slot). The v0.126 APC integration used a small
-hand-picked list of Parcel codes as a placeholder rather than the
-live ServiceAvailability.json lookup, explicitly flagged as a
-follow-up in that release.
+Dan reported three things from testing v0.126/v0.127:
 
-Implemented `ApcShippingService.checkServiceAvailability(order)`:
-POSTs the order's actual delivery address + weight to
-ServiceAvailability.json with Item/Type=ALL, so APC itself returns
-every product family that genuinely fits (MailPack max 1kg,
-CourierPack max 5kg, Standard Parcel max 30kg, per the guide's
-Service Product Codes table) - exactly what the Hypaship website
-shows. Mirrors DpdShippingService.listAvailableServices(order)
-exactly, including the fallback shape: if the live call fails, falls
-back to the last successfully-fetched list (cached in Settings as
-apc_last_known_services), and only as a last resort to a small
-static list. The order screen shows a Live/Cached badge, same as
-DPD's dropdown already does.
+1. APC's Service dropdown showed "No services available" with no error
+   anywhere. Root cause: every APC response envelope carries its own
+   Messages.Code/Description nested under whichever wrapper key that
+   endpoint uses (ServiceAvailability/Orders/Tracks/...), and APC can
+   return HTTP 200 with a non-SUCCESS code (an auth or account
+   problem) - the shared send() helper only checked the HTTP status,
+   so this sailed through as a "successful" empty response. Now
+   checked via JsonNode.findPath("Messages") (works without knowing
+   the wrapper key up front) across all three APC calls (book, label,
+   service lookup) - a real problem now throws with APC's own
+   description, and the Service dropdown correctly shows its cached
+   fallback with a "Cached" badge instead of silently rendering empty.
 
-Also: picking a service now saves its human description (e.g. "1600
-Parcel") into the order's Service text, not just the raw product
-code - previously only the code was stored, which is presumably
-what read back as "ND-16" rather than "Next Day by 16:00".
+2. He tested printing a DPD label in v0.126 and got "Failed to fetch
+   DPD labels - DPD returned HTTP 400" with no way to tell what DPD
+   actually objected to, and can't reproduce it right now to get more
+   detail. Found the cause by inspection: DpdShippingService.getLabels
+   discarded response.body() entirely on a non-2xx response, logging
+   DPD's real reason server-side but never surfacing it in the thrown
+   exception (unlike shipment booking, which already parses DPD's
+   error[].message/fieldName shape via describeDpdError). Added the
+   equivalent describeDpdLabelError() for the labels endpoint, so next
+   time this happens the actual reason is right there in the error/bug
+   report instead of requiring log access neither of us has right now.
+
+3. Settings > Couriers wanted its three sub-sections (Collection
+   Services, DPD, APC) individually collapsible rather than one long
+   scroll - each is now its own nested SettingsSection, same
+   collapse/expand behaviour as every top-level section on the page.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

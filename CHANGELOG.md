@@ -5,6 +5,33 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.63] - 2026-09-30 (v0.128)
+
+### Fixed
+
+- **APC's Service dropdown showing "No services available"**: APC can
+  return HTTP 200 with a non-SUCCESS `Messages.Code` inside the body (an
+  auth or account problem, for example) - previously treated as a
+  successful-but-empty response, so the dropdown silently had nothing to
+  show and no error anywhere to explain why. Every APC response is now
+  checked for this, across booking, labels and the service lookup alike,
+  so a real problem now surfaces as an actual error message (and the
+  Service dropdown correctly falls back to the cached/static list with a
+  "Cached" badge) instead of failing silently.
+- **DPD label fetch failures now include DPD's actual error detail.** A
+  failed "Print Label" was only ever recorded as "DPD returned HTTP 400"
+  in the bug report, with DPD's real reason visible only in the server
+  log nobody can reach from a bug report. It's now parsed and included in
+  the error message itself, the same way a failed shipment booking
+  already explains what DPD rejected.
+
+### Changed
+
+- Settings > Couriers' three sub-sections (Collection Services, DPD, APC)
+  are now each independently collapsible, instead of one long scroll -
+  open just the one you came here to change, same as every other page
+  section.
+
 ## [0.23.62] - 2026-09-30 (v0.127)
 
 ### Fixed
