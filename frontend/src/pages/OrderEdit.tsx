@@ -2,7 +2,22 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { AcknowledgementResult, CompanyView, DpdServiceLookupResult, GdmsRunResult, InvoiceHistoryView, Order, OrderCreditStatus, OrderStatus, OrderType, Product, TicketSummaryView } from "../types";
+import {
+  AcknowledgementResult,
+  ApcServiceOption,
+  CollectionCourierOption,
+  CompanyView,
+  CourierType,
+  DpdServiceLookupResult,
+  GdmsRunResult,
+  InvoiceHistoryView,
+  Order,
+  OrderCreditStatus,
+  OrderStatus,
+  OrderType,
+  Product,
+  TicketSummaryView,
+} from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
 import { dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
@@ -17,10 +32,17 @@ import SavedBadge from "../components/SavedBadge";
 const STATUSES: OrderStatus[] = ["ON_HOLD", "AWAITING_DESPATCH", "CANCELLED", "AWAITING_CONVERSION"];
 const SYSTEM_ONLY_STATUSES: OrderStatus[] = ["COMPLETED", "PARTIALLY_DESPATCHED", "INVOICE_PENDING"];
 const TYPES: OrderType[] = ["ORDER", "PAUSED", "QUOTE", "CREDIT_REFUND", "SCHEDULED"];
-// Only DPD is wired up today - this is a real dropdown (not hardcoded into the
-// service picker) so another courier can be added here later without
-// reworking the release screen.
-const COURIERS = ["DPD"] as const;
+// Courier is now a real, persisted field (Order.courierType) rather than
+// UI-only local state that was silently discarded on save - see
+// CourierType.java. NONE hides the whole service/booking/label section;
+// COLLECTION records an external courier BNS neither books nor labels
+// itself (see CollectionCourierOption, fetched live below).
+const COURIER_TYPES: { value: CourierType; label: string }[] = [
+  { value: "NONE", label: "No Courier" },
+  { value: "DPD", label: "DPD" },
+  { value: "APC", label: "APC" },
+  { value: "COLLECTION", label: "Collection" },
+];
 
 // crypto.randomUUID() is only exposed in "secure contexts" (HTTPS or localhost) -
 // it's silently undefined on plain http://<LAN-IP>, which crashed this whole page.
@@ -69,8 +91,15 @@ export default function OrderEdit() {
   const [orderType, setOrderType] = useState<OrderType>("ORDER");
   const [shippingCost, setShippingCost] = useState("");
   const [courierMethod, setCourierMethod] = useState("");
-  const [courier, setCourier] = useState<string>(COURIERS[0]);
+  // Defaults to DPD for continuity with the old only-option behaviour -
+  // corrected from existingOrder.courierType once that loads (see the
+  // effect below). Despatch panel isn't shown for a new (unsaved) order at
+  // all, so this initial value only ever matters briefly while an existing
+  // order's data is still loading.
+  const [courierType, setCourierType] = useState<CourierType>("DPD");
+  const [collectionCourierName, setCollectionCourierName] = useState("");
   const [dpdNetworkKey, setDpdNetworkKey] = useState("");
+  const [apcServiceCode, setApcServiceCode] = useState("");
   const [specialInstructions, setSpecialInstructions] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +178,10 @@ export default function OrderEdit() {
     setOrderType(existingOrder.orderType);
     setShippingCost(existingOrder.shippingCost != null ? String(existingOrder.shippingCost) : "");
     setCourierMethod(existingOrder.courierMethod ?? "");
+    setCourierType(existingOrder.courierType ?? "DPD");
+    setCollectionCourierName(existingOrder.collectionCourierName ?? "");
     setDpdNetworkKey(existingOrder.dpdNetworkKey ?? "");
+    setApcServiceCode(existingOrder.apcServiceCode ?? "");
     setSpecialInstructions(existingOrder.specialInstructions ?? "");
     setLines(
       existingOrder.lines.length > 0
@@ -188,12 +220,15 @@ export default function OrderEdit() {
         orderType,
         shippingCost: shippingCost ? Number(shippingCost) : undefined,
         courierMethod: courierMethod || undefined,
+        courierType,
+        collectionCourierName: courierType === "COLLECTION" ? collectionCourierName || undefined : undefined,
         // Included so a service change made after release (once the order's
         // no longer ON_HOLD, and so no longer going through
         // release-for-despatch) is actually saved by the ordinary Save Order
         // button - see OrderService.applyFields, which now accepts this on
         // the general update path too.
         dpdNetworkKey: dpdNetworkKey || undefined,
+        apcServiceCode: courierType === "APC" ? apcServiceCode || undefined : undefined,
         specialInstructions: specialInstructions || undefined,
         // Only meaningful for an existing order - lets the backend reject
         // the save with a clear conflict if someone else has already saved
@@ -283,10 +318,29 @@ export default function OrderEdit() {
     // Not limited to ON_HOLD any more - the service stays editable (and so
     // needs a live options list) at any status up until the order's shipping
     // has actually been invoiced.
-    enabled: !isNew && courier === "DPD" && !existingOrder?.shippingInvoiced,
+    enabled: !isNew && courierType === "DPD" && !existingOrder?.shippingInvoiced,
     retry: false,
   });
   const dpdServices = dpdServiceResult?.services;
+
+  // APC's service list is a static fallback (see ApcShippingService), so no
+  // live/cached distinction like DPD's - just fetched once per order screen
+  // visit while APC is the selected courier.
+  const { data: apcServices } = useQuery({
+    queryKey: ["apc-services", id],
+    queryFn: async () => (await api.get<ApcServiceOption[]>(`/orders/${id}/apc-services`)).data,
+    enabled: !isNew && courierType === "APC" && !existingOrder?.shippingInvoiced,
+  });
+
+  // Active-only Collection courier list for the Collection dropdown - not
+  // scoped to this order at all (unlike DPD/APC services), so it's fetched
+  // once and shared with Settings > Couriers' own admin list query key would
+  // differ (that one includes inactive rows), hence the distinct key here.
+  const { data: collectionCourierOptions } = useQuery({
+    queryKey: ["collection-courier-options"],
+    queryFn: async () => (await api.get<CollectionCourierOption[]>("/collection-courier-options")).data,
+    enabled: !isNew && courierType === "COLLECTION" && !existingOrder?.shippingInvoiced,
+  });
 
   // Dan's three most-used services first, in this exact order, then
   // everything else in whatever order DPD returned it - a stable sort
@@ -320,7 +374,10 @@ export default function OrderEdit() {
         await api.post<Order>(`/orders/${id}/release-for-despatch`, {
           shippingCost: shippingCost ? Number(shippingCost) : undefined,
           courierMethod: courierMethod || undefined,
+          courierType,
+          collectionCourierName: courierType === "COLLECTION" ? collectionCourierName || undefined : undefined,
           dpdNetworkKey: dpdNetworkKey || undefined,
+          apcServiceCode: courierType === "APC" ? apcServiceCode || undefined : undefined,
           overrideCreditHold: override ?? false,
           overrideReason: override ? creditOverrideReason : undefined,
         })
@@ -399,6 +456,17 @@ export default function OrderEdit() {
     onError: (err: Error) => setDpdError(err.message),
   });
 
+  const [apcError, setApcError] = useState<string | null>(null);
+  const bookApcShipmentMutation = useMutation({
+    mutationFn: async () => (await api.post(`/orders/${id}/apc-shipment`)).data,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      setApcError(null);
+      showToast("APC shipment booked.");
+    },
+    onError: (err: Error) => setApcError(err.message),
+  });
+
   const [gdmsError, setGdmsError] = useState<string | null>(null);
   const [gdmsResult, setGdmsResult] = useState<GdmsRunResult | null>(null);
   const gdmsAssignMutation = useMutation({
@@ -421,10 +489,27 @@ export default function OrderEdit() {
       if (printResult.printed) {
         showToast("Label sent to printer.");
       } else {
-        setDpdError("Print agent not reachable - start it on this PC (see Settings > DPD) and try again.");
+        setDpdError("Print agent not reachable - start it on this PC (see Settings > Couriers > DPD) and try again.");
       }
     } catch (err) {
       setDpdError((err as Error).message);
+    }
+  };
+
+  const viewApcLabel = async () => {
+    setApcError(null);
+    try {
+      const response = await api.get(`/orders/${id}/apc-labels`, { responseType: "text" });
+      const agentUrl = settings?.["print_agent_url"] || "http://localhost:9191/print";
+      const printerName = settings?.["label_printer"] || "";
+      const printResult = await printRaw(response.data, agentUrl, printerName);
+      if (printResult.printed) {
+        showToast("Label sent to printer.");
+      } else {
+        setApcError("Print agent not reachable - start it on this PC (see Settings > Couriers > APC) and try again.");
+      }
+    } catch (err) {
+      setApcError((err as Error).message);
     }
   };
 
@@ -770,18 +855,22 @@ export default function OrderEdit() {
               these changeable right up to the point of invoicing, including
               after release (e.g. the customer calls to switch courier
               service before despatch). */}
-          {existingOrder?.shippingInvoiced && (shippingCost || courier || courierMethod) && (
+          {existingOrder?.shippingInvoiced && (shippingCost || courierType !== "NONE" || courierMethod) && (
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-600 mb-3">
               <span>
                 <span className="text-slate-400">Shipping Cost:</span>{" "}
                 {shippingCost ? `£${Number(shippingCost).toFixed(2)}` : "-"}
               </span>
               <span>
-                <span className="text-slate-400">Courier:</span> {courier || "-"}
+                <span className="text-slate-400">Courier:</span>{" "}
+                {COURIER_TYPES.find((c) => c.value === courierType)?.label ?? "-"}
+                {courierType === "COLLECTION" && collectionCourierName ? ` (${collectionCourierName})` : ""}
               </span>
-              <span>
-                <span className="text-slate-400">Service:</span> {courierMethod || "-"}
-              </span>
+              {courierType !== "NONE" && courierType !== "COLLECTION" && (
+                <span>
+                  <span className="text-slate-400">Service:</span> {courierMethod || apcServiceCode || "-"}
+                </span>
+              )}
               <span className="text-xs text-slate-400 italic">Locked - this order has been invoiced</span>
             </div>
           )}
@@ -808,91 +897,147 @@ export default function OrderEdit() {
                 <div>
                   <label className="block text-xs text-slate-400 mb-1">Courier</label>
                   <select
-                    value={courier}
+                    value={courierType}
                     onChange={(e) => {
-                      setCourier(e.target.value);
+                      setCourierType(e.target.value as CourierType);
                       setDpdNetworkKey("");
                       setCourierMethod("");
+                      setCollectionCourierName("");
+                      setApcServiceCode("");
                     }}
-                    className="input w-32"
+                    className="input w-36"
                   >
-                    {COURIERS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
+                    {COURIER_TYPES.map((c) => (
+                      <option key={c.value} value={c.value}>
+                        {c.label}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="flex-1 min-w-[20rem]">
-                  <label className="block text-xs text-slate-400 mb-1">Service</label>
-                  {dpdServicesError ? (
-                    <input
-                      value={courierMethod}
-                      onChange={(e) => setCourierMethod(e.target.value)}
-                      placeholder="e.g. DPD Next Day"
-                      title="Couldn't look up DPD services for this order - type the service manually."
+                {/* No service box at all for No Courier - see the courierType
+                    prop's doc comment on Order.java. */}
+                {courierType === "COLLECTION" && (
+                  <div className="flex-1 min-w-[20rem]">
+                    <label className="block text-xs text-slate-400 mb-1">Collection Service</label>
+                    <select
+                      value={collectionCourierName}
+                      onChange={(e) => setCollectionCourierName(e.target.value)}
                       className="input"
-                    />
-                  ) : (
-                    <div className="relative">
-                      <select
-                        value={dpdNetworkKey}
-                        onChange={(e) => {
-                          const selected = dpdServices?.find((s) => s.networkKey === e.target.value);
-                          setDpdNetworkKey(e.target.value);
-                          setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
-                        }}
-                        disabled={dpdServicesLoading || !dpdServices?.length}
-                        className="input pr-14"
-                      >
-                        <option value="">
-                          {dpdServicesLoading
-                            ? "Looking up services..."
-                            : dpdServices?.length
-                            ? "Select a service..."
-                            : "No services available"}
+                    >
+                      <option value="">Select...</option>
+                      {collectionCourierOptions?.map((o) => (
+                        <option key={o.id} value={o.name}>
+                          {o.name}
                         </option>
-                        {sortedDpdServices?.map((s) => (
-                          <option key={s.networkKey} value={s.networkKey}>
-                            {s.networkDesc} - {s.serviceDesc}
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      An external courier BNS doesn't book or label - manage the list under Settings &gt; Couriers.
+                    </p>
+                  </div>
+                )}
+                {courierType === "DPD" && (
+                  <div className="flex-1 min-w-[20rem]">
+                    <label className="block text-xs text-slate-400 mb-1">Service</label>
+                    {dpdServicesError ? (
+                      <input
+                        value={courierMethod}
+                        onChange={(e) => setCourierMethod(e.target.value)}
+                        placeholder="e.g. DPD Next Day"
+                        title="Couldn't look up DPD services for this order - type the service manually."
+                        className="input"
+                      />
+                    ) : (
+                      <div className="relative">
+                        <select
+                          value={dpdNetworkKey}
+                          onChange={(e) => {
+                            const selected = dpdServices?.find((s) => s.networkKey === e.target.value);
+                            setDpdNetworkKey(e.target.value);
+                            setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
+                          }}
+                          disabled={dpdServicesLoading || !dpdServices?.length}
+                          className="input pr-14"
+                        >
+                          <option value="">
+                            {dpdServicesLoading
+                              ? "Looking up services..."
+                              : dpdServices?.length
+                              ? "Select a service..."
+                              : "No services available"}
+                          </option>
+                          {sortedDpdServices?.map((s) => (
+                            <option key={s.networkKey} value={s.networkKey}>
+                              {s.networkDesc} - {s.serviceDesc}
+                            </option>
+                          ))}
+                        </select>
+                        {/* Whether this list is DPD's live answer for this exact address/weight,
+                            or the last list DPD gave us for anything, kept as a fallback so the
+                            dropdown still has real options instead of forcing free text - see
+                            dpdServiceResult.liveError (surfaced below) for why it isn't live. */}
+                        {!dpdServicesLoading && dpdServiceResult && (
+                          <span
+                            title={
+                              dpdServiceResult.live
+                                ? "Live - checked against DPD just now for this address and weight"
+                                : `Not live - showing the last services DPD offered. ${dpdServiceResult.liveError ?? ""}`
+                            }
+                            className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
+                              dpdServiceResult.live
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {dpdServiceResult.live ? "Live" : "Cached"}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {dpdServicesError && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {dpdServicesLookupError instanceof Error
+                          ? dpdServicesLookupError.message
+                          : "Couldn't look up DPD services - check the delivery postcode and Settings > Couriers > DPD."}
+                      </p>
+                    )}
+                    {dpdServiceResult && !dpdServiceResult.live && dpdServiceResult.liveError && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Not live for this address: {dpdServiceResult.liveError}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {courierType === "APC" && (
+                  <div className="flex-1 min-w-[20rem]">
+                    <label className="block text-xs text-slate-400 mb-1">Service</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={apcServices?.some((s) => s.code === apcServiceCode) ? apcServiceCode : ""}
+                        onChange={(e) => setApcServiceCode(e.target.value)}
+                        className="input"
+                      >
+                        <option value="">Select or type below...</option>
+                        {apcServices?.map((s) => (
+                          <option key={s.code} value={s.code}>
+                            {s.code} - {s.description}
                           </option>
                         ))}
                       </select>
-                      {/* Whether this list is DPD's live answer for this exact address/weight,
-                          or the last list DPD gave us for anything, kept as a fallback so the
-                          dropdown still has real options instead of forcing free text - see
-                          dpdServiceResult.liveError (surfaced below) for why it isn't live. */}
-                      {!dpdServicesLoading && dpdServiceResult && (
-                        <span
-                          title={
-                            dpdServiceResult.live
-                              ? "Live - checked against DPD just now for this address and weight"
-                              : `Not live - showing the last services DPD offered. ${dpdServiceResult.liveError ?? ""}`
-                          }
-                          className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
-                            dpdServiceResult.live
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-amber-100 text-amber-700"
-                          }`}
-                        >
-                          {dpdServiceResult.live ? "Live" : "Cached"}
-                        </span>
-                      )}
+                      <input
+                        value={apcServiceCode}
+                        onChange={(e) => setApcServiceCode(e.target.value)}
+                        placeholder="e.g. ND16"
+                        title="Type an APC product code directly, or pick one from the list."
+                        className="input"
+                      />
                     </div>
-                  )}
-                  {dpdServicesError && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {dpdServicesLookupError instanceof Error
-                        ? dpdServicesLookupError.message
-                        : "Couldn't look up DPD services - check the delivery postcode and Settings > DPD."}
+                    <p className="text-xs text-slate-400 mt-1">
+                      A static list of common APC product codes - type one directly if it's not listed. Leave blank
+                      to let APC fall back to your account's default product.
                     </p>
-                  )}
-                  {dpdServiceResult && !dpdServiceResult.live && dpdServiceResult.liveError && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      Not live for this address: {dpdServiceResult.liveError}
-                    </p>
-                  )}
-                </div>
+                  </div>
+                )}
                 {status === "ON_HOLD" && (
                   <button
                     onClick={() => releaseMutation.mutate(undefined)}
@@ -1017,7 +1162,10 @@ export default function OrderEdit() {
             </div>
           )}
 
-          {!isNew && existingOrder && (
+          {/* No booking/label UI at all for No Courier or Collection - a
+              Collection order is an external courier BNS neither books nor
+              labels, and No Courier means there's genuinely nothing to book. */}
+          {!isNew && existingOrder && courierType === "DPD" && (
             <div className="mt-4 border-t border-slate-100 pt-4">
               <div className="flex flex-wrap gap-3 items-center">
                 {existingOrder.dpdConsignmentNumber ? (
@@ -1052,6 +1200,36 @@ export default function OrderEdit() {
                 )}
               </div>
               {dpdError && <p className="text-sm text-red-600 mt-2">{dpdError}</p>}
+            </div>
+          )}
+
+          {!isNew && existingOrder && courierType === "APC" && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <div className="flex flex-wrap gap-3 items-center">
+                {existingOrder.apcWaybill ? (
+                  <>
+                    <span className="text-sm text-slate-700">
+                      APC waybill <span className="font-medium">{existingOrder.apcWaybill}</span>
+                      {existingOrder.apcOrderNumber ? ` (order ${existingOrder.apcOrderNumber})` : ""}
+                    </span>
+                    <button
+                      onClick={viewApcLabel}
+                      className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
+                    >
+                      Print Label
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => bookApcShipmentMutation.mutate()}
+                    disabled={bookApcShipmentMutation.isPending}
+                    className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded hover:bg-slate-900 disabled:opacity-50"
+                  >
+                    {bookApcShipmentMutation.isPending ? "Booking..." : "Book APC Shipment"}
+                  </button>
+                )}
+              </div>
+              {apcError && <p className="text-sm text-red-600 mt-2">{apcError}</p>}
             </div>
           )}
 

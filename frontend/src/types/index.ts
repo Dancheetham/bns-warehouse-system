@@ -703,6 +703,13 @@ export interface InvoiceHistoryView {
   orderNumbers: string[];
 }
 
+// Which courier (if any) an order is going out on - previously inferred
+// purely from whether dpdShipmentId was set, since DPD was the only
+// integrated courier. NONE hides the whole service/booking/label UI on the
+// order screen; COLLECTION records an external courier BNS neither books
+// nor labels itself (see CollectionCourierOption).
+export type CourierType = "NONE" | "DPD" | "APC" | "COLLECTION";
+
 export interface Order {
   id: number;
   orderNumber: string;
@@ -726,6 +733,10 @@ export interface Order {
   orderType: OrderType;
   shippingCost?: number;
   courierMethod?: string;
+  courierType?: CourierType;
+  // Only meaningful when courierType === "COLLECTION" - which
+  // CollectionCourierOption was picked, as plain text.
+  collectionCourierName?: string;
   dpdNetworkKey?: string;
   // Once-only guard, set the moment this order's delivery charge is actually
   // billed on an invoice (see InvoiceService) - shipping cost/courier/service
@@ -737,6 +748,11 @@ export interface Order {
   dpdConsignmentNumber?: string;
   dpdParcelNumbers?: string;
   dpdShippedAt?: string;
+  // APC Overnight (Hypaship) equivalents of the dpd* fields above.
+  apcServiceCode?: string;
+  apcOrderNumber?: string;
+  apcWaybill?: string;
+  apcShippedAt?: string;
   // Set once, the first time this order actually despatches - never cleared
   // by Reverse to Despatch. Absence means it's never gone out the door at
   // all, which is what OrderEdit uses to decide whether to show a Delivery
@@ -747,6 +763,25 @@ export interface Order {
   // changes were pushed back to the underlying Shopify order. Never present
   // otherwise (e.g. on a plain GET), so always optional here.
   shopifyAmendStatus?: string;
+}
+
+// One entry in the admin-managed "Collection" courier list (Settings >
+// Couriers) - external services (a customer's own courier, UKI, InXpress,
+// Seabridge, ...) BNS neither books nor labels itself. Orders reference
+// this by name (Order.collectionCourierName), not id.
+export interface CollectionCourierOption {
+  id: number;
+  name: string;
+  active: boolean;
+  sortOrder: number;
+}
+
+// One APC Overnight product code offered on the order screen's Service
+// dropdown when courierType === "APC" - a static list (see
+// ApcShippingService.STANDARD_SERVICES), paired with a free-text override.
+export interface ApcServiceOption {
+  code: string;
+  description: string;
 }
 
 // One DPD service actually available right now for an order's delivery

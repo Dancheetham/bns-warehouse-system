@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
+import uk.co.bns.warehouse_api.dto.ApcOrderResult;
 import uk.co.bns.warehouse_api.dto.DespatchConfirmationResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderPickSummary;
@@ -14,6 +15,7 @@ import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.StockItem;
 import uk.co.bns.warehouse_api.entity.StockMovement;
+import uk.co.bns.warehouse_api.enums.CourierType;
 import uk.co.bns.warehouse_api.enums.MovementType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.PickingStatus;
@@ -51,6 +53,7 @@ public class DespatchService {
     private final ShopifyFulfillmentService shopifyFulfillmentService;
     private final DespatchConfirmationService despatchConfirmationService;
     private final DpdShippingService dpdShippingService;
+    private final ApcShippingService apcShippingService;
 
     public static final String PACKING_MODE_KEY = "packing_mode";
     public static final String PACKING_MODE_SPLIT = "SPLIT";
@@ -88,7 +91,8 @@ public class DespatchService {
         // case explicitly asked to be a hard stop instead). Skipped entirely
         // once a shipment's already booked for this order - nothing to
         // re-validate at that point.
-        if (order.getDpdShipmentId() == null && !settingsService.get("dpd_api_key", "").isBlank()) {
+        if (order.getCourierType() == CourierType.DPD && order.getDpdShipmentId() == null
+                && !settingsService.get("dpd_api_key", "").isBlank()) {
             dpdShippingService.assertOrderServiceAvailable(order);
         }
 
@@ -167,6 +171,8 @@ public class DespatchService {
         // shipment and a real tracking number, which is then preferred over the
         // old manually-typed carton tracking number for the Shopify push.
         String dpdStatus = bookDpdShipment(order);
+        String apcStatus = bookApcShipment(order);
+        String courierStatus = dpdStatus != null ? dpdStatus : apcStatus;
 
         List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(orderId);
         String manualTrackingNumber = cartons.stream()
@@ -174,21 +180,27 @@ public class DespatchService {
                 .filter(t -> t != null && !t.isBlank())
                 .findFirst()
                 .orElse(null);
-        String trackingNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber() : manualTrackingNumber;
+        String trackingNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber()
+                : order.getApcWaybill() != null ? order.getApcWaybill() : manualTrackingNumber;
         String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, trackingNumber);
         AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime, performedByName);
 
-        return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus, dpdStatus);
+        return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus, courierStatus);
     }
 
     /**
-     * Only attempts a booking when DPD is actually configured (an API key is
-     * set) - orders/environments not using DPD yet get a silent null rather
-     * than a confusing "DPD not booked" message on every single despatch.
-     * Already-booked orders (re-confirming, or booked manually beforehand via
-     * the order screen) are left alone rather than booking a second shipment.
+     * Only attempts a booking when this order is actually on DPD
+     * (courierType == DPD) and DPD is configured (an API key is set) -
+     * NONE/COLLECTION/APC orders, and DPD orders in an environment that
+     * hasn't set up DPD yet, get a silent null rather than a confusing "DPD
+     * not booked" message on every single despatch. Already-booked orders
+     * (re-confirming, or booked manually beforehand via the order screen)
+     * are left alone rather than booking a second shipment.
      */
     private String bookDpdShipment(Order order) {
+        if (order.getCourierType() != CourierType.DPD) {
+            return null;
+        }
         if (order.getDpdShipmentId() != null) {
             return "DPD shipment already booked (consignment " + order.getDpdConsignmentNumber() + ")";
         }
@@ -201,6 +213,26 @@ public class DespatchService {
         } catch (Exception e) {
             log.warn("DPD shipment booking failed for order {} at despatch confirmation: {}", order.getOrderNumber(), e.getMessage());
             return "DPD shipment NOT booked: " + e.getMessage() + " - book it manually from the order screen once fixed";
+        }
+    }
+
+    /** APC equivalent of bookDpdShipment above - same best-effort, same gating shape. */
+    private String bookApcShipment(Order order) {
+        if (order.getCourierType() != CourierType.APC) {
+            return null;
+        }
+        if (order.getApcWaybill() != null) {
+            return "APC shipment already booked (waybill " + order.getApcWaybill() + ")";
+        }
+        if (settingsService.get("apc_email", "").isBlank() || settingsService.get("apc_password", "").isBlank()) {
+            return null;
+        }
+        try {
+            ApcOrderResult result = apcShippingService.createOrder(order);
+            return "APC shipment booked - waybill " + result.waybill();
+        } catch (Exception e) {
+            log.warn("APC shipment booking failed for order {} at despatch confirmation: {}", order.getOrderNumber(), e.getMessage());
+            return "APC shipment NOT booked: " + e.getMessage() + " - book it manually from the order screen once fixed";
         }
     }
 }

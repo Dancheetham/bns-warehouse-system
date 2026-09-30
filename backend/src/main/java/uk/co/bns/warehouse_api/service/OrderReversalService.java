@@ -94,6 +94,14 @@ public class OrderReversalService {
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
 
+        // APC equivalent of the DPD clearing above - same reasoning (no
+        // cancel/void endpoint used here; genuinely undoing an already
+        // collected APC waybill needs APC's own portal). apcServiceCode is
+        // deliberately left alone, same as dpdNetworkKey above.
+        order.setApcOrderNumber(null);
+        order.setApcWaybill(null);
+        order.setApcShippedAt(null);
+
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
         List<StockItem> reversedItems = new ArrayList<>();
         for (StockItem item : items) {
@@ -186,6 +194,11 @@ public class OrderReversalService {
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
         order.setDpdNetworkKey(null);
+        // APC equivalent - same reasoning as above.
+        order.setApcOrderNumber(null);
+        order.setApcWaybill(null);
+        order.setApcShippedAt(null);
+        order.setApcServiceCode(null);
         return orderRepository.save(order);
     }
 

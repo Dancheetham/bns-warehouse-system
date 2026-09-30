@@ -5,6 +5,44 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.61] - 2026-09-30 (v0.126)
+
+### Added
+
+- **Courier is now a real, persisted choice on every order** (`Order.courierType`:
+  No Courier / DPD / APC / Collection) instead of being inferred purely from
+  whether a DPD shipment existed. Picking **No Courier** hides the whole
+  service/booking/label box on the order screen - for orders that genuinely
+  aren't being shipped by a tracked courier.
+- **Collection couriers**: an admin-extensible list (Settings > Couriers >
+  Collection Services - seeded with Customer, UKI, InXpress, Seabridge, add
+  your own) for external couriers BNS doesn't book or label itself. Picking
+  Collection on an order just records which one was used, with no API
+  involved.
+- **New "Couriers" Settings section**, replacing the old standalone DPD
+  section - the Collection Services list and DPD's settings now live there
+  together, with APC's settings alongside them.
+- **APC Overnight (Hypaship Booking Platform API v3) integration** - book a
+  shipment and print its label directly from the order screen, the same way
+  DPD already works. Settings > Couriers > APC takes your Hypaship login
+  email/password, environment (Training/Live), account number, and optional
+  default product code / goods description / override collection address
+  (leave the collection address blank to use your account's own default
+  depot, which is the normal case since BNS is the collection point). The
+  order screen's Service field offers a short list of common product codes
+  (ND10/ND12/ND16/NDSAT/ECO48) plus a free-text override for anything else,
+  mirroring DPD's own live-lookup-with-fallback pattern. Tracking, amending
+  and cancelling an APC order aren't wired up yet - booking and labels are
+  the two things actually needed to despatch, same as DPD.
+- Despatch confirmation now books an APC shipment automatically, exactly
+  like it already does for DPD, when an order's courier is APC and APC
+  credentials are set - best-effort, so a booking failure never blocks the
+  despatch itself, just surfaces as a status message (and a red flag on the
+  despatch screen) so it can be booked manually afterwards.
+- Delivery History's "Courier" column now reads the same explicit
+  courierType rather than guessing DPD-or-nothing from a consignment
+  number, so it correctly shows APC/Collection/No Courier too.
+
 ## [0.23.60] - 2026-09-30 (v0.125)
 
 ### Added

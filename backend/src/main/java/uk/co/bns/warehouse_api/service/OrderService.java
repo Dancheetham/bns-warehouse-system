@@ -173,9 +173,13 @@ public class OrderService {
         boolean shippingLocked = order.isShippingInvoiced() && !reopeningForExtraShipment;
         if (shippingLocked) {
             boolean costChanged = !bigDecimalEquals(request.shippingCost(), order.getShippingCost());
-            boolean courierChanged = !java.util.Objects.equals(request.courierMethod(), order.getCourierMethod());
-            boolean serviceChanged = request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()
-                    && !request.dpdNetworkKey().equals(order.getDpdNetworkKey());
+            boolean courierChanged = !java.util.Objects.equals(request.courierMethod(), order.getCourierMethod())
+                    || (request.courierType() != null && request.courierType() != order.getCourierType())
+                    || !java.util.Objects.equals(request.collectionCourierName(), order.getCollectionCourierName());
+            boolean serviceChanged = (request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()
+                    && !request.dpdNetworkKey().equals(order.getDpdNetworkKey()))
+                    || (request.apcServiceCode() != null && !request.apcServiceCode().isBlank()
+                    && !request.apcServiceCode().equals(order.getApcServiceCode()));
             if (costChanged || courierChanged || serviceChanged) {
                 throw new uk.co.bns.warehouse_api.exception.ValidationException(
                         "Shipping cost, courier and service can no longer be changed - this order's delivery has already been invoiced");
@@ -251,12 +255,19 @@ public class OrderService {
     private void archiveCurrentShipment(Order order) {
         Shipment shipment = new Shipment();
         shipment.setOrder(order);
-        shipment.setShippedAt(order.getDpdShippedAt() != null ? order.getDpdShippedAt() : order.getDespatchedAt());
+        shipment.setShippedAt(order.getDpdShippedAt() != null ? order.getDpdShippedAt()
+                : order.getApcShippedAt() != null ? order.getApcShippedAt() : order.getDespatchedAt());
         shipment.setCourierMethod(order.getCourierMethod());
+        shipment.setCourierType(order.getCourierType());
+        shipment.setCollectionCourierName(order.getCollectionCourierName());
         shipment.setDpdNetworkKey(order.getDpdNetworkKey());
         shipment.setDpdShipmentId(order.getDpdShipmentId());
         shipment.setDpdConsignmentNumber(order.getDpdConsignmentNumber());
         shipment.setDpdParcelNumbers(order.getDpdParcelNumbers());
+        shipment.setApcServiceCode(order.getApcServiceCode());
+        shipment.setApcOrderNumber(order.getApcOrderNumber());
+        shipment.setApcWaybill(order.getApcWaybill());
+        shipment.setApcShippedAt(order.getApcShippedAt());
         shipment.setShippingCost(order.getShippingCost());
         shipmentRepository.save(shipment);
 
@@ -268,6 +279,9 @@ public class OrderService {
         order.setDpdConsignmentNumber(null);
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
+        order.setApcOrderNumber(null);
+        order.setApcWaybill(null);
+        order.setApcShippedAt(null);
     }
 
     private static boolean isSystemOnlyStatus(OrderStatus status) {
@@ -327,12 +341,20 @@ public class OrderService {
         order.setOrderType(request.orderType());
         order.setShippingCost(request.shippingCost());
         order.setCourierMethod(request.courierMethod());
+        // Null is "leave whatever's there" - see OrderRequest.courierType.
+        if (request.courierType() != null) {
+            order.setCourierType(request.courierType());
+        }
+        order.setCollectionCourierName(request.collectionCourierName());
         // Blank/null is "leave whatever's there", matching releaseForDespatch
         // below - callers that don't know about DPD services at all (e.g. a
         // future integration building an OrderRequest without ever touching
         // this field) shouldn't silently wipe out a service someone picked.
         if (request.dpdNetworkKey() != null && !request.dpdNetworkKey().isBlank()) {
             order.setDpdNetworkKey(request.dpdNetworkKey());
+        }
+        if (request.apcServiceCode() != null && !request.apcServiceCode().isBlank()) {
+            order.setApcServiceCode(request.apcServiceCode());
         }
         order.setSpecialInstructions(request.specialInstructions());
         order.setCompany(request.companyId() != null ? companyService.findById(request.companyId()) : null);
@@ -350,7 +372,9 @@ public class OrderService {
      */
     @Transactional
     public Order releaseForDespatch(Long id, java.math.BigDecimal shippingCost, String courierMethod,
-                                     String dpdNetworkKey, boolean overrideCreditHold, String overrideReason) {
+                                     uk.co.bns.warehouse_api.enums.CourierType courierType, String collectionCourierName,
+                                     String dpdNetworkKey, String apcServiceCode,
+                                     boolean overrideCreditHold, String overrideReason) {
         Order order = findById(id);
         if (order.getStatus() != uk.co.bns.warehouse_api.enums.OrderStatus.ON_HOLD) {
             throw new uk.co.bns.warehouse_api.exception.ValidationException(
@@ -376,8 +400,17 @@ public class OrderService {
         if (courierMethod != null && !courierMethod.isBlank()) {
             order.setCourierMethod(courierMethod);
         }
+        if (courierType != null) {
+            order.setCourierType(courierType);
+        }
+        if (collectionCourierName != null) {
+            order.setCollectionCourierName(collectionCourierName);
+        }
         if (dpdNetworkKey != null && !dpdNetworkKey.isBlank()) {
             order.setDpdNetworkKey(dpdNetworkKey);
+        }
+        if (apcServiceCode != null && !apcServiceCode.isBlank()) {
+            order.setApcServiceCode(apcServiceCode);
         }
         order.setStatus(uk.co.bns.warehouse_api.enums.OrderStatus.AWAITING_DESPATCH);
         return orderRepository.save(order);

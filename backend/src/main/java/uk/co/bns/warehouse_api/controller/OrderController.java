@@ -9,6 +9,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.AcknowledgementResult;
+import uk.co.bns.warehouse_api.dto.ApcLabelResult;
+import uk.co.bns.warehouse_api.dto.ApcOrderResult;
+import uk.co.bns.warehouse_api.dto.ApcServiceOption;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
@@ -19,6 +22,7 @@ import uk.co.bns.warehouse_api.dto.ReleaseForDespatchRequest;
 import uk.co.bns.warehouse_api.dto.GdmsRunResult;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.service.AcknowledgementService;
+import uk.co.bns.warehouse_api.service.ApcShippingService;
 import uk.co.bns.warehouse_api.service.DpdShippingService;
 import uk.co.bns.warehouse_api.service.GdmsEndOfDayService;
 import uk.co.bns.warehouse_api.service.OrderService;
@@ -37,6 +41,7 @@ public class OrderController {
     private final AcknowledgementService acknowledgementService;
     private final PaymentService paymentService;
     private final DpdShippingService dpdShippingService;
+    private final ApcShippingService apcShippingService;
     private final GdmsEndOfDayService gdmsEndOfDayService;
 
     @GetMapping
@@ -63,7 +68,8 @@ public class OrderController {
     @PostMapping("/{id}/release-for-despatch")
     public Order releaseForDespatch(@PathVariable Long id, @RequestBody ReleaseForDespatchRequest request) {
         return orderService.releaseForDespatch(id, request.shippingCost(), request.courierMethod(),
-                request.dpdNetworkKey(), request.overrideCreditHold(), request.overrideReason());
+                request.courierType(), request.collectionCourierName(), request.dpdNetworkKey(),
+                request.apcServiceCode(), request.overrideCreditHold(), request.overrideReason());
     }
 
     // Populates the "Service" dropdown on the order screen with whatever DPD
@@ -129,5 +135,29 @@ public class OrderController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + id + ".zpl\"")
                 .contentType(MediaType.valueOf("application/x-zpl"))
                 .body(result.rawLabelData().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    // APC equivalents of the dpd-services/dpd-shipment/dpd-labels endpoints
+    // above - see ApcShippingService for why the service list is a static
+    // fallback rather than a live lookup in this first version.
+    @GetMapping("/{id}/apc-services")
+    public List<ApcServiceOption> apcServices(@PathVariable Long id) {
+        return apcShippingService.listAvailableServices();
+    }
+
+    @PostMapping("/{id}/apc-shipment")
+    public ApcOrderResult createApcShipment(@PathVariable Long id) {
+        return apcShippingService.createOrder(orderService.findById(id));
+    }
+
+    // Raw ZPL, same treatment as the DPD label endpoint above, so "Print
+    // Label" goes through the same printRaw()/print-agent flow.
+    @GetMapping("/{id}/apc-labels")
+    public ResponseEntity<byte[]> getApcLabels(@PathVariable Long id) {
+        ApcLabelResult result = apcShippingService.getLabel(orderService.findById(id));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"apc-label-" + id + ".zpl\"")
+                .contentType(MediaType.valueOf("application/x-zpl"))
+                .body(result.labelData());
     }
 }

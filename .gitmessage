@@ -1,55 +1,61 @@
-Add a notification bell for GDMS failures + a backfill date picker (v0.125)
+Add No Courier/Collection couriers, a Couriers settings section, and
+APC Overnight integration (v0.126)
 
-Dan tested v0.124's recall/log feature and it worked as expected, then
-raised a real problem: sometimes new stock gets despatched before
-Grandstream has finished assigning it to our channel on their side, so
-our /assign call fails for it - and until now that failure was only
-visible if someone thought to go check the GDMS log. His two ideas:
+Dan asked for three things together: a "No Courier" option that hides
+the service box entirely, an admin-extensible "Collection" courier
+category (Customer/UKI/InXpress/Seabridge to start) for external
+couriers BNS neither books nor labels, and full APC Overnight
+integration via the Hypaship Booking Platform API v3 (docs attached),
+with its settings living alongside DPD's in a new Couriers section.
 
-1. A notification bell (top-right, number bubble) that surfaces "GDMS
-   Error" and takes you straight to the filtered log when clicked.
-2. A date picker next to "Run GDMS end-of-day now" so a bad day (GDMS
-   down, or a batch that failed for the reason above) can be backfilled
-   once it clears, rather than only ever re-running today's despatches.
-
-He also asked me to confirm an assumption: that retrying via the
-per-order button would pick up a previously-failed device. Confirmed,
-no code change needed - StockItem.gdmsSyncedAt is only ever set on
-success, so a failed device is naturally picked up fresh by the next
-run of any kind.
+The underlying gap this closes: courier was never actually a
+persisted field on Order - "DPD" was hardcoded as the only option in
+the frontend dropdown, and which courier had shipped was only ever
+inferred from whether a DPD shipment existed. That worked while DPD
+was the only integration, but couldn't hold a second one. Order now
+has a real `courierType` (NONE/DPD/APC/COLLECTION), backfilled on
+existing orders from their DPD data.
 
 Implemented:
 
-- New general-purpose `notifications` table (migration V53) -
-  deliberately not GDMS-specific, so it can back other notification
-  types later (Dan's mentioned wanting a reminder system at some
-  point) without rework. `NotificationService`/`NotificationController`:
-  GET /notifications (recent 30), GET /notifications/unread-count
-  (polled every 30s for the badge), POST /notifications/mark-all-read.
+- `CourierType` enum + `Order.courierType`/`collectionCourierName`,
+  mirrored onto `Shipment` so archived shipments (Reverse to Despatch,
+  additional part-shipments) keep their courier data too.
+- `collection_courier_options` table + admin CRUD (Settings >
+  Couriers > Collection Services, saves immediately per change) and a
+  public active-only endpoint for the order screen's dropdown.
+- New "Couriers" Settings section: the Collection Services list, then
+  DPD's existing settings moved in unchanged, then a new APC block
+  (email/password login - APC's auth is a simple Basic-style header,
+  not DPD's OAuth token exchange - environment, account number,
+  optional override collection address, default product code/goods
+  description).
+- `ApcAuthService`/`ApcShippingService`, structured like
+  `DpdAuthService`/`DpdShippingService`: book an order (`Orders.json`)
+  and fetch its label live on demand (ZPL, so it goes through the same
+  print-agent flow as DPD labels), both best-effort and deliberately
+  not `@Transactional` so a courier-side failure never blocks the
+  despatch it's attached to.
+- `DespatchService` books an APC shipment automatically at despatch
+  time under the same conditions DPD already does (courier selected +
+  credentials configured), and the despatch-confirmation status/colour
+  coding now reflects whichever courier actually applies.
+- OrderEdit's Despatch panel is now a real 4-way branch on
+  `courierType`: nothing for No Courier, DPD unchanged, a plain
+  dropdown with no booking/label UI for Collection, and an APC block
+  mirroring DPD's (service picker with free-text fallback, book
+  button, then waybill + print label).
+- Delivery History's Courier column now reads the explicit
+  `courierType` instead of guessing "DPD or nothing" from a
+  consignment number - the same implicit-inference bug the rest of
+  this change was fixing, so worth closing here too.
 
-- `GdmsChannelService` now raises one GDMS_FAILURE notification per
-  assign/recall call that has any failed MAC - once per call, not once
-  per internal 100-MAC batch, so a whole failed run doesn't spam the
-  bell. The notification links to /gdms-log?from=<today>&to=<today>&
-  status=FAILURE. Confirmed via two design questions with Dan: the
-  notifications table is general-purpose (not GDMS-only), and the
-  badge clears the instant the bell is opened rather than only once a
-  specific failure has actually been viewed.
-
-- New floating NotificationBell component (fixed top-right - this
-  app's Layout has no header bar to live in, sidebar-only) - badge,
-  dropdown of recent notifications, click-to-navigate, click-outside
-  to close.
-
-- GdmsLog.tsx now reads its initial from/to/status filters from the
-  URL query string on mount, so a notification's link lands already
-  filtered to the right day and FAILURE status.
-
-- SettingsController's run-end-of-day endpoint now takes an optional
-  `date` param (defaults to today); Settings.tsx grew a date input
-  next to the button. Sync log source reads "Manual" for today,
-  "Manual (backfill <date>)" for a picked-back date, so it's obvious
-  on the log which runs were a live catch-up versus a backfill.
+Deliberately out of scope for this first APC pass: tracking, amending
+and cancelling a booked order, and a live product-code lookup
+(APC's optional Service Availability call) - booking + label is what
+despatch actually needs, matching what DPD parity requires. A short
+static list of common product codes (ND10/ND12/ND16/NDSAT/ECO48) with
+a free-text override covers the rest for now.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

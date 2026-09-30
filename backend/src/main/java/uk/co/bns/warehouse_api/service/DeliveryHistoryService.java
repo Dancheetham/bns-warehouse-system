@@ -85,12 +85,28 @@ public class DeliveryHistoryService {
         return shipmentRepository.findByOrder_IdOrderByCreatedAtAsc(order.getId()).stream()
                 .map(s -> new ShipmentView(
                         s.getShippedAt(),
-                        s.getDpdConsignmentNumber() != null ? "DPD" : null,
+                        shipmentCourierLabel(s),
                         s.getCourierMethod(),
-                        s.getDpdConsignmentNumber(),
+                        s.getDpdConsignmentNumber() != null ? s.getDpdConsignmentNumber() : s.getApcWaybill(),
                         s.getDpdParcelNumbers(),
                         s.getShippingCost()))
                 .toList();
+    }
+
+    private String shipmentCourierLabel(uk.co.bns.warehouse_api.entity.Shipment shipment) {
+        uk.co.bns.warehouse_api.enums.CourierType type = shipment.getCourierType();
+        if (type == null) {
+            // Archived before courierType existed on Shipment - fall back to
+            // the old DPD-consignment inference.
+            return shipment.getDpdConsignmentNumber() != null ? "DPD" : null;
+        }
+        return switch (type) {
+            case DPD -> "DPD";
+            case APC -> "APC";
+            case COLLECTION -> shipment.getCollectionCourierName() != null
+                    ? "Collection (" + shipment.getCollectionCourierName() + ")" : "Collection";
+            case NONE -> null;
+        };
     }
 
     public byte[] exportExcel(LocalDate from, LocalDate to) {
@@ -197,17 +213,31 @@ public class DeliveryHistoryService {
 
     private DeliveryHistoryView toView(Order order) {
         int parcelCount = cartonRepository.countByOrder_Id(order.getId());
-        // Only DPD is actually wired up today (see DpdShippingService) - a
-        // consignment number is the tell for "this genuinely went out on
-        // DPD" as opposed to a manual/no-courier despatch (e.g. collected,
-        // or a courier typed straight onto a carton's tracking number).
-        String courier = order.getDpdConsignmentNumber() != null ? "DPD" : null;
+        // courierType is now an explicit field on the order (see
+        // CourierType) rather than inferred from whether a DPD consignment
+        // number happened to be set - covers APC and Collection too, and
+        // still falls back to the old DPD-consignment inference for orders
+        // despatched before this field existed (backfilled to DPD by
+        // V54__add_courier_type_and_apc.sql, but belt-and-braces here too).
+        String courier = courierLabel(order);
+        String consignmentNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber()
+                : order.getApcWaybill();
         return new DeliveryHistoryView(
                 order.getId(), order.getOrderNumber(), order.getDespatchedAt(),
                 order.getCompany() != null ? order.getCompany().getName() : null,
                 order.getDeliveryName(), order.getDeliveryPostcode(),
-                courier, order.getCourierMethod(), order.getDpdConsignmentNumber(),
+                courier, order.getCourierMethod(), consignmentNumber,
                 parcelCount, order.getStatus().name());
+    }
+
+    private String courierLabel(Order order) {
+        return switch (order.getCourierType() != null ? order.getCourierType() : uk.co.bns.warehouse_api.enums.CourierType.NONE) {
+            case DPD -> "DPD";
+            case APC -> "APC";
+            case COLLECTION -> order.getCollectionCourierName() != null
+                    ? "Collection (" + order.getCollectionCourierName() + ")" : "Collection";
+            case NONE -> order.getDpdConsignmentNumber() != null ? "DPD" : null;
+        };
     }
 
     private List<DeliveryHistoryItemView> itemsFor(Order order) {

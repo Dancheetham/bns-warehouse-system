@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import uk.co.bns.warehouse_api.enums.CourierType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.OrderType;
 
@@ -32,6 +33,15 @@ public record OrderRequest(
         @NotNull OrderType orderType,
         BigDecimal shippingCost,
         String courierMethod,
+        // Null means "leave whatever's there" (matches the dpdNetworkKey
+        // handling below) - so a caller that doesn't know about
+        // courierType at all (an older client, or a create request for a
+        // brand-new order) doesn't silently force it back to NONE. See
+        // OrderService.applyFields.
+        CourierType courierType,
+        // Only meaningful when courierType == COLLECTION - which
+        // CollectionCourierOption was picked, captured as plain text.
+        String collectionCourierName,
         // Optional - the general update path can now carry the DPD service
         // choice too (previously only releaseForDespatch could set it), so
         // it can be changed after release without going through that
@@ -39,6 +49,9 @@ public record OrderRequest(
         // see OrderService.applyFields, which mirrors releaseForDespatch's
         // own blank-is-a-no-op handling rather than wiping it out.
         String dpdNetworkKey,
+        // APC's equivalent of dpdNetworkKey - the product/service code
+        // picked (or typed) on the order screen when courierType == APC.
+        String apcServiceCode,
         String specialInstructions,
         // Only meaningful on update, not create - the version the editor
         // loaded, so a stale save (someone else has saved since) can be

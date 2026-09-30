@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import uk.co.bns.warehouse_api.enums.CourierType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.OrderType;
 import uk.co.bns.warehouse_api.enums.PickingStatus;
@@ -109,6 +110,24 @@ public class Order {
     @Column(name = "courier_method")
     private String courierMethod;
 
+    // Explicit discriminator for which courier (if any) this order is going
+    // out on - previously inferred purely from whether dpdShipmentId was
+    // non-null, which only ever worked because DPD was the only integrated
+    // courier. NONE hides the whole service/booking/label UI; COLLECTION
+    // records an external courier (see collectionCourierName /
+    // CollectionCourierOption) that BNS neither books nor labels itself.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "courier_type", nullable = false)
+    private CourierType courierType = CourierType.NONE;
+
+    // Which extensible "Collection" option (Customer/UKI/InXpress/
+    // Seabridge/...) was picked, captured as plain text at selection time -
+    // only meaningful when courierType == COLLECTION. Deliberately NOT a
+    // foreign key to CollectionCourierOption, so renaming/removing an option
+    // later never orphans a historical order - see CollectionCourierOption.
+    @Column(name = "collection_courier_name")
+    private String collectionCourierName;
+
     // The DPD networkKey (e.g. "1^12") chosen from the live service dropdown
     // on the order screen at release-for-despatch time. Despatch tries this
     // exact service first (re-checked against DPD's live list, since
@@ -141,6 +160,24 @@ public class Order {
 
     @Column(name = "dpd_shipped_at")
     private LocalDateTime dpdShippedAt;
+
+    // APC Overnight (Hypaship) equivalents of the dpd* fields above -
+    // populated once ApcShippingService.createOrder() has actually booked a
+    // shipment for this order. apcServiceCode is the product code picked (or
+    // typed) on the order screen; apcOrderNumber/apcWaybill are what APC
+    // hands back (an 18-digit order number and a 22-digit consignment
+    // waybill respectively) - see ApcShippingService for the fuller mapping.
+    @Column(name = "apc_service_code")
+    private String apcServiceCode;
+
+    @Column(name = "apc_order_number")
+    private String apcOrderNumber;
+
+    @Column(name = "apc_waybill")
+    private String apcWaybill;
+
+    @Column(name = "apc_shipped_at")
+    private LocalDateTime apcShippedAt;
 
     // Set once, the first time DespatchService.confirmDespatch() runs for
     // this order - unlike the dpd* fields above, never cleared by Reverse to

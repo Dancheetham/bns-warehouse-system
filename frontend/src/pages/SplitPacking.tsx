@@ -161,7 +161,7 @@ export default function SplitPacking() {
         {result.dpdStatus && (
           <div
             className={`rounded-lg p-4 mb-6 text-sm border flex items-center justify-between gap-3 ${
-              result.dpdStatus.startsWith("DPD shipment NOT booked")
+              result.dpdStatus.includes("shipment NOT booked")
                 ? "bg-red-50 border-red-200 text-red-700"
                 : "bg-emerald-50 border-emerald-200 text-emerald-700"
             }`}

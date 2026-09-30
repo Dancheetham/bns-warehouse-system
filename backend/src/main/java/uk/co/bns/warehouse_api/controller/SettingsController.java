@@ -1,9 +1,14 @@
 package uk.co.bns.warehouse_api.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import uk.co.bns.warehouse_api.dto.CollectionCourierOptionRequest;
 import uk.co.bns.warehouse_api.dto.GdmsChannelLookupResult;
 import uk.co.bns.warehouse_api.dto.GdmsRunResult;
+import uk.co.bns.warehouse_api.entity.CollectionCourierOption;
+import uk.co.bns.warehouse_api.service.CollectionCourierOptionService;
 import uk.co.bns.warehouse_api.service.DpdAuthService;
 import uk.co.bns.warehouse_api.service.GdmsAuthService;
 import uk.co.bns.warehouse_api.service.GdmsChannelService;
@@ -11,6 +16,7 @@ import uk.co.bns.warehouse_api.service.GdmsEndOfDayService;
 import uk.co.bns.warehouse_api.service.SettingsService;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -23,6 +29,7 @@ public class SettingsController {
     private final GdmsAuthService gdmsAuthService;
     private final GdmsChannelService gdmsChannelService;
     private final GdmsEndOfDayService gdmsEndOfDayService;
+    private final CollectionCourierOptionService collectionCourierOptionService;
 
     @GetMapping
     public Map<String, String> getAll() {
@@ -77,5 +84,31 @@ public class SettingsController {
         LocalDate target = date != null ? date : LocalDate.now();
         String source = target.equals(LocalDate.now()) ? "Manual" : "Manual (backfill " + target + ")";
         return gdmsEndOfDayService.runForDate(target, source);
+    }
+
+    // Admin list/CRUD for the "Collection" courier list (Settings >
+    // Couriers), including inactive rows - the order screen's own dropdown
+    // reads the active-only /api/collection-courier-options endpoint
+    // instead (CollectionCourierOptionController).
+    @GetMapping("/collection-couriers")
+    public List<CollectionCourierOption> collectionCouriers() {
+        return collectionCourierOptionService.findAll();
+    }
+
+    @PostMapping("/collection-couriers")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CollectionCourierOption createCollectionCourier(@Valid @RequestBody CollectionCourierOptionRequest request) {
+        return collectionCourierOptionService.create(request);
+    }
+
+    @PutMapping("/collection-couriers/{id}")
+    public CollectionCourierOption updateCollectionCourier(@PathVariable Long id, @Valid @RequestBody CollectionCourierOptionRequest request) {
+        return collectionCourierOptionService.update(id, request);
+    }
+
+    @DeleteMapping("/collection-couriers/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteCollectionCourier(@PathVariable Long id) {
+        collectionCourierOptionService.delete(id);
     }
 }

@@ -6,11 +6,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import uk.co.bns.warehouse_api.dto.ApcLabelResult;
 import uk.co.bns.warehouse_api.dto.DespatchConfirmationResult;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.OrderPickSummary;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.exception.ValidationException;
+import uk.co.bns.warehouse_api.service.ApcShippingService;
 import uk.co.bns.warehouse_api.service.DespatchService;
 import uk.co.bns.warehouse_api.service.DpdShippingService;
 import uk.co.bns.warehouse_api.service.OrderService;
@@ -28,6 +30,7 @@ public class DespatchController {
     private final DespatchService despatchService;
     private final ShippingLabelService shippingLabelService;
     private final DpdShippingService dpdShippingService;
+    private final ApcShippingService apcShippingService;
     private final OrderService orderService;
     private final SettingsService settingsService;
 
@@ -57,6 +60,13 @@ public class DespatchController {
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"dpd-label-" + orderId + ".zpl\"")
                     .contentType(MediaType.valueOf("application/x-zpl"))
                     .body(label.rawLabelData().getBytes(StandardCharsets.UTF_8));
+        }
+        if (order.getApcWaybill() != null) {
+            ApcLabelResult label = apcShippingService.getLabel(order);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"apc-label-" + orderId + ".zpl\"")
+                    .contentType(MediaType.valueOf("application/x-zpl"))
+                    .body(label.labelData());
         }
         if (!"true".equals(settingsService.get("print_sample_labels", "true"))) {
             throw new ValidationException(

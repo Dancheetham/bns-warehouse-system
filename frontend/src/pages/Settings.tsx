@@ -6,7 +6,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useToast } from "../components/ToastContext";
 import SettingsSection from "../components/SettingsSection";
 import SavedBadge from "../components/SavedBadge";
-import { GdmsRunResult } from "../types";
+import { CollectionCourierOption, GdmsRunResult } from "../types";
 
 interface UserView {
   id: number;
@@ -51,6 +51,23 @@ export default function Settings() {
   const [dpdGoodsDescription, setDpdGoodsDescription] = useState("");
   const [dpdCurrency, setDpdCurrency] = useState("GBP");
   const [dpdExtendedLiability, setDpdExtendedLiability] = useState(false);
+  const [apcEnvironment, setApcEnvironment] = useState<"training" | "live">("training");
+  const [apcEmail, setApcEmail] = useState("");
+  const [apcPassword, setApcPassword] = useState("");
+  const [apcAccountNumber, setApcAccountNumber] = useState("");
+  const [apcDefaultProductCode, setApcDefaultProductCode] = useState("");
+  const [apcGoodsDescription, setApcGoodsDescription] = useState("");
+  // Optional override collection address - blank (the default) means "use
+  // APC's own account default depot", which is what BNS wants day to day
+  // since BNS is the collection point, not the customer. See
+  // ApcShippingService.buildRequestBody.
+  const [apcCollectionOrganisation, setApcCollectionOrganisation] = useState("");
+  const [apcCollectionStreet, setApcCollectionStreet] = useState("");
+  const [apcCollectionPostcode, setApcCollectionPostcode] = useState("");
+  const [apcCollectionCity, setApcCollectionCity] = useState("");
+  const [apcCollectionCountryCode, setApcCollectionCountryCode] = useState("GB");
+  const [apcCollectionContactName, setApcCollectionContactName] = useState("");
+  const [apcCollectionContactPhone, setApcCollectionContactPhone] = useState("");
   const [gdmsRegion, setGdmsRegion] = useState<"eu" | "us">("eu");
   const [gdmsClientId, setGdmsClientId] = useState("");
   const [gdmsClientSecret, setGdmsClientSecret] = useState("");
@@ -140,6 +157,20 @@ export default function Settings() {
     setDpdGoodsDescription(settings["dpd_goods_description"] ?? "Telecoms and networking equipment");
     setDpdCurrency(settings["dpd_currency"] ?? "GBP");
     setDpdExtendedLiability((settings["dpd_extended_liability"] ?? "false") === "true");
+    setApcEnvironment((settings["apc_environment"] as "training" | "live") ?? "training");
+    setApcEmail(settings["apc_email"] ?? "");
+    // apc_password deliberately never populated back, same reasoning as
+    // smtp_password/dpd_api_secret above.
+    setApcAccountNumber(settings["apc_account_number"] ?? "");
+    setApcDefaultProductCode(settings["apc_default_product_code"] ?? "");
+    setApcGoodsDescription(settings["apc_goods_description"] ?? "Telecoms and networking equipment");
+    setApcCollectionOrganisation(settings["apc_collection_organisation"] ?? "");
+    setApcCollectionStreet(settings["apc_collection_street"] ?? "");
+    setApcCollectionPostcode(settings["apc_collection_postcode"] ?? "");
+    setApcCollectionCity(settings["apc_collection_city"] ?? "");
+    setApcCollectionCountryCode(settings["apc_collection_country_code"] ?? "GB");
+    setApcCollectionContactName(settings["apc_collection_contact_name"] ?? "");
+    setApcCollectionContactPhone(settings["apc_collection_contact_phone"] ?? "");
     setGdmsRegion((settings["gdms_region"] as "eu" | "us") ?? "eu");
     setGdmsClientId(settings["gdms_client_id"] ?? "");
     // gdms_client_secret/gdms_password deliberately never populated back,
@@ -181,6 +212,52 @@ export default function Settings() {
     onSuccess: () =>
       showToast("GDMS connection reset - the next GDMS action will log in fresh and get a new access token."),
     onError: () => showToast("Failed to reset the GDMS connection - see the console for details."),
+  });
+
+  // Collection courier list (Settings > Couriers > Collection Services) -
+  // each row saves immediately on click (add/toggle/delete), rather than
+  // waiting for this page's big Save button, since it's managing a separate
+  // list resource (CollectionCourierOption rows), not settings-map
+  // key/values like everything else on this page.
+  const { data: collectionCouriers } = useQuery({
+    queryKey: ["collection-couriers-admin"],
+    queryFn: async () => (await api.get<CollectionCourierOption[]>("/settings/collection-couriers")).data,
+  });
+  const [newCollectionCourierName, setNewCollectionCourierName] = useState("");
+  const addCollectionCourierMutation = useMutation({
+    mutationFn: async () =>
+      api.post("/settings/collection-couriers", {
+        name: newCollectionCourierName.trim(),
+        active: true,
+        sortOrder: (collectionCouriers?.length ?? 0) * 10,
+      }),
+    onSuccess: () => {
+      setNewCollectionCourierName("");
+      queryClient.invalidateQueries({ queryKey: ["collection-couriers-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["collection-courier-options"] });
+    },
+    onError: (err: Error) => showToast(err.message),
+  });
+  const toggleCollectionCourierMutation = useMutation({
+    mutationFn: async (option: CollectionCourierOption) =>
+      api.put(`/settings/collection-couriers/${option.id}`, {
+        name: option.name,
+        active: !option.active,
+        sortOrder: option.sortOrder,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["collection-couriers-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["collection-courier-options"] });
+    },
+    onError: (err: Error) => showToast(err.message),
+  });
+  const deleteCollectionCourierMutation = useMutation({
+    mutationFn: async (id: number) => api.delete(`/settings/collection-couriers/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["collection-couriers-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["collection-courier-options"] });
+    },
+    onError: (err: Error) => showToast(err.message),
   });
 
   const runGdmsEndOfDayMutation = useMutation({
@@ -231,6 +308,21 @@ export default function Settings() {
         dpd_goods_description: dpdGoodsDescription,
         dpd_currency: dpdCurrency,
         dpd_extended_liability: String(dpdExtendedLiability),
+        apc_environment: apcEnvironment,
+        apc_email: apcEmail,
+        // Only included when actually typed - same reasoning as
+        // smtp_password/dpd_api_secret above.
+        ...(apcPassword ? { apc_password: apcPassword } : {}),
+        apc_account_number: apcAccountNumber,
+        apc_default_product_code: apcDefaultProductCode,
+        apc_goods_description: apcGoodsDescription,
+        apc_collection_organisation: apcCollectionOrganisation,
+        apc_collection_street: apcCollectionStreet,
+        apc_collection_postcode: apcCollectionPostcode,
+        apc_collection_city: apcCollectionCity,
+        apc_collection_country_code: apcCollectionCountryCode,
+        apc_collection_contact_name: apcCollectionContactName,
+        apc_collection_contact_phone: apcCollectionContactPhone,
         gdms_region: gdmsRegion,
         gdms_client_id: gdmsClientId,
         ...(gdmsClientSecret ? { gdms_client_secret: gdmsClientSecret } : {}),
@@ -515,9 +607,70 @@ export default function Settings() {
       </SettingsSection>
 
       <SettingsSection
-        title="DPD"
-        description="API credentials and sender details for creating DPD shipments and printing labels directly from an order. The API key/secret pair comes from your DPD developer account (My DPD > API Access), not your normal DPD login."
+        title="Couriers"
+        description="Which couriers are available on the order screen's Despatch panel (No Courier / DPD / APC / Collection), and the settings each one needs."
       >
+        <div>
+          <h4 className="text-sm font-medium text-slate-700">Collection Services</h4>
+          <p className="text-xs text-slate-400 mb-3">
+            The options offered on the order screen when Courier = Collection - external couriers (a customer's own
+            courier, a local courier, etc.) BNS neither books nor labels itself, just records which one was used.
+            Each change here saves immediately, rather than waiting for the page's Save button below.
+          </p>
+          <div className="space-y-1.5 mb-3">
+            {collectionCouriers?.map((option) => (
+              <div key={option.id} className="flex items-center gap-3 text-sm bg-slate-50 border border-slate-200 rounded px-3 py-1.5">
+                <span className={`flex-1 ${option.active ? "text-slate-700" : "text-slate-400 line-through"}`}>
+                  {option.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleCollectionCourierMutation.mutate(option)}
+                  disabled={toggleCollectionCourierMutation.isPending}
+                  className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                >
+                  {option.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Delete "${option.name}" from the Collection courier list? Historical orders keep their own copy of the name either way.`)) {
+                      deleteCollectionCourierMutation.mutate(option.id);
+                    }
+                  }}
+                  disabled={deleteCollectionCourierMutation.isPending}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
+            ))}
+            {collectionCouriers?.length === 0 && <p className="text-xs text-slate-400">No Collection couriers set up yet.</p>}
+          </div>
+          <div className="flex gap-2 items-end">
+            <input
+              value={newCollectionCourierName}
+              onChange={(e) => setNewCollectionCourierName(e.target.value)}
+              placeholder="e.g. Local Courier Ltd"
+              className="input flex-1"
+            />
+            <button
+              type="button"
+              onClick={() => addCollectionCourierMutation.mutate()}
+              disabled={addCollectionCourierMutation.isPending || !newCollectionCourierName.trim()}
+              className="btn-secondary text-sm"
+            >
+              {addCollectionCourierMutation.isPending ? "Adding…" : "Add"}
+            </button>
+          </div>
+        </div>
+
+        <h4 className="text-sm font-medium text-slate-700 pt-4 border-t border-slate-100">DPD</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          API credentials and sender details for creating DPD shipments and printing labels directly from an order.
+          The API key/secret pair comes from your DPD developer account (My DPD &gt; API Access), not your normal
+          DPD login.
+        </p>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">API key (Client-Id)</label>
@@ -745,6 +898,117 @@ export default function Settings() {
           Turn this off once DPD is fully set up, so a despatch never accidentally prints an old test label instead
           of failing loudly - "Confirm Despatch" will simply not offer a label to print if DPD wasn't booked.
         </p>
+
+        <h4 className="text-sm font-medium text-slate-700 pt-4 border-t border-slate-100">APC</h4>
+        <p className="text-xs text-slate-400 -mt-3">
+          Login and default settings for creating APC Overnight (Hypaship) shipments and printing labels directly
+          from an order. Unlike DPD, there's no separate API key - just the email/password for your APC Hypaship
+          login.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+            <input value={apcEmail} onChange={(e) => setApcEmail(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              Password (leave blank to keep the current one)
+            </label>
+            <input
+              type="password"
+              value={apcPassword}
+              onChange={(e) => setApcPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Environment</label>
+            <select
+              value={apcEnvironment}
+              onChange={(e) => setApcEnvironment(e.target.value as "training" | "live")}
+              className="input w-48"
+            >
+              <option value="training">Training (testing)</option>
+              <option value="live">Live</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Account number (optional)</label>
+            <input value={apcAccountNumber} onChange={(e) => setApcAccountNumber(e.target.value)} className="input" />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Default product code (optional)</label>
+          <input
+            value={apcDefaultProductCode}
+            onChange={(e) => setApcDefaultProductCode(e.target.value)}
+            placeholder="e.g. ND16"
+            className="input w-48"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Used when an order has no service picked on the order screen. Leave blank to let APC fall back to your
+            account's own default product.
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-slate-500 mb-1">Goods description</label>
+          <input
+            value={apcGoodsDescription}
+            onChange={(e) => setApcGoodsDescription(e.target.value)}
+            placeholder="e.g. Telecoms and networking equipment"
+            className="input"
+          />
+        </div>
+
+        <h5 className="text-sm font-medium text-slate-700 pt-2">Collection address override (optional)</h5>
+        <p className="text-xs text-slate-400 -mt-3">
+          Leave every field below blank to use your APC account's own default collection depot - this is what BNS
+          wants day to day, since BNS is the collection point, not the customer. Only fill these in if you need to
+          override that on every shipment.
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Organisation</label>
+            <input
+              value={apcCollectionOrganisation}
+              onChange={(e) => setApcCollectionOrganisation(e.target.value)}
+              placeholder="BNS Distribution"
+              className="input"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Contact name</label>
+            <input value={apcCollectionContactName} onChange={(e) => setApcCollectionContactName(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Contact phone</label>
+            <input value={apcCollectionContactPhone} onChange={(e) => setApcCollectionContactPhone(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Address line 1</label>
+            <input value={apcCollectionStreet} onChange={(e) => setApcCollectionStreet(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">City</label>
+            <input value={apcCollectionCity} onChange={(e) => setApcCollectionCity(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Postcode</label>
+            <input value={apcCollectionPostcode} onChange={(e) => setApcCollectionPostcode(e.target.value)} className="input" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1">Country code</label>
+            <input
+              value={apcCollectionCountryCode}
+              onChange={(e) => setApcCollectionCountryCode(e.target.value.toUpperCase())}
+              maxLength={2}
+              className="input uppercase w-24"
+            />
+          </div>
+        </div>
       </SettingsSection>
 
       <SettingsSection

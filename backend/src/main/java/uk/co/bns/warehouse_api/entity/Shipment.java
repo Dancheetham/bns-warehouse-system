@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import uk.co.bns.warehouse_api.enums.CourierType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -50,6 +51,17 @@ public class Shipment {
     @Column(name = "courier_method")
     private String courierMethod;
 
+    // See Order.courierType/collectionCourierName/apc* for what each of
+    // these snapshots - Shipment mirrors every courier-related field on
+    // Order so archiving a shipment (see OrderService.archiveCurrentShipment)
+    // loses nothing, whichever courier was actually used.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "courier_type")
+    private CourierType courierType;
+
+    @Column(name = "collection_courier_name")
+    private String collectionCourierName;
+
     @Column(name = "dpd_network_key")
     private String dpdNetworkKey;
 
@@ -61,6 +73,18 @@ public class Shipment {
 
     @Column(name = "dpd_parcel_numbers")
     private String dpdParcelNumbers;
+
+    @Column(name = "apc_service_code")
+    private String apcServiceCode;
+
+    @Column(name = "apc_order_number")
+    private String apcOrderNumber;
+
+    @Column(name = "apc_waybill")
+    private String apcWaybill;
+
+    @Column(name = "apc_shipped_at")
+    private LocalDateTime apcShippedAt;
 
     @Column(name = "shipping_cost")
     private BigDecimal shippingCost;
