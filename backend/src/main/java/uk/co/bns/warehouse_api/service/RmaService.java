@@ -43,6 +43,7 @@ public class RmaService {
     private final StockItemRepository stockItemRepository;
     private final StockMovementRepository stockMovementRepository;
     private final RmaLookupService lookupService;
+    private final GdmsRecallService gdmsRecallService;
 
     private static final BigDecimal RSF_RATE = new BigDecimal("0.85");
 
@@ -185,6 +186,13 @@ public class RmaService {
         Map<Long, ReceiveRmaItemInput> inputsById = request.items().stream()
                 .collect(Collectors.toMap(ReceiveRmaItemInput::rmaItemId, i -> i));
 
+        // Collected as items are received below, then recalled from GDMS
+        // (and gdmsSyncedAt reset) in one batched call - see
+        // GdmsRecallService. A revived StockItem's gdmsSyncedAt isn't
+        // touched by anything else in this method, so it still reflects
+        // whatever it was before this RMA if not reset here.
+        List<StockItem> touchedItems = new java.util.ArrayList<>();
+
         Order creditOrder = new Order();
         creditOrder.setOrderNumber(orderService.generateOrderNumber());
         creditOrder.setOrderDate(LocalDateTime.now());
@@ -229,6 +237,7 @@ public class RmaService {
             stockItem.setLocation(null);
             stockItem.setReceivedAt(LocalDateTime.now());
             stockItemRepository.save(stockItem);
+            touchedItems.add(stockItem);
 
             StockMovement movement = new StockMovement();
             movement.setStockItem(stockItem);
@@ -255,6 +264,11 @@ public class RmaService {
             }
             item.setCredited(true);
         }
+
+        // Auto (RMA) - any received unit already synced to GDMS gets
+        // recalled and its gdmsSyncedAt reset, same as a reversal or
+        // cancellation (see GdmsRecallService).
+        gdmsRecallService.recallSyncedItems(touchedItems, rma.getRmaNumber(), "Auto (RMA)");
 
         if (!creditOrder.getLines().isEmpty()) {
             creditOrder = orderRepository.save(creditOrder);

@@ -77,6 +77,7 @@ const navGroups: { heading: string; items: { to: string; label: string; end?: bo
     items: [
       { to: "/api-access", label: "API Access" },
       { to: "/shopify-sync", label: "Shopify Sync" },
+      { to: "/gdms-log", label: "GDMS Log" },
       { to: "/bug-reports", label: "Bug Reports" },
       { to: "/settings", label: "Settings" },
     ],

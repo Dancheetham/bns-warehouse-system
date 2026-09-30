@@ -1,33 +1,73 @@
-Fix GDMS double-counting a redespatched device (v0.123)
+Add GDMS recall-on-return and a per-MAC sync log (v0.124)
 
-Dan tested the per-order manual GDMS assign again today and got
-"2 device(s) assigned" for an order with only one device on it (an
-HT801 V2). GdmsEndOfDayService#runForMovements() built its batch by
-iterating every matching DESPATCH StockMovement and adding that
-movement's StockItem to the list, with no deduplication - but a
-single StockItem can genuinely have more than one DESPATCH movement
-against it: despatch, OrderReversalService#reverseToDespatch() (which
-deliberately never touches gdmsSyncedAt - see that class's own
-comments), despatch again. Both DESPATCH movements point at the same
-StockItem, so its one real MAC address went into the /assign batch
-twice, and both our own devicesAssigned count and GDMS's own success
-count reflected that duplicate.
+Dan's next three asks after confirming the GDMS assign flow works
+end-to-end:
 
-Fixed by deduplicating on StockItem id (a HashSet of seen ids) before
-a StockItem is ever added to a company's batch, regardless of how
-many DESPATCH movements reference it.
+1. Recall a unit from GDMS whenever it moves back into stock - RMA
+   received, an order reversed to despatch, or an order cancelled and
+   returned to stock (and, later, a stock-adjustment feature not yet
+   built) - and reset gdmsSyncedAt so a future re-despatch resyncs it
+   fresh rather than being silently skipped as "already synced".
 
-Also confirmed, while looking at this, that untracked items (e.g. the
-RJ11 BT adaptor that ships alongside an HT801 V2) are already handled
-correctly and needed no change: DespatchService still creates a
-StockMovement/StockItem for a NONE-tracking product (PickingService's
-quantity-pick path), but it has no macAddress, and
-runForMovements() already skips any item with a blank/null MAC before
-it's ever added to a batch - so an untracked item is silently excluded
-and never blocks or fails the assign for the tracked items in the same
-order.
+2. A GDMS sync log, similar to the existing Bug Reports log but with a
+   search bar, date range picker and status filter - one row per MAC
+   attempted (not per batch/company), showing date, source (scheduled/
+   manual/manual+order number/auto+reason), order number, MAC, channel
+   and status (success/failure + reason).
 
-gdms-api-findings.md (project doc) updated with both confirmations.
+3. Whether to send /assign one MAC at a time instead of batches of 100,
+   so one bad MAC can't hold up the rest of a batch - flagged alongside
+   a concern about GDMS mistaking rapid individual calls for a DDoS.
+
+Implemented:
+
+- New `gdms_sync_log` table (migration V52) and `GdmsSyncLogService`,
+  written exclusively by `GdmsChannelService` immediately after every
+  /assign or /recycle batch call. A batch call that fails outright
+  (network/auth/GDMS error, before GDMS ever looked at individual MACs)
+  now writes a FAILURE row for every MAC in that batch before the
+  exception is rethrown - previously such a failure left no record of
+  the attempt at all.
+
+- `GdmsChannelService.assignMacsToChannel()` now also takes the channel
+  name, a MAC-to-order-number map and a free-text "source", purely so
+  each log row is readable. `GdmsEndOfDayService` threads that source
+  through: "Scheduled" from the 16:30 job, "Manual" from the Settings
+  button, "Manual (Order BNS-1234)" from the per-order button (looked
+  up from the order's own despatch movements).
+
+- New `GdmsChannelService.reclaimMacs()`, calling GDMS's /channel/recycle
+  (confirmed live via the doc's own api_data.js: request field is
+  "macs", not "macList" like /assign - a genuinely different field name,
+  not a typo carried over - same batching/per-MAC-logging shape).
+
+- New `GdmsRecallService`, shared by `OrderReversalService`
+  (reverseToDespatch/cancelAndReturnToStock) and `RmaService#receive()`.
+  Collects every already-synced StockItem being returned, reclaims all
+  of them from GDMS in one batched call, and always resets
+  gdmsSyncedAt afterwards regardless of whether the GDMS call itself
+  succeeded - a recall failure must never block the underlying RMA/
+  reversal/cancellation, since the stock is physically back in the
+  warehouse either way. The failed/skipped attempt is still visible on
+  the new log page even though it didn't stop anything.
+
+- New GDMS Log page (Admin nav), mirroring PaymentTracking.tsx's shape:
+  search input, status/operation filters, DateRangePicker, everything
+  filtered client-side against a plain unfiltered GET - the same
+  pattern every other log/history page in this codebase already uses,
+  confirmed via research there's no exception to deviate from.
+
+Decided against switching /assign to one-MAC-per-call: GDMS's own
+errorMacList already isolates individually-rejected MACs within an
+otherwise-successful batch (confirmed from the doc's own example
+response), so today's design already stops one bad MAC from blocking
+the rest of its batch. Going to one-per-call would multiply the number
+of signed API calls roughly a hundredfold for no real benefit, and
+directly increases the rate-limiting/DDoS-detection risk that was the
+actual worry behind the question - kept batches of 100.
+
+gdms-api-findings.md (project doc) to be updated with the /recycle
+field-name finding.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

@@ -19,6 +19,7 @@ import ReportsOrders from "./pages/ReportsOrders";
 import ReportsStock from "./pages/ReportsStock";
 import ReportsInvoices from "./pages/ReportsInvoices";
 import BugReports from "./pages/BugReports";
+import GdmsLog from "./pages/GdmsLog";
 import SalesActivity from "./pages/SalesActivity";
 import OrderEdit from "./pages/OrderEdit";
 import Settings from "./pages/Settings";
@@ -110,6 +111,7 @@ export default function App() {
             <Route path="/reports/stock" element={<ReportsStock />} />
             <Route path="/reports/invoices" element={<ReportsInvoices />} />
             <Route path="/bug-reports" element={<BugReports />} />
+            <Route path="/gdms-log" element={<GdmsLog />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/account-settings" element={<AccountSettings />} />
             <Route path="/settings/stock-import" element={<StockImport />} />

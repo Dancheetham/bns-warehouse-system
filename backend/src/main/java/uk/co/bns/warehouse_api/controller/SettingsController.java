@@ -70,6 +70,6 @@ public class SettingsController {
      */
     @PostMapping("/gdms/run-end-of-day")
     public GdmsRunResult runGdmsEndOfDay() {
-        return gdmsEndOfDayService.runForDate(LocalDate.now());
+        return gdmsEndOfDayService.runForDate(LocalDate.now(), "Manual");
     }
 }

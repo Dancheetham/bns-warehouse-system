@@ -12,6 +12,7 @@ import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.*;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -47,6 +48,7 @@ public class OrderReversalService {
     private final CartonRepository cartonRepository;
     private final CartonLineRepository cartonLineRepository;
     private final InventoryService inventoryService;
+    private final GdmsRecallService gdmsRecallService;
 
     @Transactional
     public Order reverseToDespatch(Long orderId) {
@@ -93,6 +95,7 @@ public class OrderReversalService {
         order.setDpdShippedAt(null);
 
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
+        List<StockItem> reversedItems = new ArrayList<>();
         for (StockItem item : items) {
             if (item.getStatus() != StockItemStatus.DESPATCHED) continue;
             Location original = originalLocationOf(item, MovementType.DESPATCH);
@@ -105,7 +108,15 @@ public class OrderReversalService {
             if (original != null) {
                 inventoryService.adjustInventory(item.getProduct(), original, 1);
             }
+            reversedItems.add(item);
         }
+
+        // Any of these that had already been synced to GDMS need recalling
+        // and their gdmsSyncedAt reset, so a future re-despatch resyncs them
+        // fresh rather than being silently skipped as "already synced" - see
+        // GdmsRecallService for the full reasoning (best-effort, never blocks
+        // this reversal itself).
+        gdmsRecallService.recallSyncedItems(reversedItems, order.getOrderNumber(), "Auto (Reverse to Despatch)");
 
         for (OrderLine line : order.getLines()) {
             line.setQuantityDespatched(0);
@@ -120,6 +131,7 @@ public class OrderReversalService {
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
 
         List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(orderId);
+        List<StockItem> returnedItems = new ArrayList<>();
         for (StockItem item : items) {
             if (item.getStatus() != StockItemStatus.ALLOCATED && item.getStatus() != StockItemStatus.DESPATCHED) continue;
 
@@ -141,7 +153,14 @@ public class OrderReversalService {
                 // for items that had actually gone out.
                 inventoryService.adjustInventory(item.getProduct(), original, 1);
             }
+            returnedItems.add(item);
         }
+
+        // Same reasoning as reverseToDespatch() - recall+reset any of these
+        // that were already synced to GDMS. order.getOrderNumber() is still
+        // valid here even though item.setOrderLine(null) above cleared each
+        // item's own link back to it.
+        gdmsRecallService.recallSyncedItems(returnedItems, order.getOrderNumber(), "Auto (Cancelled)");
 
         // carton_lines reference cartons, so they have to go first
         List<CartonLine> lines = cartonLineRepository.findByOrderLine_Order_Id(orderId);

@@ -5,6 +5,52 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.59] - 2026-09-30 (v0.124)
+
+### Added
+- **GDMS recall on stock return.** Whenever a previously-synced unit moves
+  back into stock - an RMA received, an order reversed to despatch, or an
+  order cancelled and returned to stock - it's now recalled from GDMS
+  (`/channel/recycle`) and `StockItem.gdmsSyncedAt` is reset, so a future
+  re-despatch resyncs it fresh (to whatever channel it ends up on next,
+  possibly a different customer entirely) instead of being silently skipped
+  as "already synced". Best-effort by design: a GDMS outage, or GDMS
+  rejecting some/all of the MACs in the recall, never blocks the RMA/
+  reversal/cancellation itself - the flag is always reset once the physical
+  stock is back, and every attempt (successful or not) is still written to
+  the new GDMS sync log below. New shared `GdmsRecallService`, used by
+  `OrderReversalService` (both `reverseToDespatch()` and
+  `cancelAndReturnToStock()`) and `RmaService#receive()`.
+- **GDMS sync log page** (Admin > GDMS Log). One row per MAC per assign/
+  recall attempt - date, operation (assign/recall), source (Scheduled /
+  Manual / Manual (Order BNS-1234) / Auto (Reverse to Despatch) / Auto
+  (Cancelled) / Auto (RMA)), order number, MAC, channel, status (success/
+  failure + reason), with a search bar, date range picker and status filter -
+  same shape as the existing Bug Reports/Payment Tracking pages (everything
+  filtered client-side, matching how every other log page here works). New
+  `gdms_sync_log` table (migration V52), written by `GdmsChannelService` on
+  every `/assign` and `/recycle` batch (including a FAILURE row for every
+  MAC in a batch when the call itself fails outright, not just individual
+  per-MAC rejections - previously such a failure left no record at all).
+
+### Changed
+- `GdmsChannelService.assignMacsToChannel()` now takes the channel name, a
+  MAC-to-order-number map and a "source" string, purely so each row it logs
+  is readable on the new log page. `GdmsEndOfDayService` threads a `source`
+  through from the scheduled job ("Scheduled"), the global manual button
+  ("Manual"), and the per-order manual button ("Manual (Order BNS-1234)").
+
+### Not changed (considered, decided against)
+- Whether to send `/assign` one MAC at a time instead of in batches of 100,
+  raised as a question alongside this request - kept batching. GDMS's own
+  `errorMacList` already isolates individually-rejected MACs within an
+  otherwise-successful batch call (confirmed from the doc's own example
+  response), so one bad MAC doesn't hold up the rest of its batch today.
+  Switching to one-per-call would multiply the number of signed API calls
+  roughly a hundredfold for no benefit, and directly increases the rate-
+  limiting/DDoS-detection risk that was the actual concern behind the
+  question.
+
 ## [0.23.58] - 2026-09-30 (v0.123)
 
 ### Fixed

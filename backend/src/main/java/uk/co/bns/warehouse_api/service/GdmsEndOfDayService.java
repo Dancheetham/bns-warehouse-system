@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.GdmsRunResult;
 import uk.co.bns.warehouse_api.entity.Company;
+import uk.co.bns.warehouse_api.entity.Order;
+import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.StockItem;
 import uk.co.bns.warehouse_api.entity.StockMovement;
 import uk.co.bns.warehouse_api.enums.MovementType;
@@ -59,28 +61,50 @@ public class GdmsEndOfDayService {
     @Scheduled(cron = "0 30 16 * * *")
     public void scheduledRun() {
         log.info("Running scheduled GDMS end-of-day channel assignment for {}", LocalDate.now());
-        GdmsRunResult result = runForDate(LocalDate.now());
+        GdmsRunResult result = runForDate(LocalDate.now(), "Scheduled");
         log.info("GDMS end-of-day run complete: {} companies processed, {} devices assigned, {} skipped (no channel), {} error(s)",
                 result.companiesProcessed(), result.devicesAssigned(), result.companiesSkippedNoChannel(), result.errors().size());
     }
 
-    /** The global manual "run now" trigger on Settings > GDMS - everything despatched on the given date, across all companies. */
+    /**
+     * The global manual "run now" trigger on Settings > GDMS - everything
+     * despatched on the given date, across all companies. `source` is
+     * written onto every GDMS sync log row this run produces (see
+     * GdmsSyncLogService) - "Scheduled" from the job above, "Manual" from
+     * SettingsController's button.
+     */
     @Transactional
-    public GdmsRunResult runForDate(LocalDate date) {
+    public GdmsRunResult runForDate(LocalDate date, String source) {
         LocalDateTime from = date.atStartOfDay();
         LocalDateTime to = date.plusDays(1).atStartOfDay();
         List<StockMovement> movements = stockMovementRepository.findByMovementTypeAndCreatedAtBetween(MovementType.DESPATCH, from, to);
-        return runForMovements(movements);
+        return runForMovements(movements, source);
     }
 
     /** The per-order manual trigger in Sales Activity - only this order's despatched-but-unsynced items, regardless of when they went out. */
     @Transactional
     public GdmsRunResult runForOrder(Long orderId) {
         List<StockMovement> movements = stockMovementRepository.findByMovementTypeAndStockItem_OrderLine_Order_Id(MovementType.DESPATCH, orderId);
-        return runForMovements(movements);
+        // Every movement here is for the same order (queried by orderId), so
+        // any one of them gives us the order number for the log's "source"
+        // column - "Manual (Order BNS-1234)" as opposed to a bare "Manual"
+        // from the Settings-page button, per Dan's explicit ask.
+        String orderNumber = movements.stream()
+                .map(StockMovement::getStockItem)
+                .filter(java.util.Objects::nonNull)
+                .map(StockItem::getOrderLine)
+                .filter(java.util.Objects::nonNull)
+                .map(OrderLine::getOrder)
+                .filter(java.util.Objects::nonNull)
+                .map(Order::getOrderNumber)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        String source = orderNumber != null ? "Manual (Order " + orderNumber + ")" : "Manual";
+        return runForMovements(movements, source);
     }
 
-    private GdmsRunResult runForMovements(List<StockMovement> movements) {
+    private GdmsRunResult runForMovements(List<StockMovement> movements, String source) {
         // Group the despatched, not-yet-synced, GDMS-enabled-and-channelled
         // items by company, so each company's devices go to GDMS in one
         // (possibly batched) call rather than one call per device.
@@ -121,8 +145,16 @@ public class GdmsEndOfDayService {
             Company company = entry.getKey();
             List<StockItem> items = entry.getValue();
             List<String> macs = items.stream().map(StockItem::getMacAddress).toList();
+            Map<String, String> macToOrderNumber = new LinkedHashMap<>();
+            for (StockItem item : items) {
+                Order order = item.getOrderLine() != null ? item.getOrderLine().getOrder() : null;
+                if (order != null && order.getOrderNumber() != null) {
+                    macToOrderNumber.put(item.getMacAddress(), order.getOrderNumber());
+                }
+            }
             try {
-                List<String> assignedMacs = gdmsChannelService.assignMacsToChannel(company.getGdmsChannelId(), macs);
+                List<String> assignedMacs = gdmsChannelService.assignMacsToChannel(
+                        company.getGdmsChannelId(), company.getGdmsChannelName(), macs, macToOrderNumber, source);
                 LocalDateTime now = LocalDateTime.now();
                 for (StockItem item : items) {
                     if (assignedMacs.contains(item.getMacAddress())) {

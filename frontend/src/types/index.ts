@@ -437,6 +437,21 @@ export interface BugReport {
   context?: string;
 }
 
+export interface GdmsSyncLog {
+  id: number;
+  attemptedAt: string;
+  operation: "ASSIGN" | "RECALL";
+  // "Scheduled" / "Manual" / "Manual (Order BNS-1234)" / "Auto (Reverse to
+  // Despatch)" / "Auto (Cancelled)" / "Auto (RMA)"
+  source: string;
+  orderNumber?: string;
+  macAddress: string;
+  channelId?: string;
+  channelName?: string;
+  status: "SUCCESS" | "FAILURE";
+  errorReason?: string;
+}
+
 export type OrderStatus =
   | "ON_HOLD"
   | "AWAITING_DESPATCH"

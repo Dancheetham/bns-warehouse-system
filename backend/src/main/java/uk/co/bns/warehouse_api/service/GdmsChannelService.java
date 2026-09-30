@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The GDMS Channel Management calls BNS actually needs: listing the
@@ -53,6 +54,7 @@ public class GdmsChannelService {
 
     private final GdmsAuthService gdmsAuthService;
     private final SettingsService settingsService;
+    private final GdmsSyncLogService gdmsSyncLogService;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -115,8 +117,14 @@ public class GdmsChannelService {
      * unconditionally on any non-throwing response, so a MAC GDMS actually
      * rejected (e.g. already assigned elsewhere) would still get
      * gdmsSyncedAt set and never be retried.
+     *
+     * `channelName` and `macToOrderNumber` exist purely to give the GDMS sync
+     * log a readable row per MAC (see GdmsSyncLogService) - `source` is the
+     * free-text origin of this call ("Scheduled", "Manual", "Manual (Order
+     * BNS-1234)", etc.), written verbatim onto every row this call produces.
      */
-    public List<String> assignMacsToChannel(String channelId, List<String> macs) {
+    public List<String> assignMacsToChannel(String channelId, String channelName, List<String> macs,
+                                             Map<String, String> macToOrderNumber, String source) {
         if (channelId == null || channelId.isBlank()) {
             throw new ValidationException("No GDMS channel is set for this company");
         }
@@ -127,10 +135,84 @@ public class GdmsChannelService {
             body.put("subEnterpriseId", channelId);
             var macArray = body.putArray("macList");
             batch.forEach(macArray::add);
-            JsonNode response = post("/assign", body);
-            assigned.addAll(acceptedMacs(response, batch));
+
+            JsonNode response;
+            try {
+                response = post("/assign", body);
+            } catch (Exception e) {
+                // The call itself failed (network/auth/GDMS-side error)
+                // before GDMS ever got to consider individual MACs -
+                // previously this batch would propagate straight up with no
+                // record of the attempt at all. Every MAC in it now gets a
+                // FAILURE row before the exception is rethrown, so the log
+                // page still shows what was attempted even when the call
+                // never got a usable response.
+                for (String mac : batch) {
+                    gdmsSyncLogService.recordFailure("ASSIGN", source, macToOrderNumber.get(mac), mac,
+                            channelId, channelName, e.getMessage());
+                }
+                throw e;
+            }
+
+            List<String> acceptedInBatch = acceptedMacs(response, batch);
+            JsonNode errorList = errorListOf(response);
+            for (String mac : batch) {
+                if (acceptedInBatch.contains(mac)) {
+                    gdmsSyncLogService.recordSuccess("ASSIGN", source, macToOrderNumber.get(mac), mac, channelId, channelName);
+                } else {
+                    gdmsSyncLogService.recordFailure("ASSIGN", source, macToOrderNumber.get(mac), mac,
+                            channelId, channelName, errorMessageFor(errorList, mac));
+                }
+            }
+            assigned.addAll(acceptedInBatch);
         }
         return assigned;
+    }
+
+    /**
+     * Recalls (via /channel/recycle) every MAC in `macs` from wherever GDMS
+     * currently has it assigned - used whenever a previously-synced unit
+     * moves back into stock (RMA, reverse to despatch, cancel and return).
+     * Same batching/error-per-MAC/logging shape as assignMacsToChannel, but
+     * /recycle's own request field is "macs" (confirmed from the doc's own
+     * parameter.examples), not "macList" like /assign, and it needs no
+     * subEnterpriseId - GDMS reclaims a MAC from whichever channel it's
+     * actually sitting in, so there's no channelId/channelName to log here.
+     * Returns the MACs GDMS actually reclaimed; callers here are best-effort
+     * (see GdmsRecallService) and don't currently act on the return value.
+     */
+    public List<String> reclaimMacs(List<String> macs, Map<String, String> macToOrderNumber, String source) {
+        List<String> recalled = new ArrayList<>();
+        for (int start = 0; start < macs.size(); start += ASSIGN_BATCH_SIZE) {
+            List<String> batch = macs.subList(start, Math.min(start + ASSIGN_BATCH_SIZE, macs.size()));
+            ObjectNode body = objectMapper.createObjectNode();
+            var macArray = body.putArray("macs");
+            batch.forEach(macArray::add);
+
+            JsonNode response;
+            try {
+                response = post("/recycle", body);
+            } catch (Exception e) {
+                for (String mac : batch) {
+                    gdmsSyncLogService.recordFailure("RECALL", source, macToOrderNumber.get(mac), mac,
+                            null, null, e.getMessage());
+                }
+                throw e;
+            }
+
+            List<String> acceptedInBatch = acceptedMacs(response, batch);
+            JsonNode errorList = errorListOf(response);
+            for (String mac : batch) {
+                if (acceptedInBatch.contains(mac)) {
+                    gdmsSyncLogService.recordSuccess("RECALL", source, macToOrderNumber.get(mac), mac, null, null);
+                } else {
+                    gdmsSyncLogService.recordFailure("RECALL", source, macToOrderNumber.get(mac), mac,
+                            null, null, errorMessageFor(errorList, mac));
+                }
+            }
+            recalled.addAll(acceptedInBatch);
+        }
+        return recalled;
     }
 
     /**
@@ -168,6 +250,7 @@ public class GdmsChannelService {
     }
 
     private String errorMessageFor(JsonNode errorList, String mac) {
+        if (errorList == null || !errorList.isArray()) return "no error message given";
         for (JsonNode error : errorList) {
             if (mac.equals(firstText(error, "mac"))) {
                 String msg = firstText(error, "errorMsg");
@@ -175,6 +258,13 @@ public class GdmsChannelService {
             }
         }
         return "no error message given";
+    }
+
+    /** Same data.result.errorMacList lookup acceptedMacs() does, exposed separately for the per-MAC log rows. */
+    private JsonNode errorListOf(JsonNode response) {
+        JsonNode data = response.has("data") ? response.get("data") : response;
+        JsonNode result = data.has("result") ? data.get("result") : data;
+        return result.get("errorMacList");
     }
 
     // --- HTTP plumbing -----------------------------------------------------
