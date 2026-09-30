@@ -107,7 +107,12 @@ public class ApcShippingService {
                 .build();
 
         JsonNode responseBody = send(request, "book the APC shipment");
-        JsonNode data = responseBody.has("Order") ? responseBody.get("Order") : responseBody;
+        // findPath digs into whichever wrapper the response actually uses
+        // (e.g. {"Orders":{"Order":{...}}}, mirroring the request shape)
+        // without needing to know the exact nesting up front - same
+        // reasoning as the Messages.Code check in send().
+        JsonNode orderNode = responseBody.findPath("Order");
+        JsonNode data = !orderNode.isMissingNode() ? orderNode : responseBody;
 
         String orderNumber = firstNonBlank(data, "OrderNumber", "orderNumber");
         String waybill = firstNonBlank(data, "WayBill", "Waybill", "waybill");
@@ -147,7 +152,8 @@ public class ApcShippingService {
                 .build();
 
         JsonNode responseBody = send(request, "fetch the APC label");
-        JsonNode data = responseBody.has("Order") ? responseBody.get("Order") : responseBody;
+        JsonNode orderNode = responseBody.findPath("Order");
+        JsonNode data = !orderNode.isMissingNode() ? orderNode : responseBody;
         JsonNode label = data.has("Label") ? data.get("Label") : data.path("Labels").isArray() && data.path("Labels").size() > 0
                 ? data.path("Labels").get(0) : data.path("Label");
 
@@ -264,15 +270,19 @@ public class ApcShippingService {
 
         ObjectNode shipmentDetails = root.putObject("ShipmentDetails");
         shipmentDetails.put("NumberOfPieces", Math.max(cartons.size(), 1));
-        ArrayNode items = shipmentDetails.putArray("Items");
-        ObjectNode item = items.addObject();
+        ObjectNode item = objectMapper.createObjectNode();
         item.put("Type", "ALL");
         item.put("Weight", weight.doubleValue());
         item.put("Length", settingsService.get("apc_default_parcel_length_cm", DEFAULT_PARCEL_LENGTH_CM));
         item.put("Width", settingsService.get("apc_default_parcel_width_cm", DEFAULT_PARCEL_WIDTH_CM));
         item.put("Height", settingsService.get("apc_default_parcel_height_cm", DEFAULT_PARCEL_HEIGHT_CM));
         item.put("Value", customsValue(order).doubleValue());
-        return root;
+        // "Items" is not itself an array - APC's schema is {"Items":{"Item": {...} } }
+        // for a single item, or {"Items":{"Item": [ {...}, {...} ]}} for several
+        // (the array nests one level inside "Item"; see buildRequestBody's
+        // comment for the source in the integration guide).
+        shipmentDetails.putObject("Items").set("Item", item);
+        return wrapAsOrder(root);
     }
 
     private void cacheLastKnownServices(List<ApcServiceOption> options) {
@@ -384,7 +394,7 @@ public class ApcShippingService {
         // when packing hasn't happened yet, exactly like DPD's own fallback.
         List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
         ObjectNode shipmentDetails = root.putObject("ShipmentDetails");
-        ArrayNode items = shipmentDetails.putArray("Items");
+        List<ObjectNode> items = new java.util.ArrayList<>();
         BigDecimal goodsValue = customsValue(order);
 
         String lengthCm = settingsService.get("apc_default_parcel_length_cm", DEFAULT_PARCEL_LENGTH_CM);
@@ -395,13 +405,26 @@ public class ApcShippingService {
             for (Carton carton : cartons) {
                 BigDecimal weight = carton.getWeightKg() != null ? carton.getWeightKg() : totalWeightKg(order).divide(
                         BigDecimal.valueOf(cartons.size()), 3, java.math.RoundingMode.HALF_UP);
-                addItem(items, weight, lengthCm, widthCm, heightCm,
-                        goodsValue.divide(BigDecimal.valueOf(cartons.size()), 2, java.math.RoundingMode.HALF_UP));
+                items.add(buildItem(weight, lengthCm, widthCm, heightCm,
+                        goodsValue.divide(BigDecimal.valueOf(cartons.size()), 2, java.math.RoundingMode.HALF_UP)));
             }
             shipmentDetails.put("NumberOfPieces", cartons.size());
         } else {
-            addItem(items, totalWeightKg(order), lengthCm, widthCm, heightCm, goodsValue);
+            items.add(buildItem(totalWeightKg(order), lengthCm, widthCm, heightCm, goodsValue));
             shipmentDetails.put("NumberOfPieces", 1);
+        }
+
+        // "Items" is not itself an array - per the integration guide's own
+        // examples (single-item bookings show "Items":{"Item":{...}}; the
+        // "For Multi-Items" callout shows "Items":{"Item":[{...},{...}]} -
+        // the array nests one level inside "Item", not "Items" itself being
+        // an array as this was previously built).
+        ObjectNode itemsNode = shipmentDetails.putObject("Items");
+        if (items.size() == 1) {
+            itemsNode.set("Item", items.get(0));
+        } else {
+            ArrayNode itemArray = itemsNode.putArray("Item");
+            items.forEach(itemArray::add);
         }
 
         ObjectNode goodsInfo = root.putObject("GoodsInfo");
@@ -411,16 +434,31 @@ public class ApcShippingService {
         goodsInfo.put("Security", false);
         goodsInfo.put("IncreasedLiability", "true".equals(settingsService.get("apc_increased_liability", "false")));
 
-        return root;
+        return wrapAsOrder(root);
     }
 
-    private void addItem(ArrayNode items, BigDecimal weight, String lengthCm, String widthCm, String heightCm, BigDecimal value) {
-        ObjectNode item = items.addObject();
+    private ObjectNode buildItem(BigDecimal weight, String lengthCm, String widthCm, String heightCm, BigDecimal value) {
+        ObjectNode item = objectMapper.createObjectNode();
         item.put("Weight", weight.doubleValue());
         item.put("Length", lengthCm);
         item.put("Width", widthCm);
         item.put("Height", heightCm);
         item.put("Value", value.doubleValue());
+        return item;
+    }
+
+    /**
+     * APC's actual schema wants the whole order/availability payload wrapped
+     * as {"Orders": {"Order": {...}}} - confirmed from the integration
+     * guide's own literal JSON and XML request examples (both the booking
+     * and ServiceAvailability calls use the same envelope). Everything built
+     * above stays as a flat set of fields for readability; this is the one
+     * place that wraps it into APC's required shape before it's sent.
+     */
+    private ObjectNode wrapAsOrder(ObjectNode order) {
+        ObjectNode wrapper = objectMapper.createObjectNode();
+        wrapper.putObject("Orders").set("Order", order);
+        return wrapper;
     }
 
     private BigDecimal customsValue(Order order) {

@@ -945,7 +945,29 @@ export default function OrderEdit() {
                 )}
                 {courierType === "DPD" && (
                   <div className="flex-1 min-w-[20rem]">
-                    <label className="block text-xs text-slate-400 mb-1">Service</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs text-slate-400">Service</label>
+                      {/* Whether this list is DPD's live answer for this exact address/weight,
+                          or the last list DPD gave us for anything, kept as a fallback so the
+                          dropdown still has real options instead of forcing free text - see
+                          dpdServiceResult.liveError (surfaced below) for why it isn't live. */}
+                      {!dpdServicesError && !dpdServicesLoading && dpdServiceResult && (
+                        <span
+                          title={
+                            dpdServiceResult.live
+                              ? "Live - checked against DPD just now for this address and weight"
+                              : `Not live - showing the last services DPD offered. ${dpdServiceResult.liveError ?? ""}`
+                          }
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            dpdServiceResult.live
+                              ? "bg-emerald-100 text-emerald-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {dpdServiceResult.live ? "Live" : "Cached"}
+                        </span>
+                      )}
+                    </div>
                     {dpdServicesError ? (
                       <input
                         value={courierMethod}
@@ -955,51 +977,29 @@ export default function OrderEdit() {
                         className="input"
                       />
                     ) : (
-                      <div className="relative">
-                        <select
-                          value={dpdNetworkKey}
-                          onChange={(e) => {
-                            const selected = dpdServices?.find((s) => s.networkKey === e.target.value);
-                            setDpdNetworkKey(e.target.value);
-                            setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
-                          }}
-                          disabled={dpdServicesLoading || !dpdServices?.length}
-                          className="input pr-14"
-                        >
-                          <option value="">
-                            {dpdServicesLoading
-                              ? "Looking up services..."
-                              : dpdServices?.length
-                              ? "Select a service..."
-                              : "No services available"}
+                      <select
+                        value={dpdNetworkKey}
+                        onChange={(e) => {
+                          const selected = dpdServices?.find((s) => s.networkKey === e.target.value);
+                          setDpdNetworkKey(e.target.value);
+                          setCourierMethod(selected ? `${selected.networkDesc} (${selected.serviceDesc})` : "");
+                        }}
+                        disabled={dpdServicesLoading || !dpdServices?.length}
+                        className="input"
+                      >
+                        <option value="">
+                          {dpdServicesLoading
+                            ? "Looking up services..."
+                            : dpdServices?.length
+                            ? "Select a service..."
+                            : "No services available"}
+                        </option>
+                        {sortedDpdServices?.map((s) => (
+                          <option key={s.networkKey} value={s.networkKey}>
+                            {s.networkDesc} - {s.serviceDesc}
                           </option>
-                          {sortedDpdServices?.map((s) => (
-                            <option key={s.networkKey} value={s.networkKey}>
-                              {s.networkDesc} - {s.serviceDesc}
-                            </option>
-                          ))}
-                        </select>
-                        {/* Whether this list is DPD's live answer for this exact address/weight,
-                            or the last list DPD gave us for anything, kept as a fallback so the
-                            dropdown still has real options instead of forcing free text - see
-                            dpdServiceResult.liveError (surfaced below) for why it isn't live. */}
-                        {!dpdServicesLoading && dpdServiceResult && (
-                          <span
-                            title={
-                              dpdServiceResult.live
-                                ? "Live - checked against DPD just now for this address and weight"
-                                : `Not live - showing the last services DPD offered. ${dpdServiceResult.liveError ?? ""}`
-                            }
-                            className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
-                              dpdServiceResult.live
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {dpdServiceResult.live ? "Live" : "Cached"}
-                          </span>
-                        )}
-                      </div>
+                        ))}
+                      </select>
                     )}
                     {dpdServicesError && (
                       <p className="text-xs text-red-500 mt-1">
@@ -1017,34 +1017,8 @@ export default function OrderEdit() {
                 )}
                 {courierType === "APC" && (
                   <div className="flex-1 min-w-[20rem]">
-                    <label className="block text-xs text-slate-400 mb-1">Service</label>
-                    <div className="relative">
-                      <select
-                        value={apcServices?.some((s) => s.code === apcServiceCode) ? apcServiceCode : ""}
-                        onChange={(e) => {
-                          const selected = apcServices?.find((s) => s.code === e.target.value);
-                          setApcServiceCode(e.target.value);
-                          // Store the human description too (e.g. "1600 Parcel") -
-                          // this is what shows on the read-only summary, picking
-                          // note, etc, rather than the bare product code.
-                          setCourierMethod(selected ? selected.description : "");
-                        }}
-                        disabled={apcServicesLoading || !apcServices?.length}
-                        className="input pr-14"
-                      >
-                        <option value="">
-                          {apcServicesLoading
-                            ? "Looking up services..."
-                            : apcServices?.length
-                            ? "Select a service..."
-                            : "No services available"}
-                        </option>
-                        {apcServices?.map((s) => (
-                          <option key={s.code} value={s.code}>
-                            {s.description} ({s.code})
-                          </option>
-                        ))}
-                      </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs text-slate-400">Service</label>
                       {/* Live = APC's own ServiceAvailability.json just now, for this
                           order's actual address/weight (so it's already correctly
                           filtered to what fits - e.g. MailPack/CourierPack/Parcel
@@ -1058,7 +1032,7 @@ export default function OrderEdit() {
                               ? "Live - checked against APC just now for this address and weight"
                               : `Not live - showing the last services APC offered. ${apcServiceResult.liveError ?? ""}`
                           }
-                          className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold px-1.5 py-0.5 rounded pointer-events-none ${
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
                             apcServiceResult.live ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
                           }`}
                         >
@@ -1066,6 +1040,32 @@ export default function OrderEdit() {
                         </span>
                       )}
                     </div>
+                    <select
+                      value={apcServices?.some((s) => s.code === apcServiceCode) ? apcServiceCode : ""}
+                      onChange={(e) => {
+                        const selected = apcServices?.find((s) => s.code === e.target.value);
+                        setApcServiceCode(e.target.value);
+                        // Store the human description too (e.g. "1600 Parcel") -
+                        // this is what shows on the read-only summary, picking
+                        // note, etc, rather than the bare product code.
+                        setCourierMethod(selected ? selected.description : "");
+                      }}
+                      disabled={apcServicesLoading || !apcServices?.length}
+                      className="input"
+                    >
+                      <option value="">
+                        {apcServicesLoading
+                          ? "Looking up services..."
+                          : apcServices?.length
+                          ? "Select a service..."
+                          : "No services available"}
+                      </option>
+                      {apcServices?.map((s) => (
+                        <option key={s.code} value={s.code}>
+                          {s.description} ({s.code})
+                        </option>
+                      ))}
+                    </select>
                     {apcServiceResult && !apcServiceResult.live && apcServiceResult.liveError && (
                       <p className="text-xs text-amber-600 mt-1">
                         Not live for this address: {apcServiceResult.liveError}

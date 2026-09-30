@@ -5,6 +5,34 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.64] - 2026-09-30 (v0.129)
+
+### Fixed
+
+- **APC bookings/service lookups failing with "APC said: UNEXPECTED ERROR"**:
+  the request bodies sent to APC (for booking, and for the service
+  availability check that drives the Service dropdown) were built as flat
+  JSON at the root, but APC's actual Hypaship schema requires the whole
+  payload wrapped as `{"Orders": {"Order": {...}}}` - confirmed from the
+  integration guide's own literal JSON/XML request examples. `ShipmentDetails.Items`
+  was also the wrong shape (a bare array) - APC wants `{"Items": {"Item": {...}}}`
+  for one item, or `{"Items": {"Item": [{...}, {...}]}}` for several, with the
+  array nested one level inside `"Item"`. Once the v0.128 fix started correctly
+  checking APC's `Messages.Code` on every response, this structural mismatch
+  is what it was actually catching - APC was rejecting the malformed body
+  outright, which is why no live services would show at all. Both request
+  builders now wrap the payload correctly; the booking and label response
+  parsing was also loosened (from checking one fixed nesting level to
+  searching the whole response) in case APC's replies use the same envelope.
+
+### Changed
+
+- **APC/DPD Service dropdowns**: the small "Live"/"Cached" badge next to
+  each Service picker used to float on top of the dropdown itself (via
+  absolute positioning and extra right-padding). It now sits in its own
+  row just above the box, next to the "Service" label, so it no longer
+  overlaps the dropdown text and doesn't affect the layout around it.
+
 ## [0.23.63] - 2026-09-30 (v0.128)
 
 ### Fixed

@@ -1,37 +1,37 @@
-Fix silent APC failures and DPD label error messages, collapse the
-Couriers sub-sections (v0.128)
+Fix APC's malformed request bodies, move the Service Live/Cached badge
+above the dropdown (v0.129)
 
-Dan reported three things from testing v0.126/v0.127:
+Dan reported that on v0.128, picking an APC service showed "Not live for
+this address: Failed to check APC service availability - APC said:
+UNEXPECTED ERROR" - and that whatever changed was blocking every live
+APC service lookup, not just this one address.
 
-1. APC's Service dropdown showed "No services available" with no error
-   anywhere. Root cause: every APC response envelope carries its own
-   Messages.Code/Description nested under whichever wrapper key that
-   endpoint uses (ServiceAvailability/Orders/Tracks/...), and APC can
-   return HTTP 200 with a non-SUCCESS code (an auth or account
-   problem) - the shared send() helper only checked the HTTP status,
-   so this sailed through as a "successful" empty response. Now
-   checked via JsonNode.findPath("Messages") (works without knowing
-   the wrapper key up front) across all three APC calls (book, label,
-   service lookup) - a real problem now throws with APC's own
-   description, and the Service dropdown correctly shows its cached
-   fallback with a "Cached" badge instead of silently rendering empty.
+Re-read the APC Hypaship API v3 integration guide's own literal JSON/XML
+request examples (booking and service-availability calls both use the
+same envelope). Root cause: ApcShippingService built its request bodies
+as flat JSON at the root, but APC's actual schema requires the whole
+payload wrapped as {"Orders": {"Order": {...}}}. ShipmentDetails.Items
+was also the wrong shape - a bare array - where APC wants
+{"Items": {"Item": {...}}} for a single item or
+{"Items": {"Item": [{...}, {...}]}} for several, with the array nested
+one level inside "Item", not "Items" itself being an array.
 
-2. He tested printing a DPD label in v0.126 and got "Failed to fetch
-   DPD labels - DPD returned HTTP 400" with no way to tell what DPD
-   actually objected to, and can't reproduce it right now to get more
-   detail. Found the cause by inspection: DpdShippingService.getLabels
-   discarded response.body() entirely on a non-2xx response, logging
-   DPD's real reason server-side but never surfacing it in the thrown
-   exception (unlike shipment booking, which already parses DPD's
-   error[].message/fieldName shape via describeDpdError). Added the
-   equivalent describeDpdLabelError() for the labels endpoint, so next
-   time this happens the actual reason is right there in the error/bug
-   report instead of requiring log access neither of us has right now.
+This had been silently wrong since the very first APC integration in
+v0.126 - APC was rejecting every booking and service-availability call
+outright with an "UNEXPECTED ERROR" the whole time. It only became
+visible once v0.128's Messages.Code check started actually surfacing
+APC's real response instead of treating HTTP 200 as success regardless
+of body content. Both buildRequestBody() and buildServiceAvailabilityBody()
+now wrap the payload correctly via a shared wrapAsOrder() helper; booking
+and label response parsing were loosened from checking one fixed nesting
+level to searching the whole response (findPath), in case APC's replies
+use the same wrapper.
 
-3. Settings > Couriers wanted its three sub-sections (Collection
-   Services, DPD, APC) individually collapsible rather than one long
-   scroll - each is now its own nested SettingsSection, same
-   collapse/expand behaviour as every top-level section on the page.
+Also moved the Service dropdown's small "Live"/"Cached" badge (APC and
+DPD both use the same pattern) from an absolutely-positioned overlay on
+top of the select box to its own row just above it, next to the
+"Service" label, per Dan's request - it no longer sits over the
+dropdown text and doesn't push any surrounding layout around.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
