@@ -1,5 +1,13 @@
 export interface PrintResult {
   printed: boolean;
+  // Set only when the agent WAS reached but reported a failure (its own
+  // {"status":"error","message":"..."} body - e.g. pywin32 not installed,
+  // the configured printer name doesn't match what Windows calls it,
+  // SumatraPDF not found). Left undefined for a genuine "couldn't connect
+  // at all" failure, so callers can tell "agent not running" apart from
+  // "agent's running but the print itself failed" and show the operator
+  // something actually useful instead of a blanket "not reachable".
+  agentError?: string;
 }
 
 /**
@@ -34,7 +42,27 @@ export async function printPdf(pdfBlob: Blob, agentUrl: string, printerName: str
   }
   const blobUrl = window.URL.createObjectURL(pdfBlob);
   window.open(blobUrl, "_blank");
-  return { printed: false };
+  return { printed: false, agentError: await readAgentError(agentResponse) };
+}
+
+/**
+ * The agent (print-agent/agent.py) replies with a JSON body -
+ * {"status":"error","message":"..."} - on any failure it catches itself
+ * (SumatraPDF not found, pywin32 missing, an unrecognised printer name,
+ * ...), which is a genuinely useful reason and shouldn't be thrown away in
+ * favour of a blanket "agent not reachable" - that phrase is only true when
+ * `response` is null (the fetch itself failed/timed out). Best-effort: a
+ * response the agent never actually sent (network layer only) or a body
+ * that isn't the expected JSON shape just yields no message, same as today.
+ */
+async function readAgentError(response: Response | null): Promise<string | undefined> {
+  if (!response) return undefined;
+  try {
+    const body = await response.json();
+    return typeof body?.message === "string" ? body.message : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -59,7 +87,10 @@ export async function printRaw(rawData: string, agentUrl: string, printerName: s
     signal: controller.signal,
   }).catch(() => null);
   clearTimeout(timeout);
-  return { printed: !!(agentResponse && agentResponse.ok) };
+  if (agentResponse && agentResponse.ok) {
+    return { printed: true };
+  }
+  return { printed: false, agentError: await readAgentError(agentResponse) };
 }
 
 /**

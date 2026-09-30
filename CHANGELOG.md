@@ -5,6 +5,29 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.66] - 2026-09-30 (v0.131)
+
+### Fixed
+
+- **Print agent errors were always reported as "not reachable"**, even when
+  the agent was running fine but the print itself failed (pywin32 not
+  installed, the configured printer name not matching Windows' name for
+  it, SumatraPDF missing, printer offline, ...) - the agent already sends
+  back its own `{"status":"error","message":"..."}` in that case, but the
+  frontend threw the response away and reported the same generic "agent
+  not reachable" message regardless. Print Label (both DPD and APC) and
+  Print Picking Note now surface the agent's own reason when it was
+  actually reached, and keep the generic message only for a genuine
+  connection failure.
+
+### Added
+
+- **APC consignment number shown alongside the waybill**: APC's own portal
+  and support desk refer to a shorter 7-digit "consignment number", which
+  turns out to just be the last 7 digits of the full 22-digit Hypaship
+  WayBill - now shown next to the waybill on the order screen so it's easy
+  to quote without doing the arithmetic by hand.
+
 ## [0.23.65] - 2026-09-30 (v0.130)
 
 ### Added

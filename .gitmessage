@@ -1,27 +1,31 @@
-Add APC tracking (v0.130)
+Surface the print agent's real error instead of a blanket "not
+reachable", show APC's short consignment number (v0.131)
 
-Dan confirmed v0.129's APC booking fix worked end to end and asked for
-tracking wired up "the same way as DPD" - i.e. a Track button on the order
-screen.
+Dan tested Print Label on a real APC order right after v0.130 and saw
+nothing happen - no tab, no print, matching what's *supposed* to happen
+when the print agent (print-agent/agent.py, a small local Python/Windows-
+tray tool BNS already built for exactly this - not QZ Tray, which came up
+as something used with APC in the past but isn't what this app talks to)
+isn't reachable. Its ZPL handling is already generic (any courier's raw
+bytes, not DPD-specific), so no backend change was needed there - but
+digging into the actual failure path in printAgent.ts found a real bug:
+when the agent IS running and reachable but the print itself fails inside
+it (pywin32 not installed, the printer name in Settings not matching what
+Windows calls it, SumatraPDF missing, the printer offline, ...), the agent
+already replies with its own {"status":"error","message":"..."} body
+explaining exactly why - but the frontend discarded that response entirely
+and reported the same generic "Print agent not reachable" message either
+way, so a real, fixable problem looked identical to "the agent just isn't
+running". printPdf/printRaw now read that body back out when the agent did
+respond (just not with 2xx) and both DPD and APC's Print Label, plus Print
+Picking Note, surface the agent's own reason - the generic message is now
+only shown for a genuine connection failure.
 
-DPD's Track button is just a plain link to DPD's public tracking site
-(track.dpd.co.uk), built client-side from the consignment number - no API
-call needed. APC has no confirmed equivalent: the closest public tracker
-found (APC Choice, apcchoice.apc-overnight.com) asks for a "7-digit
-consignment number", which doesn't match the 22-digit Hypaship WayBill
-this app stores, so there was no way to be confident a plain link would
-actually work.
-
-Used APC's own authenticated Tracks.json endpoint instead (documented in
-section 5 of the integration guide): GET
-Tracks/{waybill}.json?searchtype=CarrierWaybill&history=Yes, same
-remote-user auth as every other APC call. ApcShippingService.trackShipment
-walks the response's nested Items/Item/Activity/Status structure (one
-Activity array per shipment piece), flattens every scan into a single
-list, and sorts it newest-first. A "Track" button on the order screen
-calls this through the backend and shows the latest status inline, with
-the full scan history tucked under a "Full scan history" toggle so it
-doesn't dominate the page for the common case.
+Also: Dan found the "consignment number" APC's own portal shows
+(0007051) is simply the last 7 digits of the full 22-digit Hypaship
+WayBill this app stores - now shown alongside the waybill on the order
+screen so it doesn't need re-deriving by hand every time it's needed for
+a phone call or the portal.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

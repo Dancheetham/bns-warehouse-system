@@ -523,6 +523,11 @@ export default function OrderEdit() {
       const printResult = await printRaw(response.data, agentUrl, printerName);
       if (printResult.printed) {
         showToast("Label sent to printer.");
+      } else if (printResult.agentError) {
+        // The agent WAS reached but couldn't print - its own reason (wrong
+        // printer name, pywin32 missing, etc.) is far more useful than a
+        // blanket "not reachable" here.
+        setDpdError(`Print agent couldn't print the label: ${printResult.agentError}`);
       } else {
         setDpdError("Print agent not reachable - start it on this PC (see Settings > Couriers > DPD) and try again.");
       }
@@ -540,6 +545,8 @@ export default function OrderEdit() {
       const printResult = await printRaw(response.data, agentUrl, printerName);
       if (printResult.printed) {
         showToast("Label sent to printer.");
+      } else if (printResult.agentError) {
+        setApcError(`Print agent couldn't print the label: ${printResult.agentError}`);
       } else {
         setApcError("Print agent not reachable - start it on this PC (see Settings > Couriers > APC) and try again.");
       }
@@ -1288,6 +1295,18 @@ export default function OrderEdit() {
                     <span className="text-sm text-slate-700">
                       APC waybill <span className="font-medium">{existingOrder.apcWaybill}</span>
                       {existingOrder.apcOrderNumber ? ` (order ${existingOrder.apcOrderNumber})` : ""}
+                      {/* APC's own tracking site/support desk refer to a
+                          shorter 7-digit "consignment number" - confirmed to
+                          be simply the last 7 digits of the full Hypaship
+                          WayBill (e.g. waybill ...0007051 shows as
+                          consignment 0007051 on their portal), so it's shown
+                          here too for anyone quoting it over the phone. */}
+                      {existingOrder.apcWaybill.length >= 7 && (
+                        <span className="text-slate-400">
+                          {" "}
+                          (consignment {existingOrder.apcWaybill.slice(-7)})
+                        </span>
+                      )}
                     </span>
                     <button
                       onClick={viewApcLabel}
