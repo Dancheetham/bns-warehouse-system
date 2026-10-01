@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.78] - 2026-10-01 (v0.143)
+
+### Fixed
+
+- **APC order cancellation was reporting failure on a genuinely successful
+  cancel.** The new "void the APC shipment on Cancel & Return to Stock /
+  Reverse to Despatch" feature (v0.142) misread APC's own success response
+  as an error - APC's CancelOrder confirms success with
+  `Messages.Code 121`/"Order Cancelled", not the `"SUCCESS"` string every
+  other APC endpoint uses, and the shared response-checking helper only
+  recognised the latter. The shipment was actually being cancelled on APC's
+  side the whole time; only our own reporting was wrong, showing a
+  misleading "couldn't cancel - check if it's been manifested" warning on
+  a shipment that hadn't been. Fixed by checking this endpoint's own
+  success shape directly instead of reusing the generic check.
+
 ## [0.23.77] - 2026-10-01 (v0.142)
 
 ### Added

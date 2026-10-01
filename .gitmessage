@@ -1,46 +1,31 @@
-Cancel the actual courier booking on reversal, fix APC tracking link (v0.142)
+Fix false "couldn't cancel" warning on a genuinely successful APC cancel (v0.143)
 
-Three asks from Dan's follow-up after v0.141:
+Dan tested the new APC cancel-on-reversal feature (v0.142) on an order that
+hadn't been manifested, and got back "Stock was returned, but the APC
+shipment couldn't be cancelled via their API (Failed to cancel the APC
+shipment - APC said: Order Cancelled)" - which reads as a failure, but
+"Order Cancelled" is actually APC's own success description for this
+endpoint.
 
-1. "Cancel & Return to Stock" and "Reverse to Despatch" now attempt to void
-   the actual courier shipment, not just BNS's own record of it. APC's own
-   integration guide documents a CancelOrder endpoint (PUT Orders/{waybill}
-   with Status=CANCELLED) that works right up until the point APC
-   manifests the order - after that it's billed and can't be cancelled via
-   their API, matching what Dan described ("especially [APC] charge for
-   anything that's been manifested"). ApcShippingService.cancelOrder() adds
-   this call, and OrderReversalService attempts it best-effort right before
-   clearing apcWaybill/apcOrderNumber in both reversal methods - it never
-   blocks the stock reversal itself, since that's the actual point of the
-   operation. A failed attempt (overwhelmingly likely: already manifested)
-   is surfaced to the frontend as a non-blocking warning so staff know to
-   check APC's own portal if it matters.
+Root cause: ApcShippingService.cancelOrder() went through the same shared
+send() helper every other APC call uses, which treats any Messages.Code
+other than the literal string "SUCCESS" as an error. That convention holds
+for ServiceAvailability/Orders/Tracks, but not for CancelOrder - its own
+success response carries Messages.Code "121" with Description
+"Order Cancelled", never the word "SUCCESS" at all. So a completely
+successful cancel was being thrown as a ValidationException purely because
+of the response-checking helper's blanket assumption, caught by
+OrderReversalService, and surfaced to Dan as a false "couldn't cancel -
+check if it's been manifested" warning on a shipment that had, in fact,
+just been cancelled correctly.
 
-   DPD has no equivalent - checked thoroughly this time by browsing the
-   entire DPD docs portal (Shipping, Collections, Sender Actions, Receiver
-   Actions, Pickup, Returns), not just the Shipping section as before.
-   There is no shipment-level cancel/void endpoint anywhere in DPD's API;
-   the only "cancel" is Cancel Collection, which only cancels a requested
-   driver-attended pickup job, not a shipment. This lines up with what Dan
-   expected going in ("not as big of a deal for DPD as they only charge us
-   for what they scan") - nothing changes for DPD orders.
-
-   Both reversal controller endpoints now return an OrderReversalResult
-   (the order plus an optional courierWarning) instead of a bare Order.
-
-2. Looked into whether either courier's API supports generating/printing
-   manifests, as a possible admin tool. Neither does - manifesting is an
-   automatic process on both couriers' own side (APC's docs only ever
-   mention it as a status the order reaches, never something triggerable;
-   same conclusion from DPD's full docs portal). Not something to build.
-
-3. APC's public tracking link ("Track →" on the order screen and Delivery
-   History) was sending the short 7-digit consignment number as the `id`
-   query parameter. Per a real working link Dan supplied, it actually needs
-   the full 22-digit waybill, plus the postcode lowercased (spaces become
-   a literal +). Fixed in utils/tracking.ts's apcTrackingUrl() and its two
-   call sites, which were both slicing the full value down to 7 digits
-   before passing it in.
+Fixed by giving cancelOrder its own response check instead of reusing
+send(): looks for Order.Status == "CANCELLED", or Messages.Code "121", or
+a Description containing "cancel" - any of which confirms a real success -
+rather than requiring the "SUCCESS" string. A genuine post-manifest
+rejection (a different Messages.Code/Description, per the guide) will still
+correctly surface as a failure; only this one endpoint's own success shape
+needed recognising separately.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

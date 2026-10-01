@@ -205,11 +205,24 @@ public class ApcShippingService {
      * the point that the order is manifested. Once an order is manifested
      * it cannot be cancelled" - exactly the distinction Dan drew when asking
      * for this ("especially charge for anything that's been manifested").
-     * A post-manifest attempt comes back with a non-SUCCESS Messages.Code,
-     * which send() already turns into a ValidationException with APC's own
-     * description - nothing extra to special-case here. Called from
-     * OrderReversalService when voiding a shipped order; see that class for
-     * why a failure here is caught there rather than blocking the reversal.
+     * Called from OrderReversalService when voiding a shipped order; see
+     * that class for why a failure here is caught there rather than
+     * blocking the reversal.
+     *
+     * Deliberately does NOT go through the shared send() helper, unlike
+     * every other call in this class - confirmed against a real cancel
+     * (2026-10-01) that CancelOrder's own success response carries
+     * Messages.Code "121"/Description "Order Cancelled", not the literal
+     * string "SUCCESS" every other APC endpoint uses as its success
+     * sentinel. send()'s generic check (any non-"SUCCESS" code = error)
+     * was misreporting this exact successful cancel as a failure - the
+     * shipment genuinely was cancelled on APC's side, but this method threw
+     * anyway and OrderReversalService caught it and showed a false "couldn't
+     * cancel, check if it's been manifested" warning. Checked and handled
+     * directly here instead: success is "Order Cancelled"/"121" specifically
+     * (not a blanket "any 200 is fine" check, so a genuine post-manifest
+     * rejection - which the guide says comes back as its own distinct
+     * Messages.Code/Description - still surfaces as a real failure).
      */
     public void cancelOrder(Order order) {
         if (order.getApcWaybill() == null) {
@@ -227,7 +240,35 @@ public class ApcShippingService {
                 .method("PUT", HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
 
-        send(request, "cancel the APC shipment");
+        JsonNode parsed;
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                log.error("Failed to cancel the APC shipment for order {} - APC returned {}: {}",
+                        order.getOrderNumber(), response.statusCode(), response.body());
+                throw new ValidationException("Failed to cancel the APC shipment - "
+                        + describeApcError(response.body(), response.statusCode()));
+            }
+            parsed = objectMapper.readTree(response.body());
+        } catch (java.io.IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            throw new RuntimeException("Failed to cancel the APC shipment: " + e.getMessage(), e);
+        }
+
+        String status = firstNonBlank(parsed.findPath("Order"), "Status", "status");
+        JsonNode messages = parsed.findPath("Messages");
+        String code = messages.path("Code").asText("");
+        String description = messages.path("Description").asText(code);
+        boolean cancelled = "CANCELLED".equalsIgnoreCase(status) || "121".equals(code)
+                || description.toLowerCase().contains("cancel");
+        if (!cancelled) {
+            log.error("APC didn't confirm the cancel for order {} - Messages.Code={}: {}",
+                    order.getOrderNumber(), code, description);
+            throw new ValidationException("Failed to cancel the APC shipment - APC said: "
+                    + (description.isBlank() ? "no confirmation in the response" : description));
+        }
     }
 
     private static final DateTimeFormatter APC_TRACK_DATETIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
