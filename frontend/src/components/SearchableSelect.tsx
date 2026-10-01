@@ -20,12 +20,19 @@ export default function SearchableSelect({
   onChange,
   placeholder = "Search...",
   className = "",
+  clearLabel = "All",
 }: {
   options: SearchableSelectOption[];
   value: string | null;
   onChange: (value: string | null) => void;
   placeholder?: string;
   className?: string;
+  // The label on the option that clears the selection (value: null) - "All"
+  // reads right for a filter (e.g. Invoice Reports' company filter), but a
+  // plain field picking one specific value (e.g. Order Edit's own Company
+  // field, where no company selected means "not a B2B account") reads
+  // better as "None".
+  clearLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -84,7 +91,7 @@ export default function SearchableSelect({
             }}
             className="w-full text-left px-3 py-2 text-sm text-slate-500 hover:bg-slate-50"
           >
-            All
+            {clearLabel}
           </button>
           {filtered.length === 0 && <p className="px-3 py-2 text-sm text-slate-400">No matches</p>}
           {filtered.map((o) => (

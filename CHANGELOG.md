@@ -5,6 +5,36 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.76] - 2026-10-01 (v0.141)
+
+### Fixed
+
+- **Available Services page didn't show a sweep's new codes until you left
+  the page and came back.** The "Refresh from live lookup" button only
+  updated the checkbox state in memory, not the underlying list the page
+  actually renders from - a brand new code the sweep just found wasn't
+  drawn on screen at all until the page's own data was re-fetched from
+  scratch (i.e. navigating away and back). Now writes the refreshed list
+  straight into the page's own data, so new codes appear immediately.
+- **The Service dropdown on a sales order could come back genuinely
+  empty** when a courier's live lookup succeeded but legitimately had no
+  matching service for that address/weight (not an error - e.g. APC on a
+  Republic of Ireland address), forcing straight to free text with nothing
+  to pick from. Both couriers now fall back to every known/allowed service
+  in that case too, same as when the live call fails outright, with a
+  short note explaining why it isn't live.
+
+### Changed
+
+- **Save button on both Available Services pages (DPD and APC) switched to
+  the floating button + "Saved." badge used on Settings and the order
+  screen**, replacing the inline Save button that used to sit at the
+  bottom of the list.
+- **"Company (B2B credit account)" on the sales order screen is now a
+  searchable, type-to-filter field** instead of a plain dropdown - the
+  same search component already used for the company filter on Invoice
+  Reports, reused here rather than built again.
+
 ## [0.23.75] - 2026-10-01 (v0.140)
 
 ### Fixed

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import { AvailableServicesRefreshResult, ServiceToggleOption } from "../types";
 import { useToast } from "../components/ToastContext";
+import SavedBadge from "../components/SavedBadge";
 
 // Settings > Couriers > DPD/APC > "Available services" - lets Dan permanently
 // hide specific service codes (e.g. APC's Liquid product codes, which BNS
@@ -21,17 +22,20 @@ export default function AvailableServices() {
   const { courier } = useParams<{ courier: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const courierKey = courier === "apc" ? "apc" : "dpd";
   const courierLabel = COURIER_LABELS[courierKey];
+  const queryKey = ["available-services", courierKey];
 
   const { data: services, isLoading } = useQuery({
-    queryKey: ["available-services", courierKey],
+    queryKey,
     queryFn: async () => (await api.get<ServiceToggleOption[]>(`/settings/${courierKey}/available-services`)).data,
   });
 
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [refreshWarnings, setRefreshWarnings] = useState<string[] | null>(null);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (!services) return;
@@ -45,22 +49,37 @@ export default function AvailableServices() {
         .map(([code]) => code);
       return (await api.put<ServiceToggleOption[]>(`/settings/${courierKey}/available-services`, disabledCodes)).data;
     },
-    onSuccess: () => showToast("Saved."),
+    onSuccess: (data) => {
+      // Keeps the list's own saved enabled-state in sync with what was just
+      // persisted, same reason the refresh mutation below writes straight
+      // into the query cache rather than just updating local checkbox state.
+      queryClient.setQueryData(queryKey, data);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    },
   });
 
   // Rather than waiting for real orders of every weight/destination to
   // trickle through and gradually fill this list in, this runs a sweep of
   // live lookups against a fixed spread of representative postcodes (BNS's
   // own, Northern Ireland, Scottish Highlands, a Scottish island, the
-  // Channel Islands, Isle of Man, Isle of Wight, Isles of Scilly) at a
-  // nominal light weight server-side, so every small-item service tier that
-  // region can offer gets pulled in in one go. See
-  // DpdShippingService/ApcShippingService.refreshAllKnownServices().
+  // Channel Islands, Isle of Man, Isle of Wight, Isles of Scilly, the
+  // Republic of Ireland) at a nominal light weight server-side, so every
+  // small-item service tier that region can offer gets pulled in in one go.
+  // See DpdShippingService/ApcShippingService.refreshAllKnownServices().
   const refreshMutation = useMutation({
     mutationFn: async () =>
       (await api.post<AvailableServicesRefreshResult>(`/settings/${courierKey}/available-services/refresh`)).data,
     onSuccess: (data) => {
-      setEnabled(Object.fromEntries(data.services.map((s) => [s.code, s.enabled])));
+      // Writes the refreshed list straight into the "available-services"
+      // query's own cache, not just local checkbox state - the rows on
+      // screen are rendered from that query's data (services/
+      // filteredServices below), so without this, a code the sweep just
+      // added for the first time didn't actually appear until the page was
+      // left and re-opened (which re-ran the query from scratch). The
+      // useEffect above still handles rebuilding `enabled` off the back of
+      // this, since it already reruns on any change to `services`.
+      queryClient.setQueryData(queryKey, data.services);
       setRefreshWarnings(data.warnings.length ? data.warnings : null);
       showToast(data.warnings.length ? "Refreshed, with some postcodes failing - see below." : "Refreshed from live lookup.");
     },
@@ -74,7 +93,11 @@ export default function AvailableServices() {
   }, [services, search]);
 
   return (
-    <div className="max-w-2xl">
+    // pb-24 clears the floating Save button below, same reason Settings.tsx
+    // and OrderEdit.tsx use it - it's fixed to the viewport, not the page,
+    // and would otherwise sit over the last bit of content on a short page
+    // or once scrolled all the way down.
+    <div className="max-w-2xl pb-24">
       <button onClick={() => navigate("/settings")} className="text-sm text-slate-500 hover:text-slate-700 mb-3">
         ← Back to Settings
       </button>
@@ -149,16 +172,21 @@ export default function AvailableServices() {
         )}
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
+      {saveMutation.isError && <p className="mt-4 text-sm text-red-600">{(saveMutation.error as Error).message}</p>}
+      {refreshMutation.isError && <p className="mt-4 text-sm text-red-600">{(refreshMutation.error as Error).message}</p>}
+
+      {/* Floating rather than sitting at the bottom of the page, matching
+          Settings.tsx and the order screen's own Save button - see the
+          pb-24 comment above. */}
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
+        <SavedBadge show={saved} />
         <button
           onClick={() => saveMutation.mutate()}
           disabled={saveMutation.isPending || isLoading}
-          className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-md hover:bg-emerald-500 disabled:opacity-50"
+          className="bg-emerald-600 text-white text-sm font-medium px-6 py-3 rounded-full shadow-lg hover:bg-emerald-500 disabled:opacity-50"
         >
           {saveMutation.isPending ? "Saving..." : "Save"}
         </button>
-        {saveMutation.isError && <p className="text-sm text-red-600">{(saveMutation.error as Error).message}</p>}
-        {refreshMutation.isError && <p className="text-sm text-red-600">{(refreshMutation.error as Error).message}</p>}
       </div>
     </div>
   );

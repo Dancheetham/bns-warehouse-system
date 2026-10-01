@@ -22,6 +22,7 @@ import { printPdf, printRaw } from "../utils/printAgent";
 import { apcTrackingUrl, dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
 import SavedBadge from "../components/SavedBadge";
+import SearchableSelect from "../components/SearchableSelect";
 
 // COMPLETED, PARTIALLY_DESPATCHED and INVOICE_PENDING are deliberately left
 // out - the backend (OrderService.update) now rejects picking any of these
@@ -696,14 +697,14 @@ export default function OrderEdit() {
             <input type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} className="input" />
           </Field>
           <Field label="Company (B2B credit account)">
-            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className="input">
-              <option value="">None</option>
-              {companies?.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={(companies ?? []).map((c) => ({ value: String(c.id), label: c.name }))}
+              value={companyId || null}
+              onChange={(value) => setCompanyId(value ?? "")}
+              placeholder="Search companies..."
+              clearLabel="None"
+              className="w-full"
+            />
           </Field>
           <Field label="Order Reference">
             <input value={orderReference} onChange={(e) => setOrderReference(e.target.value)} className="input" />

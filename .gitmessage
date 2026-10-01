@@ -1,39 +1,40 @@
-Move available-services cache out of Settings into its own table (v0.140)
+Live-refresh fixes, empty-service fallback, floating save, searchable Company (v0.141)
 
-Dan's report after v0.139: the DPD sweep now runs with no errors (fixed in
-v0.139), and APC's only warning is the expected "Ireland - no services" one,
-but the Available Services list still wasn't growing. He asked to replace
-the Settings-based cache with a courier-specific data table instead of
-fixing the symptom again.
+Four separate asks from Dan's follow-up after v0.140:
 
-Root cause: DpdShippingService/ApcShippingService.cacheLastKnownServices()
-serialized the whole known-services list as JSON into a single Settings row
-(dpd_last_known_services/apc_last_known_services). That row's column
-(app_settings.setting_value) was VARCHAR(500) (V23 migration) - plenty for
-the handful of short config strings Settings originally held, but nowhere
-near enough once a sweep across 9 postcodes accumulated DPD/APC's often
-fairly verbose service descriptions. Postgres's "value too long for type
-character varying(500)" exception on save was being silently swallowed by
-a try/catch that only logged a server-side warning - so the sweep's own
-HTTP calls could all succeed (no postcode-level warnings at all) while the
-save that was supposed to remember the results quietly failed every single
-time, with nothing surfaced to the warnings list or the frontend.
+1. Available Services page's "Refresh from live lookup" updated the
+   checkbox state but not the list it's rendered from (the
+   "available-services" react-query cache) - so a brand new code the sweep
+   just found only actually appeared after leaving the page and coming back
+   (re-fetching from scratch). AvailableServices.tsx now writes the
+   refreshed list straight into that query's own cache via
+   queryClient.setQueryData() on both the refresh and save mutations, so
+   the rendered rows update immediately.
 
-Fix - a real table instead of a capped blob:
-- New `courier_service_options` table (courier, code, label, extra_label,
-  enabled - one row per courier+code, TEXT columns so there's no practical
-  size ceiling to hit again) and entity/repository
-  (CourierServiceOption/CourierServiceOptionRepository).
-- DpdShippingService/ApcShippingService's cacheLastKnownServices(),
-  loadLastKnownServices(), disabledServiceCodes(), setDisabledServices()
-  and listAllKnownServicesForToggle() all rewritten against the new table -
-  no more JSON serialization, and a code's enabled flag is a real column
-  that can be flipped without rewriting the whole list.
-- Migration (V55) also widens app_settings.setting_value from VARCHAR(500)
-  to TEXT, so no other setting can hit this same silent ceiling in future,
-  and does a best-effort carry-over of whatever's currently cached (skipped
-  per-courier, not failed outright, if that cached value is itself
-  malformed/truncated from the original bug).
+2. If a courier's live service lookup succeeds but genuinely returns zero
+   matching services (not an exception - e.g. APC on a Republic of Ireland
+   address, confirmed not a bug separately), the order screen's Service
+   dropdown was left completely empty, forcing straight to free text.
+   ApcShippingService.checkServiceAvailability()/
+   DpdShippingService.listAvailableServices() now treat an empty-but-
+   successful result the same as a failed live call: fall back to every
+   known/allowed cached service, with live=false and a liveError explaining
+   why ("APC/DPD returned no services for this address/weight"). The
+   frontend already rendered whatever `services` came back and already
+   showed `liveError` when not live, so no frontend change was needed for
+   this part.
+
+3. Save button on both Available Services pages (DPD and APC) switched
+   from the old inline button at the bottom of the list to the floating
+   button + SavedBadge pattern already used on Settings.tsx and the order
+   screen - same fixed bottom-right placement, same "Saved." pill.
+
+4. "Company (B2B credit account)" on the order screen is now a searchable
+   type-to-filter field instead of a plain <select> - reuses the existing
+   SearchableSelect component (previously only used for the company filter
+   on Invoice Reports) rather than building a new one. SearchableSelect
+   gained a `clearLabel` prop ("All" by default, kept for Invoice Reports;
+   "None" for this field, matching the old <select>'s "None" option).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

@@ -308,8 +308,19 @@ public class ApcShippingService {
             List<ApcServiceOption> options = parseServiceAvailabilityResponse(responseBody);
             if (!options.isEmpty()) {
                 cacheLastKnownServices(options);
+                return new ApcServiceLookupResult(excludeDisabled(options), true, null);
             }
-            return new ApcServiceLookupResult(excludeDisabled(options), true, null);
+            // The call itself succeeded (no exception), but APC genuinely
+            // offered nothing for this address/weight - e.g. a destination
+            // APC doesn't cover at all (Republic of Ireland, confirmed
+            // 2026-10-01). Leaving the dropdown empty here would force staff
+            // straight to free text with nothing to pick from, so this falls
+            // back to every known/allowed service exactly like the exception
+            // branch below does, just with its own explanation rather than a
+            // caught exception's message.
+            List<ApcServiceOption> cached = loadLastKnownServices();
+            return new ApcServiceLookupResult(excludeDisabled(cached.isEmpty() ? STANDARD_SERVICES : cached), false,
+                    "APC returned no services for this address/weight");
         } catch (Exception e) {
             log.warn("Live APC service availability check failed for order {}: {}", order.getOrderNumber(), e.getMessage());
             List<ApcServiceOption> cached = loadLastKnownServices();

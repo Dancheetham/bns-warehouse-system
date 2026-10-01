@@ -874,8 +874,18 @@ public class DpdShippingService {
             }
             if (!options.isEmpty()) {
                 cacheLastKnownServices(options);
+                return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(excludeDisabled(options), true, null);
             }
-            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(excludeDisabled(options), true, null);
+            // The call itself succeeded (no exception), but DPD genuinely
+            // offered nothing for this address/weight. Leaving the dropdown
+            // empty here would force staff straight to free text with
+            // nothing to pick from, so this falls back to every known/
+            // allowed service exactly like the exception branch below does,
+            // just with its own explanation rather than a caught exception's
+            // message.
+            List<uk.co.bns.warehouse_api.dto.DpdServiceOption> cached = loadLastKnownServices();
+            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(excludeDisabled(cached), false,
+                    "DPD returned no services for this address/weight");
         } catch (Exception e) {
             log.warn("Live DPD service lookup failed for order {}: {}", order.getOrderNumber(), e.getMessage());
             List<uk.co.bns.warehouse_api.dto.DpdServiceOption> cached = loadLastKnownServices();
