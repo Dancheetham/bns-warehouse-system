@@ -1,32 +1,43 @@
-Fix scheduled GDMS run's BST drift and status-dropdown GDMS gap (v0.134)
+Add Available Services toggle, APC tracking link, tidy order screen (v0.135)
 
-Dan tested the scheduled GDMS run and found it fired at 17:30 instead of
-16:30, then found a cancelled test order's device still showing assigned
-in GDMS.
+Three asks from Dan:
 
-1. GdmsEndOfDayService.scheduledRun()'s cron had no timezone, so it ran
-   on the container's UTC clock - 16:30 UTC is 17:30 in the UK while BST
-   is in effect, which is exactly what Dan saw. Pinned to Europe/London
-   so it's 16:30 UK time all year.
+1. New "Available Services" admin page for DPD and APC (Settings >
+   Couriers > DPD/APC > Available services ->) - every service code
+   either courier has actually offered so far, with a tick to control
+   whether it still shows in the order screen's Service dropdown.
+   Unticking (e.g. APC's Liquid codes BNS never uses) doesn't delete the
+   code, just excludes it going forward via a new disabled-codes setting
+   (apc_disabled_services/dpd_disabled_services) filtered out right
+   before DpdShippingService/ApcShippingService return their service
+   list - so it can be ticked again later, and never touches anything
+   already booked. There's no fixed master catalog of every courier
+   service code anywhere in this app, so the list is whatever's actually
+   been seen live/cached so far, same as the dropdown itself already
+   relies on.
 
-2. There are two ways to cancel an order in this app, and only one of
-   them touched GDMS: the dedicated "Cancel & Return to Stock" button
-   does a full recall+stock+carton unwind via GdmsRecallService, but
-   picking "Cancelled" from the order's own Status dropdown
-   (OrderService.update()) was a bare status flip with no GDMS call at
-   all. Added the same recall call there too, scoped to just the GDMS
-   side (that dropdown path still doesn't touch stock/cartons, which is
-   a different, deliberate behaviour from the dedicated button).
+2. APC tracking changed to open in a new tab via a plain link
+   (apcTrackingUrl, mirroring dpdTrackingUrl), using the confirmed
+   7-digit consignment number, instead of the previous in-page widget
+   that called APC's authenticated Tracks API. The exact public URL
+   format (apcchoice.apc-overnight.com/track-parcel?id=...&postcode=...)
+   is a best-effort match to the tracker's own form fields - it's a
+   client-rendered page, so it couldn't be confirmed end-to-end from this
+   sandbox. Flagged clearly in code and the project's APC findings doc for
+   Dan to confirm on the next real tracking click.
 
-Separately investigated why Dan's device stayed assigned even though he
-confirmed he used the correct "Cancel & Return to Stock" button, not the
-dropdown - that code path is correct and does call GDMS's own
-/channel/recycle endpoint as documented, but per this project's own GDMS
-findings doc, that endpoint had never actually been exercised against
-the real GDMS account before today, only confirmed against GDMS's
-documented shapes. No code changes for this part - the GDMS Sync Log
-(Admin > GDMS Log) records the real success/failure and error message
-per attempt, which is the next place to check.
+3. Removed two UI nudges on the order screen that were throwing off the
+   layout: APC's "Type a product code manually instead" toggle, and the
+   explanatory note under the Collection Service dropdown.
+
+Also answered (no code change): why no Saturday-prefixed APC/DPD services
+show up outside the right collection day - confirmed neither
+ApcShippingService nor DpdShippingService does any day-of-week filtering
+at all; the only date sent to either courier's service-lookup is today's
+date (APC) or nothing (DPD), so which services come back is entirely
+decided by the courier's own live API based on what their outbound
+schedule actually offers for that collection day - testing on a Friday
+is the right call.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

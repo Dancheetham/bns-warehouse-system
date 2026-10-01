@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import uk.co.bns.warehouse_api.dto.DpdLabelResult;
 import uk.co.bns.warehouse_api.dto.DpdShipmentResult;
+import uk.co.bns.warehouse_api.dto.ServiceToggleOption;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.CartonLine;
 import uk.co.bns.warehouse_api.entity.Company;
@@ -30,6 +31,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -826,6 +828,12 @@ public class DpdShippingService {
     // show when a later live lookup fails - see listAvailableServices().
     private static final String LAST_KNOWN_SERVICES_KEY = "dpd_last_known_services";
 
+    // Settings > Couriers > DPD > Available Services - same idea as APC's
+    // equivalent (see ApcShippingService) - a comma-separated list of
+    // networkKeys the admin has unticked, filtered out right before
+    // returning options to the frontend, never before caching.
+    private static final String DISABLED_SERVICES_KEY = "dpd_disabled_services";
+
     /**
      * The full list of services DPD actually has available right now for an
      * order's delivery address and weight - used to populate the "Service"
@@ -867,12 +875,44 @@ public class DpdShippingService {
             if (!options.isEmpty()) {
                 cacheLastKnownServices(options);
             }
-            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(options, true, null);
+            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(excludeDisabled(options), true, null);
         } catch (Exception e) {
             log.warn("Live DPD service lookup failed for order {}: {}", order.getOrderNumber(), e.getMessage());
             List<uk.co.bns.warehouse_api.dto.DpdServiceOption> cached = loadLastKnownServices();
-            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(cached, false, e.getMessage());
+            return new uk.co.bns.warehouse_api.dto.DpdServiceLookupResult(excludeDisabled(cached), false, e.getMessage());
         }
+    }
+
+    /**
+     * Settings > Couriers > DPD > Available Services - every networkKey this
+     * account has ever actually seen offered (there's no static floor like
+     * APC's STANDARD_SERVICES for DPD - every service is 100% live/cached,
+     * see the class-level fallback comment on listAvailableServices above),
+     * each marked with whether it's currently enabled.
+     */
+    public List<ServiceToggleOption> listAllKnownServicesForToggle() {
+        Set<String> disabled = disabledServiceCodes();
+        Map<String, uk.co.bns.warehouse_api.dto.DpdServiceOption> byKey = new LinkedHashMap<>();
+        for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : loadLastKnownServices()) byKey.put(o.networkKey(), o);
+        return byKey.values().stream()
+                .map(o -> new ServiceToggleOption(o.networkKey(), o.networkDesc() + " - " + o.serviceDesc(), !disabled.contains(o.networkKey())))
+                .toList();
+    }
+
+    public void setDisabledServices(Set<String> codes) {
+        settingsService.set(DISABLED_SERVICES_KEY, String.join(",", codes));
+    }
+
+    private Set<String> disabledServiceCodes() {
+        String raw = settingsService.get(DISABLED_SERVICES_KEY, "");
+        if (raw.isBlank()) return Set.of();
+        return Arrays.stream(raw.split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+    }
+
+    private List<uk.co.bns.warehouse_api.dto.DpdServiceOption> excludeDisabled(List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options) {
+        Set<String> disabled = disabledServiceCodes();
+        if (disabled.isEmpty()) return options;
+        return options.stream().filter(o -> !disabled.contains(o.networkKey())).toList();
     }
 
     private void cacheLastKnownServices(List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options) {

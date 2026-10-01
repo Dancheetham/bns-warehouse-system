@@ -14,6 +14,7 @@ import uk.co.bns.warehouse_api.dto.ApcServiceLookupResult;
 import uk.co.bns.warehouse_api.dto.ApcServiceOption;
 import uk.co.bns.warehouse_api.dto.ApcTrackingEvent;
 import uk.co.bns.warehouse_api.dto.ApcTrackingResult;
+import uk.co.bns.warehouse_api.dto.ServiceToggleOption;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
@@ -29,8 +30,13 @@ import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Books shipments through APC Overnight's Hypaship Booking Platform API v3
@@ -73,6 +79,14 @@ public class ApcShippingService {
     // a later live lookup fails - mirrors DPD_LAST_KNOWN_SERVICES_KEY in
     // DpdShippingService exactly.
     private static final String LAST_KNOWN_SERVICES_KEY = "apc_last_known_services";
+
+    // Settings > Couriers > APC > Available Services - a comma-separated list
+    // of product codes the admin has unticked, so they stop appearing in the
+    // order screen's Service dropdown without losing their place in the
+    // cached/standard lists (so they can be ticked again later). Applied as a
+    // filter right before returning options to the frontend, never before
+    // caching - cacheLastKnownServices() always stores APC's full raw answer.
+    private static final String DISABLED_SERVICES_KEY = "apc_disabled_services";
 
     private final ApcAuthService apcAuthService;
     private final SettingsService settingsService;
@@ -313,12 +327,49 @@ public class ApcShippingService {
             if (!options.isEmpty()) {
                 cacheLastKnownServices(options);
             }
-            return new ApcServiceLookupResult(options, true, null);
+            return new ApcServiceLookupResult(excludeDisabled(options), true, null);
         } catch (Exception e) {
             log.warn("Live APC service availability check failed for order {}: {}", order.getOrderNumber(), e.getMessage());
             List<ApcServiceOption> cached = loadLastKnownServices();
-            return new ApcServiceLookupResult(cached.isEmpty() ? STANDARD_SERVICES : cached, false, e.getMessage());
+            return new ApcServiceLookupResult(excludeDisabled(cached.isEmpty() ? STANDARD_SERVICES : cached), false, e.getMessage());
         }
+    }
+
+    /**
+     * Settings > Couriers > APC > Available Services - every product code
+     * this account has ever actually seen offered (the small built-in
+     * STANDARD_SERVICES floor, plus whatever's accumulated in the live-
+     * result cache), each marked with whether it's currently enabled. There's
+     * no complete master catalog of every APC product code anywhere in this
+     * codebase (see the integration guide's own table for that) - this page
+     * can only toggle codes that have actually shown up for this account at
+     * least once; a brand new code neither touches this list until a live
+     * lookup returns it, at which point it's added here already enabled.
+     */
+    public List<ServiceToggleOption> listAllKnownServicesForToggle() {
+        Set<String> disabled = disabledServiceCodes();
+        Map<String, ApcServiceOption> byCode = new LinkedHashMap<>();
+        for (ApcServiceOption o : STANDARD_SERVICES) byCode.put(o.code(), o);
+        for (ApcServiceOption o : loadLastKnownServices()) byCode.put(o.code(), o);
+        return byCode.values().stream()
+                .map(o -> new ServiceToggleOption(o.code(), o.description(), !disabled.contains(o.code())))
+                .toList();
+    }
+
+    public void setDisabledServices(Set<String> codes) {
+        settingsService.set(DISABLED_SERVICES_KEY, String.join(",", codes));
+    }
+
+    private Set<String> disabledServiceCodes() {
+        String raw = settingsService.get(DISABLED_SERVICES_KEY, "");
+        if (raw.isBlank()) return Set.of();
+        return Arrays.stream(raw.split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+    }
+
+    private List<ApcServiceOption> excludeDisabled(List<ApcServiceOption> options) {
+        Set<String> disabled = disabledServiceCodes();
+        if (disabled.isEmpty()) return options;
+        return options.stream().filter(o -> !disabled.contains(o.code())).toList();
     }
 
     /**

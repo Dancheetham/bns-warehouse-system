@@ -5,7 +5,6 @@ import { api } from "../api/client";
 import {
   AcknowledgementResult,
   ApcServiceLookupResult,
-  ApcTrackingResult,
   CollectionCourierOption,
   CompanyView,
   CourierType,
@@ -20,7 +19,7 @@ import {
   TicketSummaryView,
 } from "../types";
 import { printPdf, printRaw } from "../utils/printAgent";
-import { dpdTrackingUrl } from "../utils/tracking";
+import { apcTrackingUrl, dpdTrackingUrl } from "../utils/tracking";
 import { useToast } from "../components/ToastContext";
 import SavedBadge from "../components/SavedBadge";
 
@@ -475,32 +474,10 @@ export default function OrderEdit() {
     onError: (err: Error) => setApcError(err.message),
   });
 
-  // APC has no public tracking link that's confirmed to accept a Hypaship
-  // WayBill the way DPD's tracker accepts a DPD consignment number (see
-  // dpdTrackingUrl) - so "Track" fetches from APC's own authenticated
-  // Tracks API via the backend and shows the result inline instead of
-  // linking out. Fetched on click rather than automatically, since it's a
-  // live call to APC every time and there's no need to make one before the
-  // operator actually wants to see it.
-  const [apcTracking, setApcTracking] = useState<ApcTrackingResult | null>(null);
-  const [apcTrackingLoading, setApcTrackingLoading] = useState(false);
-  const [apcTrackingError, setApcTrackingError] = useState<string | null>(null);
-  const viewApcTracking = async () => {
-    setApcTrackingError(null);
-    setApcTrackingLoading(true);
-    try {
-      const response = await api.get<ApcTrackingResult>(`/orders/${id}/apc-tracking`);
-      setApcTracking(response.data);
-      if (!response.data.events.length) {
-        setApcTrackingError("APC hasn't recorded any scans for this shipment yet.");
-      }
-    } catch (err) {
-      setApcTracking(null);
-      setApcTrackingError((err as Error).message);
-    } finally {
-      setApcTrackingLoading(false);
-    }
-  };
+  // APC's own consumer tracker (apcTrackingUrl) takes the short 7-digit
+  // consignment number + postcode, same shape as dpdTrackingUrl - Track →
+  // just opens it directly now, matching DPD's UX, rather than calling
+  // APC's authenticated Tracks API and showing the result inline as before.
 
   const [gdmsError, setGdmsError] = useState<string | null>(null);
   const [gdmsResult, setGdmsResult] = useState<GdmsRunResult | null>(null);
@@ -973,9 +950,6 @@ export default function OrderEdit() {
                         </option>
                       ))}
                     </select>
-                    <p className="text-xs text-slate-400 mt-1">
-                      An external courier BNS doesn't book or label - manage the list under Settings &gt; Couriers.
-                    </p>
                   </div>
                 )}
                 {courierType === "DPD" && (
@@ -1106,20 +1080,6 @@ export default function OrderEdit() {
                         Not live for this address: {apcServiceResult.liveError}
                       </p>
                     )}
-                    <details className="mt-1">
-                      <summary className="text-xs text-slate-400 cursor-pointer">
-                        Type a product code manually instead
-                      </summary>
-                      <input
-                        value={apcServiceCode}
-                        onChange={(e) => {
-                          setApcServiceCode(e.target.value);
-                          setCourierMethod(e.target.value);
-                        }}
-                        placeholder="e.g. ND16"
-                        className="input mt-1"
-                      />
-                    </details>
                   </div>
                 )}
                 {status === "ON_HOLD" && (
@@ -1314,13 +1274,14 @@ export default function OrderEdit() {
                     >
                       Print Label
                     </button>
-                    <button
-                      onClick={viewApcTracking}
-                      disabled={apcTrackingLoading}
-                      className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200 disabled:opacity-50"
+                    <a
+                      href={apcTrackingUrl(existingOrder.apcWaybill.slice(-7), deliveryPostcode)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"
                     >
-                      {apcTrackingLoading ? "Tracking..." : "Track →"}
-                    </button>
+                      Track →
+                    </a>
                   </>
                 ) : (
                   <button
@@ -1333,33 +1294,6 @@ export default function OrderEdit() {
                 )}
               </div>
               {apcError && <p className="text-sm text-red-600 mt-2">{apcError}</p>}
-              {apcTrackingError && <p className="text-sm text-red-600 mt-2">{apcTrackingError}</p>}
-              {/* APC has no confirmed public tracking link (unlike DPD's
-                  Track → which just opens track.dpd.co.uk), so the result of
-                  the authenticated Tracks API call is shown here instead -
-                  latest status up front, full scan history tucked away so it
-                  doesn't dominate the page for the common case. */}
-              {apcTracking && apcTracking.events.length > 0 && (
-                <div className="mt-2 text-sm text-slate-700">
-                  <span className="font-medium">{apcTracking.latestStatus}</span>
-                  {apcTracking.latestDateTime && (
-                    <span className="text-slate-400"> — {apcTracking.latestDateTime}</span>
-                  )}
-                  <details className="mt-1">
-                    <summary className="text-xs text-slate-400 cursor-pointer">
-                      Full scan history ({apcTracking.events.length})
-                    </summary>
-                    <ul className="mt-1 space-y-1">
-                      {apcTracking.events.map((event, i) => (
-                        <li key={i} className="text-xs text-slate-600">
-                          <span className="text-slate-400">{event.dateTime ?? "—"}</span> {event.description}
-                          {event.location && event.location !== "N/A" ? ` (${event.location})` : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  </details>
-                </div>
-              )}
             </div>
           )}
 

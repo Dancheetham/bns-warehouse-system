@@ -461,6 +461,18 @@ export interface GdmsSyncLog {
   errorReason?: string;
 }
 
+// One row on Settings > Couriers > DPD/APC > Available Services - every
+// service code that courier has ever actually offered (live or cached - see
+// DpdShippingService/ApcShippingService.listAllKnownServicesForToggle()),
+// with `enabled` reflecting whether it's currently allowed to appear in the
+// order screen's Service dropdown. Unticking one doesn't delete it - it's
+// just excluded going forward, and can be re-ticked later.
+export interface ServiceToggleOption {
+  code: string;
+  label: string;
+  enabled: boolean;
+}
+
 export type OrderStatus =
   | "ON_HOLD"
   | "AWAITING_DESPATCH"

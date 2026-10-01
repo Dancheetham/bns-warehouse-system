@@ -639,6 +639,15 @@ export default function Settings() {
           title="DPD"
           description="API credentials and sender details for creating DPD shipments and printing labels directly from an order. The API key/secret pair comes from your DPD developer account (My DPD > API Access), not your normal DPD login."
         >
+        <div>
+          <Link to="/settings/available-services/dpd" className="text-sm text-emerald-600 hover:underline">
+            Available services →
+          </Link>
+          <p className="text-xs text-slate-400 mt-1">
+            Hide specific DPD services from the order screen's Service dropdown, without losing the option to bring
+            them back later.
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">API key (Client-Id)</label>
@@ -911,6 +920,15 @@ export default function Settings() {
           title="APC"
           description="Login and default settings for creating APC Overnight (Hypaship) shipments and printing labels directly from an order. Unlike DPD, there's no separate API key - just the email/password for your APC Hypaship login."
         >
+        <div>
+          <Link to="/settings/available-services/apc" className="text-sm text-emerald-600 hover:underline">
+            Available services →
+          </Link>
+          <p className="text-xs text-slate-400 mt-1">
+            Hide specific APC product codes (e.g. the Liquid services) from the order screen's Service dropdown,
+            without losing the option to bring them back later.
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>

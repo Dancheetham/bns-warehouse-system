@@ -47,6 +47,7 @@ import PaymentTracking from "./pages/PaymentTracking";
 import InvoiceHistory from "./pages/InvoiceHistory";
 import DeliveryHistory from "./pages/DeliveryHistory";
 import DeliveryHistoryDetail from "./pages/DeliveryHistoryDetail";
+import AvailableServices from "./pages/AvailableServices";
 
 export default function App() {
   return (
@@ -116,6 +117,7 @@ export default function App() {
             <Route path="/account-settings" element={<AccountSettings />} />
             <Route path="/settings/stock-import" element={<StockImport />} />
             <Route path="/settings/company-import" element={<CompanyImport />} />
+            <Route path="/settings/available-services/:courier" element={<AvailableServices />} />
             <Route path="/shopify-sync" element={<ShopifySync />} />
           </Route>
         </Route>

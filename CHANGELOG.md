@@ -5,6 +5,34 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.70] - 2026-10-01 (v0.135)
+
+### Added
+
+- **"Available Services" page for DPD and APC** (Settings > Couriers > DPD/
+  APC > Available services →): every service code either courier has
+  actually offered so far, with a tick to control whether it's still
+  allowed to appear in the order screen's Service dropdown - untick APC's
+  Liquid codes, for instance, without losing the ability to turn them
+  back on later. Unticking a code doesn't delete it or affect anything
+  already booked using it - it's just excluded from future lookups until
+  re-ticked.
+
+### Changed
+
+- **APC tracking now opens in a new tab**, matching DPD's "Track →", using
+  the short 7-digit consignment number confirmed previously, instead of
+  the in-page dropdown calling APC's authenticated Tracks API. The exact
+  link format is a best-effort match to APC's own tracker
+  (apcchoice.apc-overnight.com) - worth confirming it lands on the right
+  parcel next time there's a real one to test, since this couldn't be
+  verified end-to-end from here (see the project's APC findings doc).
+- Removed two bits of order-screen text that were nudging the layout
+  around without adding much: the "Type a product code manually instead"
+  manual-override toggle under APC's Service dropdown, and the "manage
+  the list under Settings > Couriers" note under the Collection Service
+  dropdown.
+
 ## [0.23.69] - 2026-10-01 (v0.134)
 
 ### Fixed

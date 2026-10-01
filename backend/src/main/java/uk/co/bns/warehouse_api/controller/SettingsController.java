@@ -7,9 +7,12 @@ import org.springframework.web.bind.annotation.*;
 import uk.co.bns.warehouse_api.dto.CollectionCourierOptionRequest;
 import uk.co.bns.warehouse_api.dto.GdmsChannelLookupResult;
 import uk.co.bns.warehouse_api.dto.GdmsRunResult;
+import uk.co.bns.warehouse_api.dto.ServiceToggleOption;
 import uk.co.bns.warehouse_api.entity.CollectionCourierOption;
+import uk.co.bns.warehouse_api.service.ApcShippingService;
 import uk.co.bns.warehouse_api.service.CollectionCourierOptionService;
 import uk.co.bns.warehouse_api.service.DpdAuthService;
+import uk.co.bns.warehouse_api.service.DpdShippingService;
 import uk.co.bns.warehouse_api.service.GdmsAuthService;
 import uk.co.bns.warehouse_api.service.GdmsChannelService;
 import uk.co.bns.warehouse_api.service.GdmsEndOfDayService;
@@ -18,6 +21,7 @@ import uk.co.bns.warehouse_api.service.SettingsService;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/settings")
@@ -30,6 +34,8 @@ public class SettingsController {
     private final GdmsChannelService gdmsChannelService;
     private final GdmsEndOfDayService gdmsEndOfDayService;
     private final CollectionCourierOptionService collectionCourierOptionService;
+    private final DpdShippingService dpdShippingService;
+    private final ApcShippingService apcShippingService;
 
     @GetMapping
     public Map<String, String> getAll() {
@@ -110,5 +116,34 @@ public class SettingsController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteCollectionCourier(@PathVariable Long id) {
         collectionCourierOptionService.delete(id);
+    }
+
+    // "Available Services" admin pages (Settings > Couriers > DPD/APC) -
+    // every service code either courier has ever actually offered, with a
+    // tick to control whether it's still allowed to appear in the order
+    // screen's Service dropdown. See DpdShippingService/ApcShippingService's
+    // listAllKnownServicesForToggle()/setDisabledServices() for the full
+    // reasoning - unticking never deletes anything, it's just added to a
+    // disabled-codes setting that's filtered out at lookup time.
+    @GetMapping("/dpd/available-services")
+    public List<ServiceToggleOption> dpdAvailableServices() {
+        return dpdShippingService.listAllKnownServicesForToggle();
+    }
+
+    @PutMapping("/dpd/available-services")
+    public List<ServiceToggleOption> updateDpdAvailableServices(@RequestBody Set<String> disabledCodes) {
+        dpdShippingService.setDisabledServices(disabledCodes);
+        return dpdShippingService.listAllKnownServicesForToggle();
+    }
+
+    @GetMapping("/apc/available-services")
+    public List<ServiceToggleOption> apcAvailableServices() {
+        return apcShippingService.listAllKnownServicesForToggle();
+    }
+
+    @PutMapping("/apc/available-services")
+    public List<ServiceToggleOption> updateApcAvailableServices(@RequestBody Set<String> disabledCodes) {
+        apcShippingService.setDisabledServices(disabledCodes);
+        return apcShippingService.listAllKnownServicesForToggle();
     }
 }
