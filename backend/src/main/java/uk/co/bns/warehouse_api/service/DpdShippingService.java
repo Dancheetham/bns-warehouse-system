@@ -1011,25 +1011,42 @@ public class DpdShippingService {
         return responseBody.has("data") ? responseBody.get("data") : responseBody;
     }
 
-    // A fixed spread of representative UK (and UK-islands) postcodes used by
+    // A fixed spread of representative UK/islands/Ireland postcodes used by
     // refreshAllKnownServices() below to proactively pull the full range of
     // services DPD actually offers, rather than waiting for real orders to
     // each one of these regions to trickle through over time - different
-    // delivery zones (mainland vs Highlands vs islands vs Northern Ireland)
-    // are exactly what makes DPD return a different service list, which is
-    // the whole reason the cache only ever grew one order's worth at a time
-    // before this. Label is just for the warnings list below; GB is used as
-    // the country code throughout since every one of these is addressed
-    // within the UK postal system, not a separate sovereign country.
+    // delivery zones (mainland vs Highlands vs islands vs Northern Ireland
+    // vs the Republic of Ireland) are exactly what makes DPD return a
+    // different service list, which is the whole reason the cache only ever
+    // grew one order's worth at a time before this.
+    //
+    // Shape is {label, postcode, town, countryCode}. The town field is the
+    // actual fix for the "Delivery city is mandatory (Delivery city)"
+    // rejection every probe hit before this: refreshAllKnownServices() used
+    // to pass an empty string for every probe's town, and DPD's
+    // outboundservices endpoint enforces that field in practice even though
+    // its documented schema carries no mandatory asterisk on it (confirmed
+    // live against DPD's own API docs - see claude/dpd-api-findings.md).
+    //
+    // Isle of Wight and Isles of Scilly postcodes below are real, current
+    // Royal Mail PAF addresses (confirmed via doogal.co.uk) replacing the
+    // invented ones from the previous release, which didn't actually exist.
+    // The Isle of Man postcode is a best-effort replacement (IM1 2LE, a
+    // Douglas address format) but Isle of Man postcodes don't appear to be
+    // in current Royal Mail PAF data at all, which may be why DPD rejects
+    // every Isle of Man postcode regardless of which one is tried - that's
+    // a possible structural gap on DPD's side, not something a different
+    // postcode choice can necessarily fix.
     private static final List<String[]> SERVICE_SWEEP_POSTCODES = List.of(
-            new String[]{"BNS (Wigan)", "WN6 0XF"},
-            new String[]{"Northern Ireland", "BT1 1AA"},
-            new String[]{"Scottish Highlands", "IV1 1AA"},
-            new String[]{"Scottish Island (Orkney)", "KW15 1AA"},
-            new String[]{"Channel Islands (Jersey)", "JE1 1AA"},
-            new String[]{"Isle of Man", "IM1 1AA"},
-            new String[]{"Isle of Wight", "PO30 1AA"},
-            new String[]{"Isles of Scilly", "TR21 0AA"});
+            new String[]{"BNS (Wigan)", "WN6 0XF", "Wigan", "GB"},
+            new String[]{"Northern Ireland", "BT1 1AA", "Belfast", "GB"},
+            new String[]{"Scottish Highlands", "IV1 1AA", "Inverness", "GB"},
+            new String[]{"Scottish Island (Orkney)", "KW15 1AA", "Kirkwall", "GB"},
+            new String[]{"Channel Islands (Jersey)", "JE1 1AA", "St Helier", "GB"},
+            new String[]{"Isle of Man", "IM1 2LE", "Douglas", "GB"},
+            new String[]{"Isle of Wight", "PO30 1XY", "Newport", "GB"},
+            new String[]{"Isles of Scilly", "TR21 0NS", "St Mary's", "GB"},
+            new String[]{"Republic of Ireland (Dublin)", "D01 F5P2", "Dublin", "IE"});
 
     /**
      * Settings > Couriers > DPD > Available Services > "Refresh from live
@@ -1041,6 +1058,13 @@ public class DpdShippingService {
      * of every weight/destination to eventually populate it. One probe
      * failing (a transient API error, say) doesn't stop the rest - its
      * postcode/reason is returned in the warnings list instead.
+     *
+     * Note there's no collection-date override here (unlike APC's sweep,
+     * which deliberately probes on the next Friday so Saturday/Sunday
+     * services have a chance to appear) - DPD's outboundservices endpoint
+     * has no date field anywhere in its schema at all, confirmed live
+     * against DPD's own API docs, so there's nothing to pass here that
+     * would change which services come back by day of week.
      */
     public List<String> refreshAllKnownServices() {
         String senderPostcode = settingsService.get("dpd_sender_postcode", "");
@@ -1049,7 +1073,7 @@ public class DpdShippingService {
         List<String> warnings = new java.util.ArrayList<>();
         for (String[] probe : SERVICE_SWEEP_POSTCODES) {
             try {
-                JsonNode services = fetchAvailableServicesRaw("GB", "", probe[1],
+                JsonNode services = fetchAvailableServicesRaw(probe[3], probe[2], probe[1],
                         senderPostcode, senderTown, senderCountryCode, new BigDecimal("0.5"), 1);
                 List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options = new java.util.ArrayList<>();
                 if (services.isArray()) {

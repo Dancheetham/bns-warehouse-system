@@ -27,6 +27,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -376,20 +377,22 @@ public class ApcShippingService {
             weight = new BigDecimal("0.01");
         }
         return buildServiceAvailabilityBodyRaw(order.getDeliveryPostcode(), order.getDeliveryCountryCode(),
-                weight, Math.max(cartons.size(), 1), customsValue(order));
+                weight, Math.max(cartons.size(), 1), customsValue(order), LocalDate.now());
     }
 
     /**
      * Same call as buildServiceAvailabilityBody() above, but driven entirely
      * by plain values instead of a real Order - used both by that method
      * (once it's worked out the order's own weight/carton count/customs
-     * value) and by refreshAllKnownServices()'s sweep below, which has no
-     * Order at all, just a fixed probe postcode and a nominal light weight.
+     * value, and today's date) and by refreshAllKnownServices()'s sweep
+     * below, which has no Order at all, just a fixed probe postcode, a
+     * nominal light weight, and (so Saturday/Sunday services actually have a
+     * chance of showing up) the next Friday rather than today.
      */
     private ObjectNode buildServiceAvailabilityBodyRaw(String postcode, String countryCode, BigDecimal weightKg,
-            int numberOfPieces, BigDecimal goodsValue) {
+            int numberOfPieces, BigDecimal goodsValue, LocalDate collectionDate) {
         ObjectNode root = objectMapper.createObjectNode();
-        root.put("CollectionDate", LocalDate.now().format(APC_DATE));
+        root.put("CollectionDate", collectionDate.format(APC_DATE));
         root.put("ReadyAt", settingsService.get("apc_ready_at", "09:00"));
         root.put("ClosedAt", settingsService.get("apc_closed_at", "17:00"));
 
@@ -450,39 +453,61 @@ public class ApcShippingService {
         return options;
     }
 
-    // Same spread of representative UK (and UK-islands) postcodes as
+    // Same spread of representative UK/islands/Ireland postcodes as
     // DpdShippingService.SERVICE_SWEEP_POSTCODES - see that field's comment
-    // for the full reasoning. Kept as a separate copy (not shared) since the
-    // two couriers' sweep methods take different parameter shapes and
-    // there's no shared base class to hang a common constant off.
+    // for the full reasoning, including the postcode corrections (Isle of
+    // Wight/Isles of Scilly) and the Isle of Man caveat. Kept as a separate
+    // copy (not shared) since the two couriers' sweep methods take different
+    // parameter shapes and there's no shared base class to hang a common
+    // constant off. Shape here is {label, postcode, countryCode} - APC's
+    // ServiceAvailability call (unlike DPD's) doesn't need a town at all, so
+    // there's no third "town" slot to carry.
     private static final List<String[]> SERVICE_SWEEP_POSTCODES = List.of(
-            new String[]{"BNS (Wigan)", "WN6 0XF"},
-            new String[]{"Northern Ireland", "BT1 1AA"},
-            new String[]{"Scottish Highlands", "IV1 1AA"},
-            new String[]{"Scottish Island (Orkney)", "KW15 1AA"},
-            new String[]{"Channel Islands (Jersey)", "JE1 1AA"},
-            new String[]{"Isle of Man", "IM1 1AA"},
-            new String[]{"Isle of Wight", "PO30 1AA"},
-            new String[]{"Isles of Scilly", "TR21 0AA"});
+            new String[]{"BNS (Wigan)", "WN6 0XF", "GB"},
+            new String[]{"Northern Ireland", "BT1 1AA", "GB"},
+            new String[]{"Scottish Highlands", "IV1 1AA", "GB"},
+            new String[]{"Scottish Island (Orkney)", "KW15 1AA", "GB"},
+            new String[]{"Channel Islands (Jersey)", "JE1 1AA", "GB"},
+            new String[]{"Isle of Man", "IM1 2LE", "GB"},
+            new String[]{"Isle of Wight", "PO30 1XY", "GB"},
+            new String[]{"Isles of Scilly", "TR21 0NS", "GB"},
+            new String[]{"Republic of Ireland (Dublin)", "D01 F5P2", "IE"});
+
+    /**
+     * "Next available Friday" per Dan's request, so the sweep's probe date
+     * actually falls on a day where Saturday/Sunday-prefixed services (APC's
+     * NDSAT and similar) have a chance of being offered at all - a weekday
+     * CollectionDate will never surface those, whatever the destination.
+     * Treats a Friday "from" date as already being the next available one
+     * (today counts), rather than always jumping a full week ahead.
+     */
+    private LocalDate nextFriday(LocalDate from) {
+        DayOfWeek day = from.getDayOfWeek();
+        int daysUntilFriday = (DayOfWeek.FRIDAY.getValue() - day.getValue() + 7) % 7;
+        return from.plusDays(daysUntilFriday);
+    }
 
     /**
      * Settings > Couriers > APC > Available Services > "Refresh from live
      * lookup" - runs checkServiceAvailability() in all but name once per
      * postcode in SERVICE_SWEEP_POSTCODES (at a nominal 0.5kg, 1 piece, a
      * nominal £10 goods value - light enough to qualify for every small-item
-     * tier a real order might also qualify for) and merges every result into
-     * the same apc_last_known_services cache ordinary order lookups use,
-     * rather than relying on real orders of every weight/destination to
-     * eventually populate it. One probe failing (a transient API error, say)
-     * doesn't stop the rest - its postcode/reason is returned in the
-     * warnings list instead.
+     * tier a real order might also qualify for), using the next available
+     * Friday as the CollectionDate (rather than today) specifically so
+     * Saturday/Sunday delivery services have a chance to appear in the
+     * results, and merges every result into the same apc_last_known_services
+     * cache ordinary order lookups use, rather than relying on real orders of
+     * every weight/destination to eventually populate it. One probe failing
+     * (a transient API error, say) doesn't stop the rest - its postcode/
+     * reason is returned in the warnings list instead.
      */
     public List<String> refreshAllKnownServices() {
         List<String> warnings = new java.util.ArrayList<>();
+        LocalDate collectionDate = nextFriday(LocalDate.now());
         for (String[] probe : SERVICE_SWEEP_POSTCODES) {
             try {
                 JsonNode responseBody = postWithDimensionRetry("ServiceAvailability.json",
-                        () -> buildServiceAvailabilityBodyRaw(probe[1], "GB", new BigDecimal("0.5"), 1, BigDecimal.TEN),
+                        () -> buildServiceAvailabilityBodyRaw(probe[1], probe[2], new BigDecimal("0.5"), 1, BigDecimal.TEN, collectionDate),
                         "check APC service availability (sweep: " + probe[0] + ")");
                 List<ApcServiceOption> options = parseServiceAvailabilityResponse(responseBody);
                 if (!options.isEmpty()) {

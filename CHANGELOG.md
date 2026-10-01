@@ -5,6 +5,41 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.74] - 2026-10-01 (v0.139)
+
+### Fixed
+
+- **DPD's live-lookup sweep (Available Services > "Refresh from live
+  lookup") was failing on every single postcode** with "Delivery city is
+  mandatory (Delivery city)". DPD's `outboundservices` endpoint enforces a
+  delivery town in practice even though its documented schema carries no
+  mandatory asterisk on that field - the sweep was sending an empty string
+  for every probe's town. Each sweep postcode now carries a real town
+  (Wigan, Belfast, Inverness, Kirkwall, St Helier, Douglas, Newport, St
+  Mary's, Dublin), fixing the rejection.
+- **Isle of Wight and Isles of Scilly sweep postcodes were invented, not
+  real** - replaced with verified, current Royal Mail postcodes (Isle of
+  Wight: `PO30 1XY`; Isles of Scilly: `TR21 0NS`). The Isle of Man postcode
+  has also been swapped (to `IM1 2LE`), but Isle of Man postcodes don't
+  appear to be in current Royal Mail PAF data at all - so DPD may continue
+  to reject that one regardless of which specific postcode is tried; this
+  looks like a structural gap on DPD's side rather than something fixable
+  by picking yet another postcode.
+
+### Added
+
+- **Republic of Ireland added to both couriers' live-lookup sweeps**
+  (Dublin, `D01 F5P2`, country code `IE`), so Irish service tiers show up
+  in Available Services without needing a real Irish order first.
+- **APC's sweep now probes on the next available Friday** (today if today
+  is already a Friday) instead of always "today", so Saturday/Sunday
+  delivery services have a chance to actually appear in the results.
+  **DPD's sweep is unchanged on this point** - DPD's `outboundservices`
+  endpoint has no collection-date field anywhere in its schema (confirmed
+  against DPD's own live API docs), so there's no equivalent change
+  possible on the DPD side; a collection date simply isn't part of what
+  that lookup accepts.
+
 ## [0.23.73] - 2026-10-01 (v0.138)
 
 ### Added

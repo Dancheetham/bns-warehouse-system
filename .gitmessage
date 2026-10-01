@@ -1,47 +1,46 @@
-Add live-lookup sweep + search to Available Services page (v0.138)
+Fix DPD sweep's mandatory-town rejection, add Ireland, probe Friday (v0.139)
 
-Dan's idea after finding out the dropdown-browsing approach doesn't
-trigger any lookups at all: instead of relying on real orders of every
-weight/destination trickling through over time to fill in the Available
-Services cache, add a button that proactively sweeps a fixed spread of
-representative postcodes at a light nominal weight, so the different
-service tiers each UK delivery zone offers get pulled in in one go.
+Dan's feedback on v0.138's new "Refresh from live lookup" sweep: it failed
+outright on every single postcode, he wanted the Republic of Ireland added,
+and he wanted the sweep to probe a Friday so Saturday/Sunday services show
+up - plus he found 3 of the original sweep postcodes don't actually
+validate against DPD.
 
-Backend (DpdShippingService/ApcShippingService):
-- Extracted the Order-dependent parts of the live lookup (postcode,
-  country, weight, parcel/piece count, and for APC the goods value too)
-  out into a plain-values "Raw" variant of the existing body builder, so
-  it can be called with a probe postcode instead of a real order, while
-  the real order-driven lookup (listAvailableServices/
-  checkServiceAvailability) now just works out those values and calls the
-  same Raw method - no behaviour change there.
-- ApcShippingService.postWithDimensionRetry() changed from taking a
-  Function<Order, ObjectNode> + Order to a plain Supplier<ObjectNode>, so
-  it no longer needs an Order at all - every call site now passes a
-  lambda capturing whatever it actually needs.
-- New SERVICE_SWEEP_POSTCODES (one list per courier, same 8 postcodes):
-  BNS's own WN6 0XF, Northern Ireland (BT1 1AA), Scottish Highlands
-  (IV1 1AA), a Scottish island/Orkney (KW15 1AA), the Channel Islands/
-  Jersey (JE1 1AA), Isle of Man (IM1 1AA), Isle of Wight (PO30 1AA), and
-  the Isles of Scilly (TR21 0AA) - all sent with country code GB, since
-  none of these are a separate sovereign country for postal purposes.
-- New refreshAllKnownServices() on both services: runs the live lookup
-  once per sweep postcode at 0.5kg (APC: 1 piece, nominal £10 goods
-  value), merging each result into the existing last-known-services cache
-  (the merge logic from v0.136, unchanged) rather than replacing it. One
-  postcode's call failing doesn't abort the sweep - its postcode and
-  error are collected into a warnings list instead, returned to the
-  frontend rather than silently swallowed.
-- New AvailableServicesRefreshResult DTO (services + warnings), and new
-  POST /settings/dpd/available-services/refresh and
-  POST /settings/apc/available-services/refresh endpoints on
-  SettingsController.
+Root cause of the total failure (DpdShippingService):
+- refreshAllKnownServices() was calling fetchAvailableServicesRaw() with an
+  empty string for every probe's delivery town. DPD's outboundservices
+  endpoint enforces that field in practice ("Delivery city is mandatory
+  (Delivery city)") even though its documented schema carries no mandatory
+  asterisk on it - confirmed by browsing DPD's own live API docs
+  (validate-outbound-services-for-address). SERVICE_SWEEP_POSTCODES is now
+  {label, postcode, town, countryCode} instead of {label, postcode}, with a
+  real town per entry, and refreshAllKnownServices() passes it through.
 
-Frontend:
-- AvailableServices.tsx: "Refresh from live lookup" button calling the
-  new refresh endpoint, re-populating the page's own tick state from the
-  result and showing any warnings inline; a search bar filtering by
-  service name or code, since the list can now be considerably longer.
+Postcode corrections, confirmed via doogal.co.uk (Royal Mail PAF lookup):
+- Isle of Wight and Isles of Scilly's previous sweep postcodes were
+  invented, not real addresses - replaced with PO30 1XY and TR21 0NS,
+  both confirmed current and in PAF.
+- Isle of Man's postcode is swapped to IM1 2LE, but Isle of Man doesn't
+  appear to be in current Royal Mail PAF data at all (doogal has no
+  individual postcode records for it) - likely why DPD may keep rejecting
+  this one specific entry regardless of which postcode is tried. Flagged
+  to Dan as a probable structural limitation, not promised as fixed.
+
+Republic of Ireland (both couriers' sweeps):
+- New entry using Dublin's GPO Eircode (D01 F5P2), town "Dublin", country
+  code IE.
+
+Collection date / Saturday-Sunday visibility:
+- APC's ServiceAvailability.json does accept CollectionDate, so
+  ApcShippingService's sweep now probes on the next available Friday
+  (today if today is already a Friday - see the new nextFriday() helper)
+  instead of always "today", giving Saturday/Sunday services a chance to
+  actually appear. buildServiceAvailabilityBodyRaw() gained a
+  collectionDate parameter for this.
+- DPD's outboundservices endpoint has no date field anywhere in its schema
+  at all (confirmed against the same live API docs) - there's nothing to
+  change on the DPD side for this part of the request, so DPD's sweep is
+  unaffected.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
