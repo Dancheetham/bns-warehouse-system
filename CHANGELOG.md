@@ -5,6 +5,22 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.73] - 2026-10-01 (v0.138)
+
+### Added
+
+- **"Refresh from live lookup" button on the Available Services page**
+  (Settings > Couriers > DPD/APC > Available services →): sweeps a fixed
+  spread of representative postcodes - BNS's own, Northern Ireland,
+  Scottish Highlands, a Scottish island, the Channel Islands, Isle of Man,
+  Isle of Wight, Isles of Scilly - at a light nominal weight, pulling in
+  whatever each region's service tiers are, instead of waiting for real
+  orders to each of those destinations to eventually populate the list one
+  order at a time. One postcode's call failing doesn't stop the rest - it's
+  listed as a warning instead.
+- **Search bar on the Available Services page** - filters by service name
+  or code, since the list can now be considerably longer after a refresh.
+
 ## [0.23.72] - 2026-10-01 (v0.137)
 
 ### Fixed

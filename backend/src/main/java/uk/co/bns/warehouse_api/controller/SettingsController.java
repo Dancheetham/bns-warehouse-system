@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import uk.co.bns.warehouse_api.dto.AvailableServicesRefreshResult;
 import uk.co.bns.warehouse_api.dto.CollectionCourierOptionRequest;
 import uk.co.bns.warehouse_api.dto.GdmsChannelLookupResult;
 import uk.co.bns.warehouse_api.dto.GdmsRunResult;
@@ -136,6 +137,18 @@ public class SettingsController {
         return dpdShippingService.listAllKnownServicesForToggle();
     }
 
+    // "Refresh from live lookup" button on the Available Services page -
+    // sweeps a fixed spread of representative UK/islands postcodes (see
+    // DpdShippingService/ApcShippingService's SERVICE_SWEEP_POSTCODES) at a
+    // nominal light weight, merging whatever each one returns into the
+    // usual cache, so the list fills in proactively rather than needing real
+    // orders of every weight/destination to trickle through over time.
+    @PostMapping("/dpd/available-services/refresh")
+    public AvailableServicesRefreshResult refreshDpdAvailableServices() {
+        List<String> warnings = dpdShippingService.refreshAllKnownServices();
+        return new AvailableServicesRefreshResult(dpdShippingService.listAllKnownServicesForToggle(), warnings);
+    }
+
     @GetMapping("/apc/available-services")
     public List<ServiceToggleOption> apcAvailableServices() {
         return apcShippingService.listAllKnownServicesForToggle();
@@ -145,5 +158,11 @@ public class SettingsController {
     public List<ServiceToggleOption> updateApcAvailableServices(@RequestBody Set<String> disabledCodes) {
         apcShippingService.setDisabledServices(disabledCodes);
         return apcShippingService.listAllKnownServicesForToggle();
+    }
+
+    @PostMapping("/apc/available-services/refresh")
+    public AvailableServicesRefreshResult refreshApcAvailableServices() {
+        List<String> warnings = apcShippingService.refreshAllKnownServices();
+        return new AvailableServicesRefreshResult(apcShippingService.listAllKnownServicesForToggle(), warnings);
     }
 }

@@ -104,7 +104,7 @@ public class ApcShippingService {
     public ApcOrderResult createOrder(Order order) {
         validateOrder(order);
 
-        JsonNode responseBody = postWithDimensionRetry("Orders.json", this::buildRequestBody, order, "book the APC shipment");
+        JsonNode responseBody = postWithDimensionRetry("Orders.json", () -> buildRequestBody(order), "book the APC shipment");
         // findPath digs into whichever wrapper the response actually uses
         // (e.g. {"Orders":{"Order":{...}}}, mirroring the request shape)
         // without needing to know the exact nesting up front - same
@@ -306,24 +306,8 @@ public class ApcShippingService {
         }
         try {
             JsonNode responseBody = postWithDimensionRetry(
-                    "ServiceAvailability.json", this::buildServiceAvailabilityBody, order, "check APC service availability");
-            JsonNode serviceList = responseBody.path("ServiceAvailability").path("Services").path("Service");
-            List<ApcServiceOption> options = new java.util.ArrayList<>();
-            if (serviceList.isArray()) {
-                for (JsonNode service : serviceList) {
-                    String code = firstNonBlank(service, "ProductCode", "productCode");
-                    String name = firstNonBlank(service, "ServiceName", "serviceName");
-                    if (code == null) continue;
-                    options.add(new ApcServiceOption(code, name != null ? name : code));
-                }
-            } else if (serviceList.isObject() && !serviceList.isMissingNode()) {
-                // A single result comes back as one object rather than a one-item array.
-                String code = firstNonBlank(serviceList, "ProductCode", "productCode");
-                String name = firstNonBlank(serviceList, "ServiceName", "serviceName");
-                if (code != null) {
-                    options.add(new ApcServiceOption(code, name != null ? name : code));
-                }
-            }
+                    "ServiceAvailability.json", () -> buildServiceAvailabilityBody(order), "check APC service availability");
+            List<ApcServiceOption> options = parseServiceAvailabilityResponse(responseBody);
             if (!options.isEmpty()) {
                 cacheLastKnownServices(options);
             }
@@ -380,6 +364,30 @@ public class ApcShippingService {
      * returns every product family that fits rather than validating one.
      */
     private ObjectNode buildServiceAvailabilityBody(Order order) {
+        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
+        BigDecimal weight = cartons.isEmpty() ? totalWeightKg(order) : cartons.stream()
+                .map(c -> c.getWeightKg() != null ? c.getWeightKg() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (weight.compareTo(BigDecimal.ZERO) <= 0) {
+            // A zero/unset weight would make APC reject the call outright
+            // (and every product tier would trivially "fit" it, which isn't
+            // useful) - 1g is enough to get a real, weight-aware answer
+            // without claiming the order actually weighs nothing.
+            weight = new BigDecimal("0.01");
+        }
+        return buildServiceAvailabilityBodyRaw(order.getDeliveryPostcode(), order.getDeliveryCountryCode(),
+                weight, Math.max(cartons.size(), 1), customsValue(order));
+    }
+
+    /**
+     * Same call as buildServiceAvailabilityBody() above, but driven entirely
+     * by plain values instead of a real Order - used both by that method
+     * (once it's worked out the order's own weight/carton count/customs
+     * value) and by refreshAllKnownServices()'s sweep below, which has no
+     * Order at all, just a fixed probe postcode and a nominal light weight.
+     */
+    private ObjectNode buildServiceAvailabilityBodyRaw(String postcode, String countryCode, BigDecimal weightKg,
+            int numberOfPieces, BigDecimal goodsValue) {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("CollectionDate", LocalDate.now().format(APC_DATE));
         root.put("ReadyAt", settingsService.get("apc_ready_at", "09:00"));
@@ -393,38 +401,99 @@ public class ApcShippingService {
         }
 
         ObjectNode delivery = root.putObject("Delivery");
-        delivery.put("PostalCode", order.getDeliveryPostcode());
-        delivery.put("CountryCode", order.getDeliveryCountryCode().toUpperCase());
+        delivery.put("PostalCode", postcode);
+        delivery.put("CountryCode", countryCode.toUpperCase());
 
         ObjectNode goodsInfo = root.putObject("GoodsInfo");
-        goodsInfo.put("GoodsValue", customsValue(order).doubleValue());
+        goodsInfo.put("GoodsValue", goodsValue.doubleValue());
         goodsInfo.put("Fragile", false);
 
-        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
-        BigDecimal weight = cartons.isEmpty() ? totalWeightKg(order) : cartons.stream()
-                .map(c -> c.getWeightKg() != null ? c.getWeightKg() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (weight.compareTo(BigDecimal.ZERO) <= 0) {
-            // A zero/unset weight would make APC reject the call outright
-            // (and every product tier would trivially "fit" it, which isn't
-            // useful) - 1g is enough to get a real, weight-aware answer
-            // without claiming the order actually weighs nothing.
-            weight = new BigDecimal("0.01");
-        }
-
         ObjectNode shipmentDetails = root.putObject("ShipmentDetails");
-        shipmentDetails.put("NumberOfPieces", Math.max(cartons.size(), 1));
+        shipmentDetails.put("NumberOfPieces", numberOfPieces);
         ObjectNode item = objectMapper.createObjectNode();
         item.put("Type", "ALL");
-        item.put("Weight", weight.doubleValue());
+        item.put("Weight", weightKg.doubleValue());
         addDimensionsIfRequired(item);
-        item.put("Value", customsValue(order).doubleValue());
+        item.put("Value", goodsValue.doubleValue());
         // "Items" is not itself an array - APC's schema is {"Items":{"Item": {...} } }
         // for a single item, or {"Items":{"Item": [ {...}, {...} ]}} for several
         // (the array nests one level inside "Item"; see buildRequestBody's
         // comment for the source in the integration guide).
         shipmentDetails.putObject("Items").set("Item", item);
         return wrapAsOrder(root);
+    }
+
+    /**
+     * Pulls the ProductCode/ServiceName pairs out of a ServiceAvailability.json
+     * response - shared by checkServiceAvailability() (a real order) and
+     * refreshAllKnownServices()'s sweep (a probe postcode), since both parse
+     * the exact same response shape.
+     */
+    private List<ApcServiceOption> parseServiceAvailabilityResponse(JsonNode responseBody) {
+        JsonNode serviceList = responseBody.path("ServiceAvailability").path("Services").path("Service");
+        List<ApcServiceOption> options = new java.util.ArrayList<>();
+        if (serviceList.isArray()) {
+            for (JsonNode service : serviceList) {
+                String code = firstNonBlank(service, "ProductCode", "productCode");
+                String name = firstNonBlank(service, "ServiceName", "serviceName");
+                if (code == null) continue;
+                options.add(new ApcServiceOption(code, name != null ? name : code));
+            }
+        } else if (serviceList.isObject() && !serviceList.isMissingNode()) {
+            // A single result comes back as one object rather than a one-item array.
+            String code = firstNonBlank(serviceList, "ProductCode", "productCode");
+            String name = firstNonBlank(serviceList, "ServiceName", "serviceName");
+            if (code != null) {
+                options.add(new ApcServiceOption(code, name != null ? name : code));
+            }
+        }
+        return options;
+    }
+
+    // Same spread of representative UK (and UK-islands) postcodes as
+    // DpdShippingService.SERVICE_SWEEP_POSTCODES - see that field's comment
+    // for the full reasoning. Kept as a separate copy (not shared) since the
+    // two couriers' sweep methods take different parameter shapes and
+    // there's no shared base class to hang a common constant off.
+    private static final List<String[]> SERVICE_SWEEP_POSTCODES = List.of(
+            new String[]{"BNS (Wigan)", "WN6 0XF"},
+            new String[]{"Northern Ireland", "BT1 1AA"},
+            new String[]{"Scottish Highlands", "IV1 1AA"},
+            new String[]{"Scottish Island (Orkney)", "KW15 1AA"},
+            new String[]{"Channel Islands (Jersey)", "JE1 1AA"},
+            new String[]{"Isle of Man", "IM1 1AA"},
+            new String[]{"Isle of Wight", "PO30 1AA"},
+            new String[]{"Isles of Scilly", "TR21 0AA"});
+
+    /**
+     * Settings > Couriers > APC > Available Services > "Refresh from live
+     * lookup" - runs checkServiceAvailability() in all but name once per
+     * postcode in SERVICE_SWEEP_POSTCODES (at a nominal 0.5kg, 1 piece, a
+     * nominal £10 goods value - light enough to qualify for every small-item
+     * tier a real order might also qualify for) and merges every result into
+     * the same apc_last_known_services cache ordinary order lookups use,
+     * rather than relying on real orders of every weight/destination to
+     * eventually populate it. One probe failing (a transient API error, say)
+     * doesn't stop the rest - its postcode/reason is returned in the
+     * warnings list instead.
+     */
+    public List<String> refreshAllKnownServices() {
+        List<String> warnings = new java.util.ArrayList<>();
+        for (String[] probe : SERVICE_SWEEP_POSTCODES) {
+            try {
+                JsonNode responseBody = postWithDimensionRetry("ServiceAvailability.json",
+                        () -> buildServiceAvailabilityBodyRaw(probe[1], "GB", new BigDecimal("0.5"), 1, BigDecimal.TEN),
+                        "check APC service availability (sweep: " + probe[0] + ")");
+                List<ApcServiceOption> options = parseServiceAvailabilityResponse(responseBody);
+                if (!options.isEmpty()) {
+                    cacheLastKnownServices(options);
+                }
+            } catch (Exception e) {
+                log.warn("APC service sweep failed for {} ({}): {}", probe[0], probe[1], e.getMessage());
+                warnings.add(probe[0] + " (" + probe[1] + "): " + e.getMessage());
+            }
+        }
+        return warnings;
     }
 
     // Merges this call's results into whatever's already cached, rather than
@@ -691,8 +760,8 @@ public class ApcShippingService {
      * very first time it's needed for a given account.
      */
     private JsonNode postWithDimensionRetry(
-            String endpoint, java.util.function.Function<Order, ObjectNode> bodyBuilder, Order order, String actionDescription) {
-        ObjectNode body = bodyBuilder.apply(order);
+            String endpoint, java.util.function.Supplier<ObjectNode> bodyBuilder, String actionDescription) {
+        ObjectNode body = bodyBuilder.get();
         try {
             return send(buildPostRequest(endpoint, body), actionDescription);
         } catch (ValidationException e) {
@@ -703,7 +772,7 @@ public class ApcShippingService {
                     "Length/Width/Height, so retrying with 1cm placeholder dimensions and remembering this for future calls.",
                     e.getMessage());
             settingsService.set(DIMENSIONS_REQUIRED_KEY, "true");
-            ObjectNode retryBody = bodyBuilder.apply(order);
+            ObjectNode retryBody = bodyBuilder.get();
             return send(buildPostRequest(endpoint, retryBody), actionDescription);
         }
     }

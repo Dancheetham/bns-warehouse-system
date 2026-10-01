@@ -948,17 +948,6 @@ public class DpdShippingService {
     }
 
     private JsonNode fetchAvailableServices(Order order, String senderPostcode, String senderTown, String senderCountryCode) {
-        ObjectNode body = objectMapper.createObjectNode();
-        ObjectNode delivery = body.putObject("deliveryDetails").putObject("address");
-        delivery.put("countryCode", order.getDeliveryCountryCode().toUpperCase());
-        delivery.put("town", order.getDeliveryTown() != null ? order.getDeliveryTown() : "");
-        delivery.put("postcode", order.getDeliveryPostcode());
-
-        ObjectNode collection = body.putObject("collectionDetails").putObject("address");
-        collection.put("countryCode", senderCountryCode);
-        collection.put("town", senderTown);
-        collection.put("postcode", senderPostcode);
-
         // Which services DPD offers depends on numberOfParcels as well as
         // weight - a heavy order asked for as a single parcel can tip DPD
         // into only offering its freight/pallet network, when the same
@@ -971,6 +960,30 @@ public class DpdShippingService {
         // (and then booked against) a single freight-tier service.
         List<BigDecimal> parcelWeights = parcelWeights(order);
         BigDecimal totalWeight = parcelWeights.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        return fetchAvailableServicesRaw(order.getDeliveryCountryCode(), order.getDeliveryTown(), order.getDeliveryPostcode(),
+                senderPostcode, senderTown, senderCountryCode, totalWeight, parcelWeights.size());
+    }
+
+    /**
+     * Same call as fetchAvailableServices() above, but driven entirely by
+     * plain values instead of a real Order - used both by that method (once
+     * it's worked out the order's own delivery address/weight/parcel count)
+     * and by refreshAllKnownServices()'s sweep below, which has no Order at
+     * all, just a fixed probe postcode and a nominal light weight.
+     */
+    private JsonNode fetchAvailableServicesRaw(String deliveryCountryCode, String deliveryTown, String deliveryPostcode,
+            String senderPostcode, String senderTown, String senderCountryCode, BigDecimal totalWeightKg, int numberOfParcels) {
+        ObjectNode body = objectMapper.createObjectNode();
+        ObjectNode delivery = body.putObject("deliveryDetails").putObject("address");
+        delivery.put("countryCode", deliveryCountryCode.toUpperCase());
+        delivery.put("town", deliveryTown != null ? deliveryTown : "");
+        delivery.put("postcode", deliveryPostcode);
+
+        ObjectNode collection = body.putObject("collectionDetails").putObject("address");
+        collection.put("countryCode", senderCountryCode);
+        collection.put("town", senderTown);
+        collection.put("postcode", senderPostcode);
+
         // Real per-carton weights aren't known yet at release time (before
         // the order's actually been packed), so the same order can still
         // legitimately get offered Freight here even once packed weight is
@@ -982,9 +995,9 @@ public class DpdShippingService {
         // whatever's actually declared on the real booked shipment at
         // despatch (buildRequestBody, below) always uses each carton's
         // genuine weight, untouched by this.
-        body.put("totalWeight", applyServiceLookupWeightCap(totalWeight).doubleValue());
+        body.put("totalWeight", applyServiceLookupWeightCap(totalWeightKg).doubleValue());
         body.put("shipmentType", 0); // Domestic
-        body.put("numberOfParcels", parcelWeights.size());
+        body.put("numberOfParcels", numberOfParcels);
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(dpdAuthService.baseUrl() + "/v1/customer/shipping/reference/outboundservices"))
                 .header("Authorization", "Bearer " + dpdAuthService.getAccessToken())
@@ -996,6 +1009,66 @@ public class DpdShippingService {
 
         JsonNode responseBody = send(request);
         return responseBody.has("data") ? responseBody.get("data") : responseBody;
+    }
+
+    // A fixed spread of representative UK (and UK-islands) postcodes used by
+    // refreshAllKnownServices() below to proactively pull the full range of
+    // services DPD actually offers, rather than waiting for real orders to
+    // each one of these regions to trickle through over time - different
+    // delivery zones (mainland vs Highlands vs islands vs Northern Ireland)
+    // are exactly what makes DPD return a different service list, which is
+    // the whole reason the cache only ever grew one order's worth at a time
+    // before this. Label is just for the warnings list below; GB is used as
+    // the country code throughout since every one of these is addressed
+    // within the UK postal system, not a separate sovereign country.
+    private static final List<String[]> SERVICE_SWEEP_POSTCODES = List.of(
+            new String[]{"BNS (Wigan)", "WN6 0XF"},
+            new String[]{"Northern Ireland", "BT1 1AA"},
+            new String[]{"Scottish Highlands", "IV1 1AA"},
+            new String[]{"Scottish Island (Orkney)", "KW15 1AA"},
+            new String[]{"Channel Islands (Jersey)", "JE1 1AA"},
+            new String[]{"Isle of Man", "IM1 1AA"},
+            new String[]{"Isle of Wight", "PO30 1AA"},
+            new String[]{"Isles of Scilly", "TR21 0AA"});
+
+    /**
+     * Settings > Couriers > DPD > Available Services > "Refresh from live
+     * lookup" - runs fetchAvailableServicesRaw() once per postcode in
+     * SERVICE_SWEEP_POSTCODES (at a nominal 0.5kg, 1 parcel - light enough to
+     * qualify for every small-parcel tier a real order might also qualify
+     * for) and merges every result into the same dpd_last_known_services
+     * cache ordinary order lookups use, rather than relying on real orders
+     * of every weight/destination to eventually populate it. One probe
+     * failing (a transient API error, say) doesn't stop the rest - its
+     * postcode/reason is returned in the warnings list instead.
+     */
+    public List<String> refreshAllKnownServices() {
+        String senderPostcode = settingsService.get("dpd_sender_postcode", "");
+        String senderTown = settingsService.get("dpd_sender_town", "");
+        String senderCountryCode = settingsService.get("dpd_sender_country_code", "GB");
+        List<String> warnings = new java.util.ArrayList<>();
+        for (String[] probe : SERVICE_SWEEP_POSTCODES) {
+            try {
+                JsonNode services = fetchAvailableServicesRaw("GB", "", probe[1],
+                        senderPostcode, senderTown, senderCountryCode, new BigDecimal("0.5"), 1);
+                List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options = new java.util.ArrayList<>();
+                if (services.isArray()) {
+                    for (JsonNode service : services) {
+                        options.add(new uk.co.bns.warehouse_api.dto.DpdServiceOption(
+                                service.path("networkKey").asText(null),
+                                service.path("networkDesc").asText(""),
+                                service.path("service").path("serviceDesc").asText("")));
+                    }
+                }
+                if (!options.isEmpty()) {
+                    cacheLastKnownServices(options);
+                }
+            } catch (Exception e) {
+                log.warn("DPD service sweep failed for {} ({}): {}", probe[0], probe[1], e.getMessage());
+                warnings.add(probe[0] + " (" + probe[1] + "): " + e.getMessage());
+            }
+        }
+        return warnings;
     }
 
     /**

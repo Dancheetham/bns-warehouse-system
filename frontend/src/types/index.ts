@@ -473,6 +473,14 @@ export interface ServiceToggleOption {
   enabled: boolean;
 }
 
+// Result of "Refresh from live lookup" on the Available Services page -
+// warnings names any probe postcode whose live call itself failed, so a
+// single bad call doesn't silently disappear.
+export interface AvailableServicesRefreshResult {
+  services: ServiceToggleOption[];
+  warnings: string[];
+}
+
 export type OrderStatus =
   | "ON_HOLD"
   | "AWAITING_DESPATCH"

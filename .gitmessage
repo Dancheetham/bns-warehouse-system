@@ -1,21 +1,47 @@
-Refresh APC service list after save, same as DPD's (v0.137)
+Add live-lookup sweep + search to Available Services page (v0.138)
 
-Dan asked how to grow the Available Services cache back up - turned out
-opening the Service dropdown and arrow-keying through it does nothing at
-all to the cache (that's just scrolling the one list already fetched
-when the order loaded; no further API calls happen from that), so his
-test couldn't have changed anything regardless of the v0.136 fix. The
-real way to add more codes is for the live lookup itself to run again
-against orders with different delivery weights/postcodes (explained to
-Dan in chat, no code change needed for that part).
+Dan's idea after finding out the dropdown-browsing approach doesn't
+trigger any lookups at all: instead of relying on real orders of every
+weight/destination trickling through over time to fill in the Available
+Services cache, add a button that proactively sweeps a fixed spread of
+representative postcodes at a light nominal weight, so the different
+service tiers each UK delivery zone offers get pulled in in one go.
 
-While checking this, found a real second bug alongside it: OrderEdit's
-save mutation invalidates the "dpd-services" react-query cache key after
-a successful save (so a changed delivery address/weight on that order
-is reflected immediately), but never invalidated the matching
-"apc-services" key - so APC's own list stayed stuck showing whatever was
-eligible before the save, until the page was reloaded from scratch. Added
-the missing invalidateQueries call right alongside DPD's.
+Backend (DpdShippingService/ApcShippingService):
+- Extracted the Order-dependent parts of the live lookup (postcode,
+  country, weight, parcel/piece count, and for APC the goods value too)
+  out into a plain-values "Raw" variant of the existing body builder, so
+  it can be called with a probe postcode instead of a real order, while
+  the real order-driven lookup (listAvailableServices/
+  checkServiceAvailability) now just works out those values and calls the
+  same Raw method - no behaviour change there.
+- ApcShippingService.postWithDimensionRetry() changed from taking a
+  Function<Order, ObjectNode> + Order to a plain Supplier<ObjectNode>, so
+  it no longer needs an Order at all - every call site now passes a
+  lambda capturing whatever it actually needs.
+- New SERVICE_SWEEP_POSTCODES (one list per courier, same 8 postcodes):
+  BNS's own WN6 0XF, Northern Ireland (BT1 1AA), Scottish Highlands
+  (IV1 1AA), a Scottish island/Orkney (KW15 1AA), the Channel Islands/
+  Jersey (JE1 1AA), Isle of Man (IM1 1AA), Isle of Wight (PO30 1AA), and
+  the Isles of Scilly (TR21 0AA) - all sent with country code GB, since
+  none of these are a separate sovereign country for postal purposes.
+- New refreshAllKnownServices() on both services: runs the live lookup
+  once per sweep postcode at 0.5kg (APC: 1 piece, nominal £10 goods
+  value), merging each result into the existing last-known-services cache
+  (the merge logic from v0.136, unchanged) rather than replacing it. One
+  postcode's call failing doesn't abort the sweep - its postcode and
+  error are collected into a warnings list instead, returned to the
+  frontend rather than silently swallowed.
+- New AvailableServicesRefreshResult DTO (services + warnings), and new
+  POST /settings/dpd/available-services/refresh and
+  POST /settings/apc/available-services/refresh endpoints on
+  SettingsController.
+
+Frontend:
+- AvailableServices.tsx: "Refresh from live lookup" button calling the
+  new refresh endpoint, re-populating the page's own tick state from the
+  result and showing any warnings inline; a search bar filtering by
+  service name or code, since the list can now be considerably longer.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS
