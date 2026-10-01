@@ -265,6 +265,13 @@ export default function OrderEdit() {
       // brand new order only gets its real id back here.
       queryClient.invalidateQueries({ queryKey: ["order", String(data.id)] });
       queryClient.invalidateQueries({ queryKey: ["dpd-services", String(data.id)] });
+      // APC's own live lookup needs the same treatment as DPD's just above -
+      // without this, changing the delivery address/weight and saving kept
+      // showing whatever APC services were eligible *before* the save, since
+      // apc-services (like dpd-services) is keyed off the order as it stood
+      // in the database at the time it last ran, and nothing was telling it
+      // the order underneath had just changed.
+      queryClient.invalidateQueries({ queryKey: ["apc-services", String(data.id)] });
       setError(null);
       if (isNew) {
         // navigate() below takes this from /sales-activity/new to the real

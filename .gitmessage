@@ -1,40 +1,21 @@
-Fix Available Services cache shrinking instead of growing (v0.136)
+Refresh APC service list after save, same as DPD's (v0.137)
 
-Dan noticed Settings > Couriers > DPD/APC > Available services only showed
-a handful of codes (DPD: just "Two Day Parcel"; APC: just Next Day by
-10/12/16) despite many more having appeared on real orders before.
+Dan asked how to grow the Available Services cache back up - turned out
+opening the Service dropdown and arrow-keying through it does nothing at
+all to the cache (that's just scrolling the one list already fetched
+when the order loaded; no further API calls happen from that), so his
+test couldn't have changed anything regardless of the v0.136 fix. The
+real way to add more codes is for the live lookup itself to run again
+against orders with different delivery weights/postcodes (explained to
+Dan in chat, no code change needed for that part).
 
-Root cause: ApcShippingService.cacheLastKnownServices() and
-DpdShippingService.cacheLastKnownServices() both overwrote the
-apc_last_known_services/dpd_last_known_services Setting outright with
-just the current live lookup's result, instead of merging it into
-whatever was already cached. A single live lookup is scoped to one
-order's weight/address (APC's ServiceAvailability.json only returns the
-product families that fit that weight; DPD's outboundservices call is
-similarly route-specific), so every lookup was quietly discarding
-everything previously seen and replacing it with just that one order's
-result - the cache (and its dead-API fallback, and the Available
-Services toggle list, which reads the same cache) kept narrowing down to
-whatever the most recently looked-up order happened to qualify for.
-
-Fixed both to merge the new result into the existing cached list (keyed
-by product code for APC, networkKey for DPD) rather than replacing it,
-so a code already seen stays listed even when a later lookup only
-returns a subset. There's no complete master catalog of every courier
-service code anywhere in this app to reseed from (confirmed via project
-docs - only a handful of fallback codes for APC, nothing for DPD), so
-the lists that already got shrunk by the bug will rebuild back up
-naturally as orders of varying weight/destination get looked up again,
-rather than needing a one-off data fix.
-
-Also: investigated Dan's GDMS recall report from his test order
-yesterday - no code issue after all. Dan hadn't refreshed to the fixed
-build before cancelling (so the recall genuinely didn't fire, as
-expected pre-fix), then recalled manually through the GDMS portal
-directly, which likely left the two systems' records disagreeing. He
-resolved it himself by dispatching the same unit again (forcing a fresh
-GDMS push) and recalling again, both of which worked. No further action
-needed; noted in the project's GDMS findings doc for the record.
+While checking this, found a real second bug alongside it: OrderEdit's
+save mutation invalidates the "dpd-services" react-query cache key after
+a successful save (so a changed delivery address/weight on that order
+is reflected immediately), but never invalidated the matching
+"apc-services" key - so APC's own list stayed stuck showing whatever was
+eligible before the save, until the page was reloaded from scratch. Added
+the missing invalidateQueries call right alongside DPD's.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

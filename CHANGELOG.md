@@ -5,6 +5,17 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.72] - 2026-10-01 (v0.137)
+
+### Fixed
+
+- **APC's live service lookup went stale after saving an order.** DPD's own
+  service list already refreshed after a save (so a changed delivery
+  address/weight showed the right options straight away), but the matching
+  refresh for APC's list was missing - it kept showing whatever was eligible
+  *before* the save until the page was reloaded. Now refreshes alongside
+  DPD's.
+
 ## [0.23.71] - 2026-10-01 (v0.136)
 
 ### Fixed
