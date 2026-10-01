@@ -5,6 +5,40 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.69] - 2026-10-01 (v0.134)
+
+### Fixed
+
+- **Scheduled GDMS run fired an hour late during British Summer Time**:
+  `GdmsEndOfDayService.scheduledRun()`'s cron (`0 30 16 * * *`) had no
+  timezone, so it ran in the container's UTC clock - 16:30 UTC, which is
+  17:30 in the UK while BST is in effect (as now), not the intended 16:30
+  local. Pinned the schedule to `Europe/London` so it runs at 16:30 UK
+  time year-round, through the clock changes either way.
+- **Cancelling an order via the Status dropdown never recalled its GDMS
+  device**: only the dedicated "Cancel & Return to Stock" button actually
+  called the GDMS recall - picking "Cancelled" from the order's own
+  Status dropdown was a bare status flip with no GDMS, stock, or carton
+  cleanup at all. The dropdown now also recalls+resets any already-synced
+  item when status moves to Cancelled this way, matching the dedicated
+  button's GDMS behaviour (it still doesn't return stock/clear cartons
+  the way that button does - this is specifically the GDMS gap).
+
+### Investigated, not a code fix
+
+- **A device stayed showing as assigned in GDMS after a cancellation that
+  used the correct "Cancel & Return to Stock" button**: traced through
+  `OrderReversalService.cancelAndReturnToStock()` → `GdmsRecallService` →
+  `GdmsChannelService.reclaimMacs()`, which does call GDMS's own
+  `/channel/recycle` endpoint correctly per their API docs - but per this
+  project's own GDMS findings, that call had never actually been
+  exercised against the real BNS GDMS account before this test, only
+  confirmed against GDMS's documented request/response shape. Every
+  attempt (success or failure) is written to the GDMS Sync Log
+  (Admin > GDMS Log, filterable to today + RECALL) with the real error
+  GDMS returned if it failed - that's the next place to look, since the
+  code path itself is confirmed correct.
+
 ## [0.23.68] - 2026-09-30 (v0.133)
 
 ### Fixed

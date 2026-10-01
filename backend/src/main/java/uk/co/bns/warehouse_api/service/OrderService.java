@@ -12,6 +12,7 @@ import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
 import uk.co.bns.warehouse_api.entity.Shipment;
+import uk.co.bns.warehouse_api.entity.StockItem;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
 import uk.co.bns.warehouse_api.enums.PickingStatus;
 import uk.co.bns.warehouse_api.exception.ConflictException;
@@ -19,6 +20,7 @@ import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.ProductRepository;
 import uk.co.bns.warehouse_api.repository.ShipmentRepository;
+import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -36,6 +38,8 @@ public class OrderService {
     private final OrderReversalService orderReversalService;
     private final ShopifyOrderAmendService shopifyOrderAmendService;
     private final ShipmentRepository shipmentRepository;
+    private final StockItemRepository stockItemRepository;
+    private final GdmsRecallService gdmsRecallService;
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
@@ -213,6 +217,21 @@ public class OrderService {
             order.setStatus(OrderStatus.PARTIALLY_DESPATCHED);
         } else if (!wasLocked) {
             order.setStatus(request.status());
+            // Picking "Cancelled" from this form's Status dropdown is a bare
+            // status flip - unlike the dedicated "Cancel & Return to Stock"
+            // button (OrderReversalService.cancelAndReturnToStock), it never
+            // touches stock/cartons, and until now never touched GDMS either,
+            // so a device already assigned via the scheduled/manual GDMS run
+            // stayed showing as assigned there even though the order itself
+            // was cancelled here. This at least recalls+resets any already-
+            // synced item exactly like the dedicated button does - it does
+            // NOT return stock to AVAILABLE or clear cartons, since picking
+            // "Cancelled" here (rather than clicking that button) usually
+            // means the stock side is being handled separately.
+            if (request.status() == OrderStatus.CANCELLED && statusBeforeEdit != OrderStatus.CANCELLED) {
+                List<StockItem> items = stockItemRepository.findByOrderLine_Order_Id(order.getId());
+                gdmsRecallService.recallSyncedItems(items, order.getOrderNumber(), "Auto (Cancelled via status change)");
+            }
         }
         // else: wasLocked with nothing extra needed - status was already
         // validated above to be unchanged, so there's nothing to set.

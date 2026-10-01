@@ -53,12 +53,17 @@ public class GdmsEndOfDayService {
     private final GdmsChannelService gdmsChannelService;
 
     /**
-     * Every day at 16:30 - the time BNS explicitly asked for, matching when
-     * the old manual process used to be run (after the day's despatches are
-     * done, but early enough that anyone here can still fix a problem before
-     * going home).
+     * Every day at 16:30 UK time - the time BNS explicitly asked for,
+     * matching when the old manual process used to be run (after the day's
+     * despatches are done, but early enough that anyone here can still fix
+     * a problem before going home). Pinned to Europe/London explicitly -
+     * the container's JVM clock runs in UTC (see JacksonConfig), so without
+     * a zone this would fire at 16:30 UTC and silently drift to 17:30 local
+     * for the whole of BST every year, which is exactly what happened
+     * before this was pinned (confirmed by Dan: a test order on 2026-09-30
+     * went through at 17:30, not 16:30).
      */
-    @Scheduled(cron = "0 30 16 * * *")
+    @Scheduled(cron = "0 30 16 * * *", zone = "Europe/London")
     public void scheduledRun() {
         log.info("Running scheduled GDMS end-of-day channel assignment for {}", LocalDate.now());
         GdmsRunResult result = runForDate(LocalDate.now(), "Scheduled");
