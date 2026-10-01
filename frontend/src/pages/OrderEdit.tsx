@@ -433,24 +433,34 @@ export default function OrderEdit() {
     onError: (err: Error) => setError(err.message),
   });
 
+  // Both reversal actions also now attempt to void the actual courier
+  // booking (APC only - DPD has no cancel/void endpoint, see
+  // OrderReversalService) before clearing it from the order. The stock
+  // reversal itself can never fail because of that - courierWarning is only
+  // ever set when the void attempt itself was made and failed (most likely
+  // because APC had already manifested it, which is also the point they'd
+  // bill for it) - shown via the same error banner as a heads-up, not
+  // because the reversal failed.
   const reverseToDespatchMutation = useMutation({
-    mutationFn: async () => (await api.post<Order>(`/orders/${id}/reversal/to-despatch`)).data,
+    mutationFn: async () =>
+      (await api.post<{ order: Order; courierWarning: string | null }>(`/orders/${id}/reversal/to-despatch`)).data,
     onSuccess: (data) => {
-      setStatus(data.status);
+      setStatus(data.order.status);
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      setError(null);
+      setError(data.courierWarning);
     },
     onError: (err: Error) => setError(err.message),
   });
 
   const cancelAndReturnMutation = useMutation({
-    mutationFn: async () => (await api.post<Order>(`/orders/${id}/reversal/cancel`)).data,
+    mutationFn: async () =>
+      (await api.post<{ order: Order; courierWarning: string | null }>(`/orders/${id}/reversal/cancel`)).data,
     onSuccess: (data) => {
-      setStatus(data.status);
+      setStatus(data.order.status);
       queryClient.invalidateQueries({ queryKey: ["order", id] });
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      setError(null);
+      setError(data.courierWarning);
     },
     onError: (err: Error) => setError(err.message),
   });
@@ -482,9 +492,9 @@ export default function OrderEdit() {
     onError: (err: Error) => setApcError(err.message),
   });
 
-  // APC's own consumer tracker (apcTrackingUrl) takes the short 7-digit
-  // consignment number + postcode, same shape as dpdTrackingUrl - Track →
-  // just opens it directly now, matching DPD's UX, rather than calling
+  // APC's own consumer tracker (apcTrackingUrl) takes the full waybill +
+  // postcode (confirmed against a real tracking link - see tracking.ts) -
+  // Track → just opens it directly, matching DPD's UX, rather than calling
   // APC's authenticated Tracks API and showing the result inline as before.
 
   const [gdmsError, setGdmsError] = useState<string | null>(null);
@@ -1283,7 +1293,7 @@ export default function OrderEdit() {
                       Print Label
                     </button>
                     <a
-                      href={apcTrackingUrl(existingOrder.apcWaybill.slice(-7), deliveryPostcode)}
+                      href={apcTrackingUrl(existingOrder.apcWaybill, deliveryPostcode)}
                       target="_blank"
                       rel="noreferrer"
                       className="bg-slate-100 text-slate-700 text-xs px-3 py-1.5 rounded hover:bg-slate-200"

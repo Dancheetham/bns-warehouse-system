@@ -159,7 +159,7 @@ export default function DeliveryHistory() {
                   )}
                   {d.consignmentNumber && d.courier === "APC" && (
                     <a
-                      href={apcTrackingUrl(d.consignmentNumber.slice(-7), d.deliveryPostcode)}
+                      href={apcTrackingUrl(d.consignmentNumber, d.deliveryPostcode)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-emerald-600 hover:underline text-xs"

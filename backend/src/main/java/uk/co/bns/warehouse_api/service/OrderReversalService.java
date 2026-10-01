@@ -1,8 +1,11 @@
 package uk.co.bns.warehouse_api.service;
 
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uk.co.bns.warehouse_api.dto.OrderReversalResult;
 import uk.co.bns.warehouse_api.entity.*;
 import uk.co.bns.warehouse_api.enums.MovementType;
 import uk.co.bns.warehouse_api.enums.OrderStatus;
@@ -37,10 +40,19 @@ import java.util.List;
  * the location field itself got cleared) rather than guessing or falling
  * back to a default - the whole point of this feature is putting stock
  * back exactly where it really was.
+ *
+ * Since v0.142, both also attempt to void the actual courier booking, not
+ * just BNS's own record of it - see cancelApcShipmentIfBooked() for why
+ * that's APC-only (DPD has no cancel/void endpoint) and best-effort (never
+ * blocks the stock reversal itself). Both methods now return an
+ * OrderReversalResult (the reversed order plus an optional courier
+ * warning) rather than a bare Order.
  */
 @Service
 @RequiredArgsConstructor
 public class OrderReversalService {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderReversalService.class);
 
     private final OrderRepository orderRepository;
     private final StockItemRepository stockItemRepository;
@@ -49,9 +61,10 @@ public class OrderReversalService {
     private final CartonLineRepository cartonLineRepository;
     private final InventoryService inventoryService;
     private final GdmsRecallService gdmsRecallService;
+    private final ApcShippingService apcShippingService;
 
     @Transactional
-    public Order reverseToDespatch(Long orderId) {
+    public OrderReversalResult reverseToDespatch(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
         if (order.getStatus() != OrderStatus.COMPLETED && order.getStatus() != OrderStatus.PARTIALLY_DESPATCHED
@@ -94,10 +107,12 @@ public class OrderReversalService {
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
 
-        // APC equivalent of the DPD clearing above - same reasoning (no
-        // cancel/void endpoint used here; genuinely undoing an already
-        // collected APC waybill needs APC's own portal). apcServiceCode is
+        // APC equivalent of the DPD clearing above - but unlike DPD, APC's
+        // API does have a cancel endpoint (CancelOrder, guide section 7), so
+        // this attempts a real void before clearing the waybill, rather than
+        // just leaving it uncancelled on APC's side. apcServiceCode is
         // deliberately left alone, same as dpdNetworkKey above.
+        String courierWarning = cancelApcShipmentIfBooked(order);
         order.setApcOrderNumber(null);
         order.setApcWaybill(null);
         order.setApcShippedAt(null);
@@ -130,11 +145,11 @@ public class OrderReversalService {
             line.setQuantityDespatched(0);
         }
         order.setStatus(OrderStatus.AWAITING_DESPATCH);
-        return orderRepository.save(order);
+        return new OrderReversalResult(orderRepository.save(order), courierWarning);
     }
 
     @Transactional
-    public Order cancelAndReturnToStock(Long orderId) {
+    public OrderReversalResult cancelAndReturnToStock(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
 
@@ -194,12 +209,49 @@ public class OrderReversalService {
         order.setDpdParcelNumbers(null);
         order.setDpdShippedAt(null);
         order.setDpdNetworkKey(null);
-        // APC equivalent - same reasoning as above.
+        // APC equivalent - attempts a real void via CancelOrder first, same
+        // as reverseToDespatch() above.
+        String courierWarning = cancelApcShipmentIfBooked(order);
         order.setApcOrderNumber(null);
         order.setApcWaybill(null);
         order.setApcShippedAt(null);
         order.setApcServiceCode(null);
-        return orderRepository.save(order);
+        return new OrderReversalResult(orderRepository.save(order), courierWarning);
+    }
+
+    /**
+     * Best-effort void of an already-booked APC shipment, called right
+     * before its waybill/order-number are cleared in both reversal methods
+     * above. DPD has no equivalent call - its documented API has no
+     * cancel/void endpoint at all (checked again 2026-10-01 via DPD's own
+     * docs portal: Shipping, Collections, Sender Actions, Receiver Actions
+     * and Pickup sections cover booking, labels, tracking, delivery
+     * redirection and driver-attended pickups, but nothing to cancel a
+     * shipment/label itself - "Cancel Collection" only cancels a requested
+     * driver pickup job, not the shipment) - consistent with what Dan
+     * expected ("not as big of a deal for DPD as they only charge us for
+     * what they scan").
+     *
+     * Never throws - a failed/impossible cancel (most commonly: APC's
+     * already manifested it, and their docs are explicit that cancellation
+     * only works up to that point) must never stop stock being put back,
+     * since the stock movements below are the actual point of this
+     * operation. The outcome is returned as a warning string instead, for
+     * the controller to pass back to the frontend so staff know to check
+     * APC's own portal if it matters (i.e. if it was actually manifested -
+     * that's also the point APC starts billing for it).
+     */
+    private String cancelApcShipmentIfBooked(Order order) {
+        if (order.getApcWaybill() == null) return null;
+        try {
+            apcShippingService.cancelOrder(order);
+            return null;
+        } catch (Exception e) {
+            log.warn("Couldn't cancel APC shipment {} for order {} via their API: {}",
+                    order.getApcWaybill(), order.getOrderNumber(), e.getMessage());
+            return "Stock was returned, but the APC shipment couldn't be cancelled via their API (" + e.getMessage()
+                    + ") - if it's already been manifested, cancel/void it from APC's own portal if you don't want to be billed for it.";
+        }
     }
 
     /**

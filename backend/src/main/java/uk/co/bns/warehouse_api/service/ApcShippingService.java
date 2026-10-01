@@ -50,10 +50,10 @@ import java.util.stream.Collectors;
  * documented on DpdShippingService.createShipment).
  *
  * Unlike DPD, APC's auth is a plain recomputed-per-request header
- * (ApcAuthService.authHeader()), and this first version deliberately covers
- * only Orders.json (book) and the label fetch - Tracking/Amend/Cancel/
- * non-GB/Safeplace are out of scope, matching what DPD parity actually
- * needs.
+ * (ApcAuthService.authHeader()). Covers Orders.json (book), the label
+ * fetch, tracking, and (since v0.142) cancelling a pre-manifest booking -
+ * Amend/non-GB/Safeplace remain out of scope, matching what DPD parity
+ * actually needs.
  */
 @Service
 @RequiredArgsConstructor
@@ -195,6 +195,39 @@ public class ApcShippingService {
             throw new RuntimeException("APC didn't return a label for this waybill - not printed, to avoid sending garbage to the label printer");
         }
         return new ApcLabelResult(combined.toByteArray(), format != null ? format : "ZPL");
+    }
+
+    /**
+     * Cancels an already-booked APC shipment - PUT Orders/{waybill}.json
+     * with body {"CancelOrder":{"Order":{"Status":"CANCELLED"}}} (guide
+     * section 7, confirmed from its own literal request/response examples).
+     * Per the guide: "Users can cancel orders created with the API up until
+     * the point that the order is manifested. Once an order is manifested
+     * it cannot be cancelled" - exactly the distinction Dan drew when asking
+     * for this ("especially charge for anything that's been manifested").
+     * A post-manifest attempt comes back with a non-SUCCESS Messages.Code,
+     * which send() already turns into a ValidationException with APC's own
+     * description - nothing extra to special-case here. Called from
+     * OrderReversalService when voiding a shipped order; see that class for
+     * why a failure here is caught there rather than blocking the reversal.
+     */
+    public void cancelOrder(Order order) {
+        if (order.getApcWaybill() == null) {
+            throw new ValidationException("Order " + order.getOrderNumber() + " has no APC shipment booked");
+        }
+        String url = apcAuthService.baseUrl() + "Orders/" + order.getApcWaybill() + ".json?searchtype=CarrierWaybill";
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.putObject("CancelOrder").putObject("Order").put("Status", "CANCELLED");
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .header("remote-user", apcAuthService.authHeader())
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .method("PUT", HttpRequest.BodyPublishers.ofString(body.toString()))
+                .build();
+
+        send(request, "cancel the APC shipment");
     }
 
     private static final DateTimeFormatter APC_TRACK_DATETIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");

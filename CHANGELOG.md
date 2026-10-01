@@ -5,6 +5,34 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.77] - 2026-10-01 (v0.142)
+
+### Added
+
+- **Cancelling an order now voids the actual APC booking, not just our own
+  record of it.** "Cancel & Return to Stock" and "Reverse to Despatch" now
+  call APC's own CancelOrder API right before clearing the shipment from
+  the order - matters most for APC, since they bill for anything that's
+  been manifested, which this can now actually stop happening for orders
+  that haven't been manifested yet. If the void can't go through (most
+  likely because it's already been manifested, and therefore already
+  billed), stock is still returned as normal and a note explains that APC's
+  own portal may need checking. DPD has no equivalent API at all to call
+  here (checked properly this time, across the whole of their docs, not
+  just the shipping section) - same as before, nothing changes for DPD
+  orders beyond what already happened.
+- Looked into whether either courier's API can generate or print manifests,
+  as a possible admin tool - neither does. Manifesting is an automatic
+  process on both couriers' own side, not something their APIs expose to
+  integrators at all.
+
+### Fixed
+
+- **APC's "Track →" link was sending the wrong parcel reference.** It was
+  using the short 7-digit consignment number; the public tracker actually
+  needs the full 22-digit waybill (plus the postcode) to find the right
+  parcel. Fixed on both the order screen and Delivery History.
+
 ## [0.23.76] - 2026-10-01 (v0.141)
 
 ### Fixed

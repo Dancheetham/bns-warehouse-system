@@ -1,40 +1,46 @@
-Live-refresh fixes, empty-service fallback, floating save, searchable Company (v0.141)
+Cancel the actual courier booking on reversal, fix APC tracking link (v0.142)
 
-Four separate asks from Dan's follow-up after v0.140:
+Three asks from Dan's follow-up after v0.141:
 
-1. Available Services page's "Refresh from live lookup" updated the
-   checkbox state but not the list it's rendered from (the
-   "available-services" react-query cache) - so a brand new code the sweep
-   just found only actually appeared after leaving the page and coming back
-   (re-fetching from scratch). AvailableServices.tsx now writes the
-   refreshed list straight into that query's own cache via
-   queryClient.setQueryData() on both the refresh and save mutations, so
-   the rendered rows update immediately.
+1. "Cancel & Return to Stock" and "Reverse to Despatch" now attempt to void
+   the actual courier shipment, not just BNS's own record of it. APC's own
+   integration guide documents a CancelOrder endpoint (PUT Orders/{waybill}
+   with Status=CANCELLED) that works right up until the point APC
+   manifests the order - after that it's billed and can't be cancelled via
+   their API, matching what Dan described ("especially [APC] charge for
+   anything that's been manifested"). ApcShippingService.cancelOrder() adds
+   this call, and OrderReversalService attempts it best-effort right before
+   clearing apcWaybill/apcOrderNumber in both reversal methods - it never
+   blocks the stock reversal itself, since that's the actual point of the
+   operation. A failed attempt (overwhelmingly likely: already manifested)
+   is surfaced to the frontend as a non-blocking warning so staff know to
+   check APC's own portal if it matters.
 
-2. If a courier's live service lookup succeeds but genuinely returns zero
-   matching services (not an exception - e.g. APC on a Republic of Ireland
-   address, confirmed not a bug separately), the order screen's Service
-   dropdown was left completely empty, forcing straight to free text.
-   ApcShippingService.checkServiceAvailability()/
-   DpdShippingService.listAvailableServices() now treat an empty-but-
-   successful result the same as a failed live call: fall back to every
-   known/allowed cached service, with live=false and a liveError explaining
-   why ("APC/DPD returned no services for this address/weight"). The
-   frontend already rendered whatever `services` came back and already
-   showed `liveError` when not live, so no frontend change was needed for
-   this part.
+   DPD has no equivalent - checked thoroughly this time by browsing the
+   entire DPD docs portal (Shipping, Collections, Sender Actions, Receiver
+   Actions, Pickup, Returns), not just the Shipping section as before.
+   There is no shipment-level cancel/void endpoint anywhere in DPD's API;
+   the only "cancel" is Cancel Collection, which only cancels a requested
+   driver-attended pickup job, not a shipment. This lines up with what Dan
+   expected going in ("not as big of a deal for DPD as they only charge us
+   for what they scan") - nothing changes for DPD orders.
 
-3. Save button on both Available Services pages (DPD and APC) switched
-   from the old inline button at the bottom of the list to the floating
-   button + SavedBadge pattern already used on Settings.tsx and the order
-   screen - same fixed bottom-right placement, same "Saved." pill.
+   Both reversal controller endpoints now return an OrderReversalResult
+   (the order plus an optional courierWarning) instead of a bare Order.
 
-4. "Company (B2B credit account)" on the order screen is now a searchable
-   type-to-filter field instead of a plain <select> - reuses the existing
-   SearchableSelect component (previously only used for the company filter
-   on Invoice Reports) rather than building a new one. SearchableSelect
-   gained a `clearLabel` prop ("All" by default, kept for Invoice Reports;
-   "None" for this field, matching the old <select>'s "None" option).
+2. Looked into whether either courier's API supports generating/printing
+   manifests, as a possible admin tool. Neither does - manifesting is an
+   automatic process on both couriers' own side (APC's docs only ever
+   mention it as a status the order reaches, never something triggerable;
+   same conclusion from DPD's full docs portal). Not something to build.
+
+3. APC's public tracking link ("Track →" on the order screen and Delivery
+   History) was sending the short 7-digit consignment number as the `id`
+   query parameter. Per a real working link Dan supplied, it actually needs
+   the full 22-digit waybill, plus the postcode lowercased (spaces become
+   a literal +). Fixed in utils/tracking.ts's apcTrackingUrl() and its two
+   call sites, which were both slicing the full value down to 7 digits
+   before passing it in.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

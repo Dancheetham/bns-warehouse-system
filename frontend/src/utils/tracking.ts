@@ -10,19 +10,15 @@ export function dpdTrackingUrl(consignmentNumber: string, postcode?: string): st
   return `https://track.dpd.co.uk/search?${params.toString()}`;
 }
 
-// APC's consumer tracker, apcchoice.apc-overnight.com - takes the short
-// 7-digit consignment number (the last 7 digits of the full Hypaship
-// WayBill - see apcWaybill on the order, and the comment next to it in
-// OrderEdit.tsx) plus the delivery postcode. NOTE: unlike dpdTrackingUrl
-// above, this exact query-string format (id + postcode) is a best guess
-// from the tracker's own URL pattern and in-page form fields, not something
-// confirmed end-to-end against a real waybill yet - it's a client-rendered
-// page, so it couldn't be verified by fetching it directly. Worth Dan
-// confirming on the next real APC tracking click; if the deep link doesn't
-// land on the right parcel, the fix is almost certainly just the param
-// name/format here, not anything else in this app.
-export function apcTrackingUrl(consignmentNumber: string, postcode?: string): string {
-  const params = new URLSearchParams({ id: consignmentNumber });
-  if (postcode) params.set("postcode", postcode);
+// APC's consumer tracker, apcchoice.apc-overnight.com - confirmed by Dan
+// with a real working link: it needs the FULL 22-digit Hypaship WayBill as
+// `id` (not the short 7-digit consignment number used elsewhere in this app
+// for display/search - see apcWaybill on the order), plus the delivery
+// postcode lowercased as `postcode` (e.g. "me4 4hy" -> "me4+4hy", the space
+// becoming a literal "+" the same way URLSearchParams already encodes it).
+// Confirmed example: https://apcchoice.apc-overnight.com/track-parcel?id=2026092908043390009308&postcode=me4+4hy
+export function apcTrackingUrl(waybillNumber: string, postcode?: string): string {
+  const params = new URLSearchParams({ id: waybillNumber });
+  if (postcode) params.set("postcode", postcode.toLowerCase());
   return `https://apcchoice.apc-overnight.com/track-parcel?${params.toString()}`;
 }
