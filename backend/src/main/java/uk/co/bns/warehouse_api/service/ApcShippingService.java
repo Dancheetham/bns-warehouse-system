@@ -427,9 +427,20 @@ public class ApcShippingService {
         return wrapAsOrder(root);
     }
 
+    // Merges this call's results into whatever's already cached, rather than
+    // replacing it outright - a single live ServiceAvailability lookup is
+    // scoped to one order's weight/address (e.g. a sub-1kg item only gets
+    // offered MailPack/CourierPack/Parcel, not the heavier-weight services),
+    // so overwriting the cache with just that result would make the Available
+    // Services list - and the dead-API fallback - shrink to whatever the most
+    // recently looked-up order happened to qualify for, forgetting every
+    // other code this account has genuinely been offered before.
     private void cacheLastKnownServices(List<ApcServiceOption> options) {
         try {
-            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(options));
+            Map<String, ApcServiceOption> merged = new LinkedHashMap<>();
+            for (ApcServiceOption o : loadLastKnownServices()) merged.put(o.code(), o);
+            for (ApcServiceOption o : options) merged.put(o.code(), o);
+            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(merged.values()));
         } catch (Exception e) {
             log.warn("Failed to cache last-known APC services: {}", e.getMessage());
         }

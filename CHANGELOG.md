@@ -5,6 +5,26 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.71] - 2026-10-01 (v0.136)
+
+### Fixed
+
+- **Available Services list for DPD and APC was shrinking instead of
+  growing.** Each live service lookup only returns the services that fit
+  *that one order's* weight/address (e.g. a sub-1kg item only qualifies
+  for MailPack/CourierPack/Parcel on APC, or just "Two Day Parcel" might
+  be the only match for a given DPD route) - but the cache behind the
+  Available Services page was being overwritten with just that result
+  each time, instead of adding to what was already known. So the list
+  kept narrowing down to whatever the most recently looked-up order
+  happened to qualify for, rather than accumulating every service this
+  account has actually been offered. Now merges new results into the
+  cache instead of replacing it, so services already seen stay listed
+  even when a later order only qualifies for a subset. There's no
+  complete master list of every courier service code anywhere in this
+  app to reseed from, so the already-shrunk lists will rebuild back up
+  as orders of varying weight/destination get looked up again.
+
 ## [0.23.70] - 2026-10-01 (v0.135)
 
 ### Added

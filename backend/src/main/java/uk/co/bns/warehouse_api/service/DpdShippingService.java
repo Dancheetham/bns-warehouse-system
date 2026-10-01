@@ -915,9 +915,19 @@ public class DpdShippingService {
         return options.stream().filter(o -> !disabled.contains(o.networkKey())).toList();
     }
 
+    // Merges this call's results into whatever's already cached, rather than
+    // replacing it outright - a single live outboundservices lookup is scoped
+    // to one order's address/weight, so overwriting the cache with just that
+    // result would make the Available Services list - and the dead-API
+    // fallback - shrink to whatever the most recently looked-up order
+    // happened to qualify for (e.g. just "Two Day Parcel"), forgetting every
+    // other networkKey this account has genuinely been offered before.
     private void cacheLastKnownServices(List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options) {
         try {
-            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(options));
+            Map<String, uk.co.bns.warehouse_api.dto.DpdServiceOption> merged = new LinkedHashMap<>();
+            for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : loadLastKnownServices()) merged.put(o.networkKey(), o);
+            for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : options) merged.put(o.networkKey(), o);
+            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(merged.values()));
         } catch (Exception e) {
             log.warn("Failed to cache last-known DPD services: {}", e.getMessage());
         }
