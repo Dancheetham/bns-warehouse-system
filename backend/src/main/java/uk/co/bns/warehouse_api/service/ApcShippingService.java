@@ -16,10 +16,12 @@ import uk.co.bns.warehouse_api.dto.ApcTrackingEvent;
 import uk.co.bns.warehouse_api.dto.ApcTrackingResult;
 import uk.co.bns.warehouse_api.dto.ServiceToggleOption;
 import uk.co.bns.warehouse_api.entity.Carton;
+import uk.co.bns.warehouse_api.entity.CourierServiceOption;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.CartonRepository;
+import uk.co.bns.warehouse_api.repository.CourierServiceOptionRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 
 import java.math.BigDecimal;
@@ -31,7 +33,6 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -75,24 +76,20 @@ public class ApcShippingService {
             new ApcServiceOption("ECO48", "Economy (2-3 day)")
     );
 
-    // Where the last successfully-fetched live service list is cached (as
-    // JSON), so the dropdown still has real, previously-offered options when
-    // a later live lookup fails - mirrors DPD_LAST_KNOWN_SERVICES_KEY in
-    // DpdShippingService exactly.
-    private static final String LAST_KNOWN_SERVICES_KEY = "apc_last_known_services";
-
-    // Settings > Couriers > APC > Available Services - a comma-separated list
-    // of product codes the admin has unticked, so they stop appearing in the
-    // order screen's Service dropdown without losing their place in the
-    // cached/standard lists (so they can be ticked again later). Applied as a
-    // filter right before returning options to the frontend, never before
-    // caching - cacheLastKnownServices() always stores APC's full raw answer.
-    private static final String DISABLED_SERVICES_KEY = "apc_disabled_services";
+    // Which courier these rows in courier_service_options belong to - see
+    // that entity's class comment for why this replaced a JSON-blob-in-a-
+    // Settings-row cache (apc_last_known_services/apc_disabled_services) as
+    // of v0.140: that blob was capped at the settings table's old
+    // VARCHAR(500) column, a limit easily exceeded once a few sweep
+    // postcodes' worth of services accumulated, and the resulting save
+    // failure was being silently swallowed rather than surfaced anywhere.
+    private static final String COURIER = "APC";
 
     private final ApcAuthService apcAuthService;
     private final SettingsService settingsService;
     private final OrderRepository orderRepository;
     private final CartonRepository cartonRepository;
+    private final CourierServiceOptionRepository courierServiceOptionRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
@@ -332,23 +329,44 @@ public class ApcShippingService {
      * lookup returns it, at which point it's added here already enabled.
      */
     public List<ServiceToggleOption> listAllKnownServicesForToggle() {
-        Set<String> disabled = disabledServiceCodes();
-        Map<String, ApcServiceOption> byCode = new LinkedHashMap<>();
-        for (ApcServiceOption o : STANDARD_SERVICES) byCode.put(o.code(), o);
-        for (ApcServiceOption o : loadLastKnownServices()) byCode.put(o.code(), o);
-        return byCode.values().stream()
-                .map(o -> new ServiceToggleOption(o.code(), o.description(), !disabled.contains(o.code())))
-                .toList();
+        // STANDARD_SERVICES is the floor - included even if it's never been
+        // seen in courier_service_options yet - but a row that IS on file
+        // always wins (its label is more likely to be APC's own live
+        // wording, and it carries whatever enabled state was last set).
+        Map<String, ServiceToggleOption> byCode = new LinkedHashMap<>();
+        for (ApcServiceOption o : STANDARD_SERVICES) {
+            byCode.put(o.code(), new ServiceToggleOption(o.code(), o.description(), true));
+        }
+        for (CourierServiceOption o : courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER)) {
+            byCode.put(o.getCode(), new ServiceToggleOption(o.getCode(), o.getLabel(), o.isEnabled()));
+        }
+        return List.copyOf(byCode.values());
     }
 
-    public void setDisabledServices(Set<String> codes) {
-        settingsService.set(DISABLED_SERVICES_KEY, String.join(",", codes));
+    // Replaces every known code's enabled flag in one go, matching what the
+    // Available Services page actually sends (the full set of codes it's
+    // currently showing unticked) - a STANDARD_SERVICES code not yet on file
+    // gets a row created here so its disabled state actually persists,
+    // rather than reverting to "enabled" the next time the page loads.
+    public void setDisabledServices(Set<String> disabledCodes) {
+        Map<String, CourierServiceOption> byCode = new LinkedHashMap<>();
+        for (CourierServiceOption o : courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER)) {
+            byCode.put(o.getCode(), o);
+        }
+        for (ApcServiceOption standard : STANDARD_SERVICES) {
+            byCode.putIfAbsent(standard.code(), new CourierServiceOption(COURIER, standard.code(), standard.description(), null, true));
+        }
+        for (CourierServiceOption o : byCode.values()) {
+            o.setEnabled(!disabledCodes.contains(o.getCode()));
+        }
+        courierServiceOptionRepository.saveAll(byCode.values());
     }
 
     private Set<String> disabledServiceCodes() {
-        String raw = settingsService.get(DISABLED_SERVICES_KEY, "");
-        if (raw.isBlank()) return Set.of();
-        return Arrays.stream(raw.split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+        return courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER).stream()
+                .filter(o -> !o.isEnabled())
+                .map(CourierServiceOption::getCode)
+                .collect(Collectors.toSet());
     }
 
     private List<ApcServiceOption> excludeDisabled(List<ApcServiceOption> options) {
@@ -495,8 +513,8 @@ public class ApcShippingService {
      * tier a real order might also qualify for), using the next available
      * Friday as the CollectionDate (rather than today) specifically so
      * Saturday/Sunday delivery services have a chance to appear in the
-     * results, and merges every result into the same apc_last_known_services
-     * cache ordinary order lookups use, rather than relying on real orders of
+     * results, and merges every result into the same courier_service_options
+     * table ordinary order lookups use, rather than relying on real orders of
      * every weight/destination to eventually populate it. One probe failing
      * (a transient API error, say) doesn't stop the rest - its postcode/
      * reason is returned in the warnings list instead.
@@ -521,37 +539,33 @@ public class ApcShippingService {
         return warnings;
     }
 
-    // Merges this call's results into whatever's already cached, rather than
-    // replacing it outright - a single live ServiceAvailability lookup is
-    // scoped to one order's weight/address (e.g. a sub-1kg item only gets
-    // offered MailPack/CourierPack/Parcel, not the heavier-weight services),
-    // so overwriting the cache with just that result would make the Available
-    // Services list - and the dead-API fallback - shrink to whatever the most
-    // recently looked-up order happened to qualify for, forgetting every
-    // other code this account has genuinely been offered before.
+    // Upserts this call's results into courier_service_options, rather than
+    // replacing the whole list outright - a single live ServiceAvailability
+    // lookup is scoped to one order's weight/address (e.g. a sub-1kg item
+    // only gets offered MailPack/CourierPack/Parcel, not the heavier-weight
+    // services), so wiping and re-writing the list with just that result
+    // would make the Available Services list - and the dead-API fallback -
+    // shrink to whatever the most recently looked-up order happened to
+    // qualify for, forgetting every other code this account has genuinely
+    // been offered before. A code's `enabled` flag is deliberately left
+    // alone on an existing row - a live lookup re-confirming a code is
+    // offered should never silently re-enable one the admin has unticked.
     private void cacheLastKnownServices(List<ApcServiceOption> options) {
-        try {
-            Map<String, ApcServiceOption> merged = new LinkedHashMap<>();
-            for (ApcServiceOption o : loadLastKnownServices()) merged.put(o.code(), o);
-            for (ApcServiceOption o : options) merged.put(o.code(), o);
-            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(merged.values()));
-        } catch (Exception e) {
-            log.warn("Failed to cache last-known APC services: {}", e.getMessage());
+        for (ApcServiceOption o : options) {
+            CourierServiceOption existing = courierServiceOptionRepository.findByCourierAndCode(COURIER, o.code()).orElse(null);
+            if (existing != null) {
+                existing.setLabel(o.description());
+                courierServiceOptionRepository.save(existing);
+            } else {
+                courierServiceOptionRepository.save(new CourierServiceOption(COURIER, o.code(), o.description(), null, true));
+            }
         }
     }
 
     private List<ApcServiceOption> loadLastKnownServices() {
-        String cached = settingsService.get(LAST_KNOWN_SERVICES_KEY, "");
-        if (cached.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(cached,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, ApcServiceOption.class));
-        } catch (Exception e) {
-            log.warn("Failed to read cached APC services: {}", e.getMessage());
-            return List.of();
-        }
+        return courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER).stream()
+                .map(o -> new ApcServiceOption(o.getCode(), o.getLabel()))
+                .toList();
     }
 
     private void validateOrder(Order order) {

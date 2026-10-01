@@ -5,6 +5,38 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.75] - 2026-10-01 (v0.140)
+
+### Fixed
+
+- **"Refresh from live lookup" could run with no errors and still not grow
+  the Available Services list.** Root cause: the courier-specific known-
+  services cache was a JSON blob squeezed into a single Settings row
+  (`dpd_last_known_services`/`apc_last_known_services`), capped by the
+  settings table's `VARCHAR(500)` column - easily exceeded once a sweep
+  across 9 postcodes accumulated enough services, and Postgres's resulting
+  "value too long" error on save was being silently swallowed by a
+  try/catch that only logged a server-side warning. The sweep's own HTTP
+  calls could all succeed (no postcode warnings) while the save that was
+  supposed to remember the results quietly failed every time.
+
+### Changed
+
+- **Available services moved out of Settings into their own database
+  table** (`courier_service_options` - one row per courier+code, with its
+  own `enabled` flag), replacing the old JSON-blob-in-a-Settings-row cache
+  and the separate comma-separated disabled-codes setting entirely. This
+  fixes the silent-failure bug above at the root (a real column per field,
+  with no practical size ceiling, rather than a capped blob to serialize a
+  growing list into) and means a single code can be toggled without
+  rewriting the whole list. Existing cached services are carried over
+  automatically on upgrade (best-effort - a value that had already been
+  truncated by the old bug is skipped rather than imported broken, so it
+  simply starts fresh from the next live lookup or sweep). The
+  `app_settings.setting_value` column itself is also widened from
+  `VARCHAR(500)` to `TEXT`, so no other setting can hit this same ceiling
+  in future.
+
 ## [0.23.74] - 2026-10-01 (v0.139)
 
 ### Fixed

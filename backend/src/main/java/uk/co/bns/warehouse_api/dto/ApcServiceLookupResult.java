@@ -9,8 +9,8 @@ import java.util.List;
  * weight just now - which is also what makes it weight-aware (e.g. only
  * offering MailPack/CourierPack for a sub-1kg/sub-5kg order, same as APC's
  * own Hypaship website would). When that live call fails, falls back to the
- * last list APC returned successfully for ANY order (cached in Settings as
- * apc_last_known_services), and finally to a small hardcoded list of common
+ * last list APC returned successfully for ANY order (cached in the
+ * courier_service_options table), and finally to a small hardcoded list of common
  * weekday product codes if nothing's ever been cached - mirrors
  * DpdServiceLookupResult exactly, see ApcShippingService.checkServiceAvailability.
  */

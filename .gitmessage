@@ -1,46 +1,39 @@
-Fix DPD sweep's mandatory-town rejection, add Ireland, probe Friday (v0.139)
+Move available-services cache out of Settings into its own table (v0.140)
 
-Dan's feedback on v0.138's new "Refresh from live lookup" sweep: it failed
-outright on every single postcode, he wanted the Republic of Ireland added,
-and he wanted the sweep to probe a Friday so Saturday/Sunday services show
-up - plus he found 3 of the original sweep postcodes don't actually
-validate against DPD.
+Dan's report after v0.139: the DPD sweep now runs with no errors (fixed in
+v0.139), and APC's only warning is the expected "Ireland - no services" one,
+but the Available Services list still wasn't growing. He asked to replace
+the Settings-based cache with a courier-specific data table instead of
+fixing the symptom again.
 
-Root cause of the total failure (DpdShippingService):
-- refreshAllKnownServices() was calling fetchAvailableServicesRaw() with an
-  empty string for every probe's delivery town. DPD's outboundservices
-  endpoint enforces that field in practice ("Delivery city is mandatory
-  (Delivery city)") even though its documented schema carries no mandatory
-  asterisk on it - confirmed by browsing DPD's own live API docs
-  (validate-outbound-services-for-address). SERVICE_SWEEP_POSTCODES is now
-  {label, postcode, town, countryCode} instead of {label, postcode}, with a
-  real town per entry, and refreshAllKnownServices() passes it through.
+Root cause: DpdShippingService/ApcShippingService.cacheLastKnownServices()
+serialized the whole known-services list as JSON into a single Settings row
+(dpd_last_known_services/apc_last_known_services). That row's column
+(app_settings.setting_value) was VARCHAR(500) (V23 migration) - plenty for
+the handful of short config strings Settings originally held, but nowhere
+near enough once a sweep across 9 postcodes accumulated DPD/APC's often
+fairly verbose service descriptions. Postgres's "value too long for type
+character varying(500)" exception on save was being silently swallowed by
+a try/catch that only logged a server-side warning - so the sweep's own
+HTTP calls could all succeed (no postcode-level warnings at all) while the
+save that was supposed to remember the results quietly failed every single
+time, with nothing surfaced to the warnings list or the frontend.
 
-Postcode corrections, confirmed via doogal.co.uk (Royal Mail PAF lookup):
-- Isle of Wight and Isles of Scilly's previous sweep postcodes were
-  invented, not real addresses - replaced with PO30 1XY and TR21 0NS,
-  both confirmed current and in PAF.
-- Isle of Man's postcode is swapped to IM1 2LE, but Isle of Man doesn't
-  appear to be in current Royal Mail PAF data at all (doogal has no
-  individual postcode records for it) - likely why DPD may keep rejecting
-  this one specific entry regardless of which postcode is tried. Flagged
-  to Dan as a probable structural limitation, not promised as fixed.
-
-Republic of Ireland (both couriers' sweeps):
-- New entry using Dublin's GPO Eircode (D01 F5P2), town "Dublin", country
-  code IE.
-
-Collection date / Saturday-Sunday visibility:
-- APC's ServiceAvailability.json does accept CollectionDate, so
-  ApcShippingService's sweep now probes on the next available Friday
-  (today if today is already a Friday - see the new nextFriday() helper)
-  instead of always "today", giving Saturday/Sunday services a chance to
-  actually appear. buildServiceAvailabilityBodyRaw() gained a
-  collectionDate parameter for this.
-- DPD's outboundservices endpoint has no date field anywhere in its schema
-  at all (confirmed against the same live API docs) - there's nothing to
-  change on the DPD side for this part of the request, so DPD's sweep is
-  unaffected.
+Fix - a real table instead of a capped blob:
+- New `courier_service_options` table (courier, code, label, extra_label,
+  enabled - one row per courier+code, TEXT columns so there's no practical
+  size ceiling to hit again) and entity/repository
+  (CourierServiceOption/CourierServiceOptionRepository).
+- DpdShippingService/ApcShippingService's cacheLastKnownServices(),
+  loadLastKnownServices(), disabledServiceCodes(), setDisabledServices()
+  and listAllKnownServicesForToggle() all rewritten against the new table -
+  no more JSON serialization, and a code's enabled flag is a real column
+  that can be flipped without rewriting the whole list.
+- Migration (V55) also widens app_settings.setting_value from VARCHAR(500)
+  to TEXT, so no other setting can hit this same silent ceiling in future,
+  and does a best-effort carry-over of whatever's currently cached (skipped
+  per-courier, not failed outright, if that cached value is itself
+  malformed/truncated from the original bug).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

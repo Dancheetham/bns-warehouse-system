@@ -14,6 +14,7 @@ import uk.co.bns.warehouse_api.dto.ServiceToggleOption;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.CartonLine;
 import uk.co.bns.warehouse_api.entity.Company;
+import uk.co.bns.warehouse_api.entity.CourierServiceOption;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.Product;
@@ -21,6 +22,7 @@ import uk.co.bns.warehouse_api.entity.StockItem;
 import uk.co.bns.warehouse_api.exception.ValidationException;
 import uk.co.bns.warehouse_api.repository.CartonLineRepository;
 import uk.co.bns.warehouse_api.repository.CartonRepository;
+import uk.co.bns.warehouse_api.repository.CourierServiceOptionRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
 import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
@@ -31,7 +33,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,8 +73,18 @@ public class DpdShippingService {
     private final CartonRepository cartonRepository;
     private final CartonLineRepository cartonLineRepository;
     private final StockItemRepository stockItemRepository;
+    private final CourierServiceOptionRepository courierServiceOptionRepository;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient = HttpClient.newHttpClient();
+
+    // Which courier these rows in courier_service_options belong to - see
+    // that entity's class comment for why this replaced a JSON-blob-in-a-
+    // Settings-row cache (dpd_last_known_services/dpd_disabled_services) as
+    // of v0.140: that blob was capped at the settings table's old
+    // VARCHAR(500) column, a limit easily exceeded once a few sweep
+    // postcodes' worth of services accumulated, and the resulting save
+    // failure was being silently swallowed rather than surfaced anywhere.
+    private static final String COURIER = "DPD";
 
     // Deliberately NOT @Transactional. When this is called from inside
     // DespatchService's own @Transactional confirmDespatch (auto-booking at
@@ -823,17 +834,6 @@ public class DpdShippingService {
         return false;
     }
 
-    // Where the last successfully-fetched live service list is cached (as
-    // JSON), so the dropdown still has real, previously-offered options to
-    // show when a later live lookup fails - see listAvailableServices().
-    private static final String LAST_KNOWN_SERVICES_KEY = "dpd_last_known_services";
-
-    // Settings > Couriers > DPD > Available Services - same idea as APC's
-    // equivalent (see ApcShippingService) - a comma-separated list of
-    // networkKeys the admin has unticked, filtered out right before
-    // returning options to the frontend, never before caching.
-    private static final String DISABLED_SERVICES_KEY = "dpd_disabled_services";
-
     /**
      * The full list of services DPD actually has available right now for an
      * order's delivery address and weight - used to populate the "Service"
@@ -891,22 +891,27 @@ public class DpdShippingService {
      * each marked with whether it's currently enabled.
      */
     public List<ServiceToggleOption> listAllKnownServicesForToggle() {
-        Set<String> disabled = disabledServiceCodes();
-        Map<String, uk.co.bns.warehouse_api.dto.DpdServiceOption> byKey = new LinkedHashMap<>();
-        for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : loadLastKnownServices()) byKey.put(o.networkKey(), o);
-        return byKey.values().stream()
-                .map(o -> new ServiceToggleOption(o.networkKey(), o.networkDesc() + " - " + o.serviceDesc(), !disabled.contains(o.networkKey())))
+        return courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER).stream()
+                .map(o -> new ServiceToggleOption(o.getCode(), o.getLabel() + " - " + o.getExtraLabel(), o.isEnabled()))
                 .toList();
     }
 
-    public void setDisabledServices(Set<String> codes) {
-        settingsService.set(DISABLED_SERVICES_KEY, String.join(",", codes));
+    // Replaces every known networkKey's enabled flag in one go, matching
+    // what the Available Services page actually sends (the full set of
+    // codes it's currently showing unticked).
+    public void setDisabledServices(Set<String> disabledCodes) {
+        List<CourierServiceOption> known = courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER);
+        for (CourierServiceOption o : known) {
+            o.setEnabled(!disabledCodes.contains(o.getCode()));
+        }
+        courierServiceOptionRepository.saveAll(known);
     }
 
     private Set<String> disabledServiceCodes() {
-        String raw = settingsService.get(DISABLED_SERVICES_KEY, "");
-        if (raw.isBlank()) return Set.of();
-        return Arrays.stream(raw.split(",")).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+        return courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER).stream()
+                .filter(o -> !o.isEnabled())
+                .map(CourierServiceOption::getCode)
+                .collect(Collectors.toSet());
     }
 
     private List<uk.co.bns.warehouse_api.dto.DpdServiceOption> excludeDisabled(List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options) {
@@ -915,36 +920,34 @@ public class DpdShippingService {
         return options.stream().filter(o -> !disabled.contains(o.networkKey())).toList();
     }
 
-    // Merges this call's results into whatever's already cached, rather than
-    // replacing it outright - a single live outboundservices lookup is scoped
-    // to one order's address/weight, so overwriting the cache with just that
-    // result would make the Available Services list - and the dead-API
-    // fallback - shrink to whatever the most recently looked-up order
-    // happened to qualify for (e.g. just "Two Day Parcel"), forgetting every
-    // other networkKey this account has genuinely been offered before.
+    // Upserts this call's results into courier_service_options, rather than
+    // replacing the whole list outright - a single live outboundservices
+    // lookup is scoped to one order's address/weight, so wiping and
+    // re-writing the list with just that result would make the Available
+    // Services list - and the dead-API fallback - shrink to whatever the
+    // most recently looked-up order happened to qualify for (e.g. just "Two
+    // Day Parcel"), forgetting every other networkKey this account has
+    // genuinely been offered before. A code's `enabled` flag is
+    // deliberately left alone on an existing row - a live lookup
+    // re-confirming a code is offered should never silently re-enable one
+    // the admin has unticked.
     private void cacheLastKnownServices(List<uk.co.bns.warehouse_api.dto.DpdServiceOption> options) {
-        try {
-            Map<String, uk.co.bns.warehouse_api.dto.DpdServiceOption> merged = new LinkedHashMap<>();
-            for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : loadLastKnownServices()) merged.put(o.networkKey(), o);
-            for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : options) merged.put(o.networkKey(), o);
-            settingsService.set(LAST_KNOWN_SERVICES_KEY, objectMapper.writeValueAsString(merged.values()));
-        } catch (Exception e) {
-            log.warn("Failed to cache last-known DPD services: {}", e.getMessage());
+        for (uk.co.bns.warehouse_api.dto.DpdServiceOption o : options) {
+            CourierServiceOption existing = courierServiceOptionRepository.findByCourierAndCode(COURIER, o.networkKey()).orElse(null);
+            if (existing != null) {
+                existing.setLabel(o.networkDesc());
+                existing.setExtraLabel(o.serviceDesc());
+                courierServiceOptionRepository.save(existing);
+            } else {
+                courierServiceOptionRepository.save(new CourierServiceOption(COURIER, o.networkKey(), o.networkDesc(), o.serviceDesc(), true));
+            }
         }
     }
 
     private List<uk.co.bns.warehouse_api.dto.DpdServiceOption> loadLastKnownServices() {
-        String cached = settingsService.get(LAST_KNOWN_SERVICES_KEY, "");
-        if (cached.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(cached,
-                    objectMapper.getTypeFactory().constructCollectionType(List.class, uk.co.bns.warehouse_api.dto.DpdServiceOption.class));
-        } catch (Exception e) {
-            log.warn("Failed to read cached DPD services: {}", e.getMessage());
-            return List.of();
-        }
+        return courierServiceOptionRepository.findByCourierOrderByCodeAsc(COURIER).stream()
+                .map(o -> new uk.co.bns.warehouse_api.dto.DpdServiceOption(o.getCode(), o.getLabel(), o.getExtraLabel()))
+                .toList();
     }
 
     private JsonNode fetchAvailableServices(Order order, String senderPostcode, String senderTown, String senderCountryCode) {
@@ -1053,8 +1056,8 @@ public class DpdShippingService {
      * lookup" - runs fetchAvailableServicesRaw() once per postcode in
      * SERVICE_SWEEP_POSTCODES (at a nominal 0.5kg, 1 parcel - light enough to
      * qualify for every small-parcel tier a real order might also qualify
-     * for) and merges every result into the same dpd_last_known_services
-     * cache ordinary order lookups use, rather than relying on real orders
+     * for) and merges every result into the same courier_service_options
+     * table ordinary order lookups use, rather than relying on real orders
      * of every weight/destination to eventually populate it. One probe
      * failing (a transient API error, say) doesn't stop the rest - its
      * postcode/reason is returned in the warnings list instead.
