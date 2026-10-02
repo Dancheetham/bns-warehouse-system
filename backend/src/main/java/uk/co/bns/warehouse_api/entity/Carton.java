@@ -36,6 +36,15 @@ public class Carton {
     @Column(name = "tracking_number")
     private String trackingNumber;
 
+    // Null until the despatch this carton belongs to is actually confirmed
+    // (DespatchService.confirmDespatch, which tags every carton used in that
+    // despatch with the Delivery row it just created). PackingService uses
+    // this to exclude an already-shipped carton/its lines from a later,
+    // separate despatch's packing view for the same order.
+    @ManyToOne
+    @JoinColumn(name = "delivery_id")
+    private Delivery delivery;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

@@ -5,6 +5,46 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.81] - 2026-10-02 (v0.146)
+
+### Added
+
+- **"Add Additional Shipping" on a Partially Despatched order.** Releases
+  whatever's still outstanding straight back onto the picking queue (it
+  reappears on the handheld) without touching the order's status at all -
+  no more needing to flip Status to Awaiting Despatch just to get the rest
+  picked, which used to silently overwrite the order's actual despatch
+  state. The courier/service set in the Shipping section at the moment
+  you click it is used for this next delivery specifically, independent
+  of whatever courier any earlier delivery on the order went out on -
+  something the old Orderwise system couldn't do (it stuck to the
+  original service for every shipment on an order).
+
+### Changed
+
+- **Partially Despatched is now a fully locked status**, the same as
+  Invoice Pending/Completed - it can no longer be hand-picked from the
+  Status dropdown (the "(set automatically)" label is gone along with
+  the rest of that workaround). The only ways out of it are "Add
+  Additional Shipping" above, or amending the order's line quantities to
+  match what's already gone out, which now closes the order out
+  automatically (to Invoice Pending or Completed, same as a real
+  despatch would) instead of needing a manual status change. Reducing a
+  line's quantity below what's already been despatched is now rejected
+  outright - Reverse to Despatch or an RMA are the tools for genuinely
+  undoing a despatch.
+- **Packing no longer shows an already-despatched item for a later,
+  separate despatch of the same order.** Each carton is now tagged with
+  the Delivery it actually went out on at the moment despatch is
+  confirmed, and the packing screen only ever shows cartons/items that
+  aren't tied to one yet. Previously the packing view pulled every carton
+  ever created for the order with no regard for whether it had already
+  shipped, so a second, independent despatch (e.g. after "Add Additional
+  Shipping") would still show the first delivery's item sitting there
+  alongside the new one.
+
+Migration: V57__cartons_delivery_link.sql (adds `delivery_id` to `cartons`).
+
 ## [0.23.80] - 2026-10-02 (v0.145)
 
 ### Added

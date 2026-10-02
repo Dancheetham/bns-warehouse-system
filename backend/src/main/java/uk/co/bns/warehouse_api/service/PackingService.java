@@ -206,8 +206,18 @@ public class PackingService {
     }
 
     private PackingView toView(Order order) {
-        List<CartonLine> allLines = cartonLineRepository.findByOrderLine_Order_Id(order.getId());
-        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
+        // Excludes anything already tied to a Delivery - a carton (and its
+        // lines) from an earlier, separate despatch of this same order.
+        // Nothing here is "wrong" or needs repacking, it's just already
+        // gone - without this, a later despatch's packing view would keep
+        // showing an already-shipped item alongside whatever's newly picked.
+        // See Carton.delivery / DespatchService.confirmDespatch.
+        List<CartonLine> allLines = cartonLineRepository.findByOrderLine_Order_Id(order.getId()).stream()
+                .filter(l -> l.getCarton() == null || l.getCarton().getDelivery() == null)
+                .toList();
+        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId()).stream()
+                .filter(c -> c.getDelivery() == null)
+                .toList();
 
         List<PackLineView> unassigned = allLines.stream()
                 .filter(l -> l.getCarton() == null)

@@ -112,7 +112,12 @@ public class SerialPackingService {
         List<StockItem> pickedItems = stockItemRepository
                 .findByOrderLine_Order_IdAndStatus(order.getId(), StockItemStatus.ALLOCATED);
 
-        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId());
+        // Items already despatched on an earlier delivery are excluded above
+        // (ALLOCATED only, not DESPATCHED) - this just drops the now-empty
+        // carton shell they used to sit in from the view too, same as
+        // PackingService does for split packing. See Carton.delivery.
+        List<Carton> cartons = cartonRepository.findByOrder_IdOrderByCartonNumberAsc(order.getId())
+                .stream().filter(c -> c.getDelivery() == null).toList();
 
         List<PackedItemView> unassigned = pickedItems.stream()
                 .filter(i -> i.getCarton() == null)

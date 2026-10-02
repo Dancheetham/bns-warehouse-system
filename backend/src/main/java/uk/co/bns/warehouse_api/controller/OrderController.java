@@ -73,6 +73,14 @@ public class OrderController {
                 request.apcServiceCode(), request.overrideCreditHold(), request.overrideReason());
     }
 
+    // "Add Additional Shipping" on a Partially Despatched order - see
+    // OrderService.releaseRemainingForShipping().
+    @PostMapping("/{id}/release-remaining")
+    public Order releaseRemaining(@PathVariable Long id,
+                                   @RequestBody uk.co.bns.warehouse_api.dto.ReleaseRemainingShippingRequest request) {
+        return orderService.releaseRemainingForShipping(id, request);
+    }
+
     // Populates the "Service" dropdown on the order screen with whatever DPD
     // actually has available right now for this order's delivery address and
     // weight - never a static list, since DPD's own docs say these can change

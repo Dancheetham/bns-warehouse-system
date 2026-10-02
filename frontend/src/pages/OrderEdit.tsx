@@ -466,6 +466,34 @@ export default function OrderEdit() {
     onError: (err: Error) => setError(err.message),
   });
 
+  // Releases whatever's still outstanding on a Partially Despatched order
+  // back onto the picking queue, using whatever courier/service is
+  // currently set in the Shipping section above for this next leg -
+  // independent of whatever the first (or any earlier) delivery went out
+  // on. Status itself never changes here (stays Partially Despatched until
+  // the next despatch resolves it) - only picking status moves, same as the
+  // rest of this form's fields, by clicking "Save Order".
+  const addAdditionalShippingMutation = useMutation({
+    mutationFn: async () =>
+      (
+        await api.post<Order>(`/orders/${id}/release-remaining`, {
+          shippingCost: shippingCost ? Number(shippingCost) : undefined,
+          courierMethod: courierMethod || undefined,
+          courierType,
+          collectionCourierName: courierType === "COLLECTION" ? collectionCourierName || undefined : undefined,
+          dpdNetworkKey: dpdNetworkKey || undefined,
+          apcServiceCode: courierType === "APC" ? apcServiceCode || undefined : undefined,
+        })
+      ).data,
+    onSuccess: (data) => {
+      setStatus(data.status);
+      queryClient.invalidateQueries({ queryKey: ["order", id] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      setError(null);
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const [dpdError, setDpdError] = useState<string | null>(null);
   const bookDpdShipmentMutation = useMutation({
     mutationFn: async () => (await api.post(`/orders/${id}/dpd-shipment`)).data,
@@ -577,13 +605,17 @@ export default function OrderEdit() {
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
   };
 
-  // Matches OrderService.update()'s own "wasLocked" check server-side -
-  // once an order has actually gone through despatch and/or invoicing, its
-  // status can only move by adding lines for an extra shipment (handled
-  // automatically, not from this dropdown), never by picking a new value
+  // Matches OrderService.update()'s own locking rules server-side - once an
+  // order has gone through despatch and/or invoicing (or is sitting
+  // Partially Despatched), its status can only move by adding lines for an
+  // extra shipment, or by amending quantities to match what's already gone
+  // out (handled automatically server-side), never by picking a new value
   // here. Based on the order as it loaded, not the (identical, since the
   // dropdown is disabled below) local `status` state.
-  const statusLocked = existingOrder?.status === "INVOICE_PENDING" || existingOrder?.status === "COMPLETED";
+  const statusLocked =
+    existingOrder?.status === "INVOICE_PENDING" ||
+    existingOrder?.status === "COMPLETED" ||
+    existingOrder?.status === "PARTIALLY_DESPATCHED";
 
   const addingExtraLines = useMemo(
     () =>
@@ -792,14 +824,24 @@ export default function OrderEdit() {
                   the despatch/invoicing process sets on its own (see
                   SYSTEM_ONLY_STATUSES above and OrderService.update). */}
               {SYSTEM_ONLY_STATUSES.includes(status) && (
-                <option value={status}>{status.replace(/_/g, " ")} (set automatically)</option>
+                <option value={status}>{status.replace(/_/g, " ")}</option>
               )}
             </select>
             {statusLocked ? (
               <p className="text-xs text-slate-400 mt-1">
-                Locked - this order has already been {existingOrder?.status === "COMPLETED" ? "completed" : "despatched and is awaiting invoicing"}.
-                Add order lines below for an extra shipment to reopen it, or use Reverse to Despatch / an RMA to
-                correct what's already gone out.
+                {existingOrder?.status === "PARTIALLY_DESPATCHED" ? (
+                  <>
+                    Locked - this order is Partially Despatched. Amend the line quantities below to match what's
+                    already gone out to close it, or use "Add additional shipping" to release the rest for picking.
+                  </>
+                ) : (
+                  <>
+                    Locked - this order has already been{" "}
+                    {existingOrder?.status === "COMPLETED" ? "completed" : "despatched and is awaiting invoicing"}.
+                    Add order lines below for an extra shipment to reopen it, or use Reverse to Despatch / an RMA to
+                    correct what's already gone out.
+                  </>
+                )}
               </p>
             ) : (
               addingExtraLines &&
@@ -1224,6 +1266,22 @@ export default function OrderEdit() {
                   <span className="text-xs text-slate-400">
                     For a quantity or address change after despatch
                     {status === "INVOICE_PENDING" && " - not available once any part of this order has been invoiced"}
+                  </span>
+                </div>
+              )}
+              {status === "PARTIALLY_DESPATCHED" && (
+                <div className="w-full border-t border-slate-100 pt-3 mt-1 flex flex-wrap gap-3 items-center">
+                  <button
+                    onClick={() => addAdditionalShippingMutation.mutate()}
+                    disabled={addAdditionalShippingMutation.isPending}
+                    className="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-500 disabled:opacity-50"
+                  >
+                    {addAdditionalShippingMutation.isPending ? "Releasing..." : "Add Additional Shipping"}
+                  </button>
+                  <span className="text-xs text-slate-400">
+                    Releases what's still outstanding back onto the picking queue, using the Shipping Cost/Courier/
+                    Service set above for this next delivery - separate from whatever courier any earlier delivery
+                    went out on. The order stays Partially Despatched until that next despatch is confirmed.
                   </span>
                 </div>
               )}

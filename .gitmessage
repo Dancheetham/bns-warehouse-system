@@ -1,31 +1,54 @@
-Fix false "couldn't cancel" warning on a genuinely successful APC cancel (v0.143)
+Lock Partially Despatched status, add Add Additional Shipping, fix packing
+double-display (v0.146)
 
-Dan tested the new APC cancel-on-reversal feature (v0.142) on an order that
-hadn't been manifested, and got back "Stock was returned, but the APC
-shipment couldn't be cancelled via their API (Failed to cancel the APC
-shipment - APC said: Order Cancelled)" - which reads as a failure, but
-"Order Cancelled" is actually APC's own success description for this
-endpoint.
+Three part-despatch issues Dan raised, all tied together:
 
-Root cause: ApcShippingService.cancelOrder() went through the same shared
-send() helper every other APC call uses, which treats any Messages.Code
-other than the literal string "SUCCESS" as an error. That convention holds
-for ServiceAvailability/Orders/Tracks, but not for CancelOrder - its own
-success response carries Messages.Code "121" with Description
-"Order Cancelled", never the word "SUCCESS" at all. So a completely
-successful cancel was being thrown as a ValidationException purely because
-of the response-checking helper's blanket assumption, caught by
-OrderReversalService, and surfaced to Dan as a false "couldn't cancel -
-check if it's been manifested" warning on a shipment that had, in fact,
-just been cancelled correctly.
+1. The "(set automatically)" label on the Status dropdown was just the tip
+   of a bigger problem: Partially Despatched could still be hand-picked
+   away via that dropdown (e.g. "Awaiting Despatch"), which silently
+   overwrote the order's real despatch state and was the only way users had
+   found to re-release a short-shipped line for picking. It's now locked
+   exactly like Invoice Pending/Completed - OrderService.update() rejects
+   any manual status change away from it. The label itself is gone for all
+   three locked statuses; the dropdown's disabled "Locked" message explains
+   why instead.
 
-Fixed by giving cancelOrder its own response check instead of reusing
-send(): looks for Order.Status == "CANCELLED", or Messages.Code "121", or
-a Description containing "cancel" - any of which confirms a real success -
-rather than requiring the "SUCCESS" string. A genuine post-manifest
-rejection (a different Messages.Code/Description, per the guide) will still
-correctly surface as a failure; only this one endpoint's own success shape
-needed recognising separately.
+   Partially Despatched now resolves only two ways:
+     - Amending the order's line quantities down to match what's already
+       despatched (or quantityDespatched up to match) closes it out
+       automatically, onto Invoice Pending/Completed exactly like a real
+       despatch would - no manual status flip needed any more. Reducing a
+       quantity below what's already despatched is now rejected outright
+       (use Reverse to Despatch / an RMA instead).
+     - The new "Add Additional Shipping" button (2).
+
+2. "Add Additional Shipping" - a new button on the order screen, shown only
+   while Partially Despatched. Releases whatever's still outstanding
+   straight back onto the picking queue (pickingStatus -> IN_PROGRESS, so
+   it reappears on the handheld) without changing the order's status at
+   all - stays Partially Despatched until the next despatch resolves it.
+   Uses whatever courier/service is currently set in the existing Shipping
+   section for this next delivery specifically - archiveCurrentShipment()
+   (already used when reopening a fully-locked order) banks the previous
+   leg's booking into Shipment history and clears the order's own dpd*/
+   apc* identifiers first, so the next despatch books a genuinely new
+   shipment rather than reusing the old one. Each Delivery row already
+   snapshots its own courier at despatch time, so per-delivery courier
+   history was mostly already there - this just makes it actually settable
+   per shipment, which Orderwise couldn't do (it stuck to the order's
+   original service for every shipment).
+
+3. Packing was showing an already-despatched item alongside a newly-picked
+   one whenever an order got a second, separate despatch (e.g. after Add
+   Additional Shipping) - a genuine data-model gap, not a display bug:
+   Carton had no idea which despatch it belonged to. Added a nullable
+   delivery_id on cartons; DespatchService.confirmDespatch now tags every
+   carton used in that despatch with the Delivery row it just created.
+   PackingService/SerialPackingService's packing views now exclude any
+   carton (and its lines/items) already tied to a Delivery, so a shipped
+   item disappears from packing permanently once it's gone out.
+
+Migration: V57__cartons_delivery_link.sql.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_012umgkDA4QRNDmyj6oaBmFS

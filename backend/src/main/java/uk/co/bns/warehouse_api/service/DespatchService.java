@@ -183,7 +183,19 @@ public class DespatchService {
                 .orElse(null);
         String trackingNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber()
                 : order.getApcWaybill() != null ? order.getApcWaybill() : manualTrackingNumber;
-        recordDelivery(order, trackingNumber, newStatus == OrderStatus.PARTIALLY_DESPATCHED);
+        uk.co.bns.warehouse_api.entity.Delivery delivery = recordDelivery(order, trackingNumber, newStatus == OrderStatus.PARTIALLY_DESPATCHED);
+        // Tags every carton used in THIS despatch with the Delivery row just
+        // created - cartons left over from an earlier despatch of the same
+        // order already have a delivery set from that time, so they're
+        // untouched here. This is what lets PackingService tell "already
+        // shipped on an earlier delivery" apart from "currently being
+        // packed" for a later, separate despatch of the same order.
+        for (Carton carton : cartons) {
+            if (carton.getDelivery() == null) {
+                carton.setDelivery(delivery);
+                cartonRepository.save(carton);
+            }
+        }
         String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, trackingNumber);
         AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime, performedByName);
 
@@ -200,7 +212,7 @@ public class DespatchService {
      * why this exists as its own record rather than relying on Order's own
      * (single, overwritten-on-reopen) courier fields.
      */
-    private void recordDelivery(Order order, String consignmentNumber, boolean partial) {
+    private uk.co.bns.warehouse_api.entity.Delivery recordDelivery(Order order, String consignmentNumber, boolean partial) {
         uk.co.bns.warehouse_api.entity.Delivery delivery = new uk.co.bns.warehouse_api.entity.Delivery();
         delivery.setDeliveryNumber(generateDeliveryNumber());
         delivery.setOrder(order);
@@ -211,7 +223,7 @@ public class DespatchService {
         delivery.setCollectionCourierName(order.getCollectionCourierName());
         delivery.setConsignmentNumber(consignmentNumber);
         delivery.setShippingCost(order.getShippingCost());
-        deliveryRepository.save(delivery);
+        return deliveryRepository.save(delivery);
     }
 
     // Same "check for a free number rather than assuming one" approach as

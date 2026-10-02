@@ -176,6 +176,19 @@ public class OrderService {
                                 + " - its status can't be changed manually. Add lines for an extra shipment to reopen "
                                 + "it, or use Reverse to Despatch / an RMA to correct what's already gone out.");
             }
+        } else if (statusBeforeEdit == OrderStatus.PARTIALLY_DESPATCHED && !extraStockNeeded
+                && request.status() != statusBeforeEdit) {
+            // Partially Despatched can only resolve two ways: the lines
+            // genuinely catching up with what's already gone out (handled
+            // below, automatically, once reconcileLines has run), or "Add
+            // additional shipping" releasing the rest for picking without
+            // touching status at all (see releaseRemainingForShipping()
+            // below). Never a bare pick from this dropdown - that used to
+            // silently overwrite the order's actual despatch state.
+            throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                    "This order is Partially Despatched and its status can't be changed directly - amend the line "
+                            + "quantities to match what's already despatched to close it out, or use \"Add "
+                            + "additional shipping\" to release the rest for picking.");
         } else if (isSystemOnlyStatus(request.status()) && request.status() != statusBeforeEdit) {
             throw new uk.co.bns.warehouse_api.exception.ValidationException(
                     "\"" + humanStatus(request.status()) + "\" is set automatically by the despatch/invoicing "
@@ -232,6 +245,19 @@ public class OrderService {
             // now genuinely is one: this order shipped in full once already,
             // and now owes more.
             order.setStatus(OrderStatus.PARTIALLY_DESPATCHED);
+        } else if (statusBeforeEdit == OrderStatus.PARTIALLY_DESPATCHED && !extraStockNeeded) {
+            // The guard above already rejected any attempt to pick a
+            // different status directly while this is true, so the only way
+            // to get here is a genuine line amendment. Resolves itself
+            // automatically, exactly like a real despatch would, once
+            // nothing's short any more (lines reduced to match what's
+            // already despatched, or quantityDespatched corrected up to
+            // match) - otherwise it just stays Partially Despatched.
+            boolean stillShort = order.getLines().stream()
+                    .anyMatch(l -> l.getQuantityOrdered() > l.getQuantityDespatched());
+            order.setStatus(stillShort
+                    ? OrderStatus.PARTIALLY_DESPATCHED
+                    : (order.getCompany() != null ? OrderStatus.INVOICE_PENDING : OrderStatus.COMPLETED));
         } else if (!wasLocked) {
             order.setStatus(request.status());
             // Picking "Cancelled" from this form's Status dropdown is a bare
@@ -318,6 +344,48 @@ public class OrderService {
         order.setApcOrderNumber(null);
         order.setApcWaybill(null);
         order.setApcShippedAt(null);
+    }
+
+    /**
+     * "Add Additional Shipping" - releases whatever's still outstanding on a
+     * Partially Despatched order back onto the picking queue, without
+     * touching the order's status at all (it stays Partially Despatched
+     * until the next despatch resolves it - see OrderService.update()'s
+     * own handling of that). The courier/service for this next delivery is
+     * set independently of whatever any earlier delivery on this order went
+     * out on: archiveCurrentShipment() first banks the previous leg's
+     * booking into Shipment history and clears the order's own dpd*/apc*
+     * identifiers, exactly as it does when reopening a fully-locked order
+     * for an extra shipment, so DespatchService books a genuinely new
+     * shipment for this leg rather than silently reusing the old one.
+     */
+    @Transactional
+    public Order releaseRemainingForShipping(Long id, uk.co.bns.warehouse_api.dto.ReleaseRemainingShippingRequest request) {
+        Order order = findById(id);
+        if (order.getStatus() != OrderStatus.PARTIALLY_DESPATCHED) {
+            throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                    "Only a Partially Despatched order has anything outstanding to release (this order is "
+                            + order.getStatus() + ")");
+        }
+        boolean anyShort = order.getLines().stream()
+                .anyMatch(l -> l.getQuantityOrdered() > l.getQuantityDespatched());
+        if (!anyShort) {
+            throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                    "Nothing's outstanding on this order - amend the line quantities instead to close it out.");
+        }
+
+        archiveCurrentShipment(order);
+        order.setShippingCost(request.shippingCost());
+        order.setCourierType(request.courierType());
+        order.setCourierMethod(request.courierMethod());
+        order.setCollectionCourierName(request.collectionCourierName());
+        order.setDpdNetworkKey(request.dpdNetworkKey());
+        order.setApcServiceCode(request.apcServiceCode());
+        // This leg's shipping charge isn't invoiced yet - matches
+        // reopeningForExtraShipment's handling in update() above.
+        order.setShippingInvoiced(false);
+        order.setPickingStatus(PickingStatus.IN_PROGRESS);
+        return orderRepository.save(order);
     }
 
     private static boolean isSystemOnlyStatus(OrderStatus status) {
@@ -496,6 +564,17 @@ public class OrderService {
             if (existing != null) {
                 existingLines.remove(existing);
                 int newQty = lr.quantityOrdered();
+                // Can't ask for less than what's physically already gone out
+                // the door - Qty Despatched here is a correction field (e.g.
+                // fixing a miscount after the fact), not a way to shrink the
+                // order below reality. Reverse to Despatch / an RMA are the
+                // right tools for genuinely undoing a despatch.
+                int despatchedSoFar = lr.quantityDespatched() != null ? lr.quantityDespatched() : existing.getQuantityDespatched();
+                if (newQty < despatchedSoFar) {
+                    throw new uk.co.bns.warehouse_api.exception.ValidationException(
+                            "Can't reduce " + existing.getProduct().getSku() + " below the " + despatchedSoFar
+                                    + " already despatched - use Reverse to Despatch or an RMA to correct what's gone out instead.");
+                }
                 if (existing.getQuantityPicked() > newQty) {
                     orderReversalService.deallocateFromLine(existing, existing.getQuantityPicked() - newQty);
                     existing.setQuantityPicked(newQty);
