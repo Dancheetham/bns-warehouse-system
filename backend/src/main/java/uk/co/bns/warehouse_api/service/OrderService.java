@@ -354,8 +354,8 @@ public class OrderService {
      * own handling of that). The courier/service for this next delivery is
      * set independently of whatever any earlier delivery on this order went
      * out on: archiveCurrentShipment() first banks the previous leg's
-     * booking into Shipment history and clears the order's own dpd*/apc*
-     * identifiers, exactly as it does when reopening a fully-locked order
+     * booking into Shipment history and clears the order's own dpd- and
+     * apc-prefixed booking identifiers, exactly as it does when reopening a fully-locked order
      * for an extra shipment, so DespatchService books a genuinely new
      * shipment for this leg rather than silently reusing the old one.
      */
