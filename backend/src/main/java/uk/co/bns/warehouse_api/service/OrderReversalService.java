@@ -62,6 +62,7 @@ public class OrderReversalService {
     private final InventoryService inventoryService;
     private final GdmsRecallService gdmsRecallService;
     private final ApcShippingService apcShippingService;
+    private final uk.co.bns.warehouse_api.repository.DeliveryRepository deliveryRepository;
 
     @Transactional
     public OrderReversalResult reverseToDespatch(Long orderId) {
@@ -145,6 +146,13 @@ public class OrderReversalService {
             line.setQuantityDespatched(0);
         }
         order.setStatus(OrderStatus.AWAITING_DESPATCH);
+        // Whatever Delivery row(s) this order had recorded it genuinely
+        // weren't final deliveries after all - see Delivery.java/Dan's
+        // reasoning (2026-10-02): both reversal actions are only ever usable
+        // before an order's actually, irreversibly out the door, so a
+        // delivery being reversed here was never a real one for Delivery
+        // History's purposes.
+        deliveryRepository.deleteByOrder_Id(orderId);
         return new OrderReversalResult(orderRepository.save(order), courierWarning);
     }
 
@@ -216,6 +224,8 @@ public class OrderReversalService {
         order.setApcWaybill(null);
         order.setApcShippedAt(null);
         order.setApcServiceCode(null);
+        // Same reasoning as reverseToDespatch() above.
+        deliveryRepository.deleteByOrder_Id(orderId);
         return new OrderReversalResult(orderRepository.save(order), courierWarning);
     }
 

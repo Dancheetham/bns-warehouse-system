@@ -17,6 +17,7 @@ import uk.co.bns.warehouse_api.repository.ProductRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -148,10 +149,19 @@ class ShopifyOrderImportService {
         }
     }
 
+    // Shopify's GraphQL createdAt is always returned in UTC (e.g.
+    // "2026-10-02T00:12:00Z"), whatever the shop's configured timezone is.
+    // toLocalDateTime() alone just strips the "Z" and keeps the raw UTC
+    // numbers, which is wrong by exactly the UK/UTC offset (currently 1
+    // hour during BST) - that's why orders were showing an hour earlier
+    // than they actually came in. atZoneSameInstant() converts to the
+    // correct wall-clock time for the UK instead.
     private LocalDateTime parseShopifyDate(String iso) {
         if (iso == null) return LocalDateTime.now();
         try {
-            return java.time.OffsetDateTime.parse(iso, DateTimeFormatter.ISO_OFFSET_DATE_TIME).toLocalDateTime();
+            return java.time.OffsetDateTime.parse(iso, DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                    .atZoneSameInstant(ZoneId.of("Europe/London"))
+                    .toLocalDateTime();
         } catch (Exception e) {
             return LocalDateTime.now();
         }

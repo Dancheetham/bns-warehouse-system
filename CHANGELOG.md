@@ -5,6 +5,49 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.80] - 2026-10-02 (v0.145)
+
+### Added
+
+- **Delivery History now tracks individual deliveries, not just orders.**
+  An order despatched in two (or more) separate consignments - e.g.
+  partially despatched, then the rest shipped later the same day - now
+  shows as one row per delivery, each with its own trackable Delivery
+  Number (DEL-000001, DEL-000002, ...), rather than one row that only ever
+  reflected the latest shipment. Search by the exact delivery number to
+  find one specific consignment, or by order number to see every delivery
+  that order's ever had. Delivery History only ever lists deliveries that
+  genuinely, irreversibly went out - a delivery is removed if the order is
+  later reversed (Reverse to Despatch/Cancel & Return to Stock), since in
+  practice neither action is usable any more once a parcel's actually been
+  collected. The order's own Delivery History detail page now has a
+  "Deliveries" table listing every one of them; the item/carton breakdown
+  stays combined across the whole order (shipment-level tracking only, not
+  per-delivery). Sales Activity/Order Edit's "Delivery History" link now
+  opens the list pre-filtered to that order's number, so it still shows
+  something sensible even for an order whose only delivery was since
+  reversed.
+- Order Edit's "Order Date" field is now set automatically to the real
+  date and time "Create Order" is clicked, for a brand-new manual order -
+  it's no longer an editable date-only picker defaulting to midnight.
+  Every manually-created order used to get stamped with midnight UTC on
+  whatever day it was opened, so every order created on the same day
+  looked identical in Sales Activity's Order Date column (which started
+  showing the time as well as the date in v0.144). Editing an existing
+  order still shows and allows correcting its date, with the original
+  creation time now shown alongside it for reference.
+
+### Fixed
+
+- **Shopify order times were off by the UK/UTC offset (currently 1 hour,
+  during BST).** Shopify's own `createdAt` timestamp is always in UTC,
+  whatever the shop's configured timezone - the import code parsed it
+  correctly but then just stripped the timezone instead of converting it,
+  keeping the raw UTC clock numbers as if they were already UK local time.
+  Fixed by converting to Europe/London properly before storing. Only
+  affects orders imported from this point on - already-imported orders
+  keep their existing (off-by-one-hour) order time unless re-synced.
+
 ## [0.23.79] - 2026-10-02 (v0.144)
 
 ### Fixed

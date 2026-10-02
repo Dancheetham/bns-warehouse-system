@@ -1027,6 +1027,8 @@ export interface CompanyImportResult {
 
 // Sales -> Delivery History
 export interface DeliveryHistoryView {
+  deliveryNumber: string;
+  partial: boolean;
   orderId: number;
   orderNumber: string;
   despatchedAt: string;
@@ -1036,7 +1038,6 @@ export interface DeliveryHistoryView {
   courier?: string;
   deliveryMethod?: string;
   consignmentNumber?: string;
-  parcelCount: number;
   orderStatus: OrderStatus;
 }
 
@@ -1058,12 +1059,13 @@ export interface DeliveryHistoryCartonSummaryRow {
   quantity: number;
 }
 
-export interface ShipmentView {
-  shippedAt?: string;
+export interface DeliveryView {
+  deliveryNumber: string;
+  despatchedAt?: string;
+  partial: boolean;
   courier?: string;
   courierMethod?: string;
-  dpdConsignmentNumber?: string;
-  dpdParcelNumbers?: string;
+  consignmentNumber?: string;
   shippingCost?: number;
 }
 
@@ -1071,5 +1073,5 @@ export interface DeliveryHistoryDetailView {
   order: DeliveryHistoryView;
   items: DeliveryHistoryItemView[];
   cartonSummary: DeliveryHistoryCartonSummaryRow[];
-  previousShipments: ShipmentView[];
+  deliveries: DeliveryView[];
 }

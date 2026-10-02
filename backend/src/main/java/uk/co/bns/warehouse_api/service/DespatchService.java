@@ -54,6 +54,7 @@ public class DespatchService {
     private final DespatchConfirmationService despatchConfirmationService;
     private final DpdShippingService dpdShippingService;
     private final ApcShippingService apcShippingService;
+    private final uk.co.bns.warehouse_api.repository.DeliveryRepository deliveryRepository;
 
     public static final String PACKING_MODE_KEY = "packing_mode";
     public static final String PACKING_MODE_SPLIT = "SPLIT";
@@ -182,10 +183,48 @@ public class DespatchService {
                 .orElse(null);
         String trackingNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber()
                 : order.getApcWaybill() != null ? order.getApcWaybill() : manualTrackingNumber;
+        recordDelivery(order, trackingNumber, newStatus == OrderStatus.PARTIALLY_DESPATCHED);
         String shopifyStatus = shopifyFulfillmentService.pushFulfillment(order, trackingNumber);
         AcknowledgementResult despatchEmail = despatchConfirmationService.sendDespatchConfirmation(order, despatchedThisTime, performedByName);
 
         return new DespatchConfirmationResult(order, despatchEmail, shopifyStatus, courierStatus);
+    }
+
+    /**
+     * One row per actual despatch confirmation - a real, physical
+     * consignment handed to a courier (or collected), whatever the order's
+     * overall status ends up at (a short/partial despatch still genuinely
+     * went out, it just leaves the rest of the order outstanding). Called
+     * once per confirmDespatch(), after the DPD/APC booking above has had
+     * its chance to set a real consignment number - see Delivery.java for
+     * why this exists as its own record rather than relying on Order's own
+     * (single, overwritten-on-reopen) courier fields.
+     */
+    private void recordDelivery(Order order, String consignmentNumber, boolean partial) {
+        uk.co.bns.warehouse_api.entity.Delivery delivery = new uk.co.bns.warehouse_api.entity.Delivery();
+        delivery.setDeliveryNumber(generateDeliveryNumber());
+        delivery.setOrder(order);
+        delivery.setDespatchedAt(java.time.LocalDateTime.now());
+        delivery.setPartial(partial);
+        delivery.setCourierType(order.getCourierType());
+        delivery.setCourierMethod(order.getCourierMethod());
+        delivery.setCollectionCourierName(order.getCollectionCourierName());
+        delivery.setConsignmentNumber(consignmentNumber);
+        delivery.setShippingCost(order.getShippingCost());
+        deliveryRepository.save(delivery);
+    }
+
+    // Same "check for a free number rather than assuming one" approach as
+    // OrderService.generateOrderNumber() - see its comment for why a bare
+    // count()+1 isn't safe.
+    private String generateDeliveryNumber() {
+        long candidate = deliveryRepository.count() + 1;
+        String deliveryNumber;
+        do {
+            deliveryNumber = "DEL-" + String.format("%06d", candidate);
+            candidate++;
+        } while (deliveryRepository.existsByDeliveryNumber(deliveryNumber));
+        return deliveryNumber;
     }
 
     /**

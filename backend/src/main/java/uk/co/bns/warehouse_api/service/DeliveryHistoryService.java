@@ -14,9 +14,10 @@ import uk.co.bns.warehouse_api.dto.DeliveryHistoryCartonSummaryRow;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryDetailView;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryItemView;
 import uk.co.bns.warehouse_api.dto.DeliveryHistoryView;
-import uk.co.bns.warehouse_api.dto.ShipmentView;
+import uk.co.bns.warehouse_api.dto.DeliveryView;
 import uk.co.bns.warehouse_api.entity.Carton;
 import uk.co.bns.warehouse_api.entity.CartonLine;
+import uk.co.bns.warehouse_api.entity.Delivery;
 import uk.co.bns.warehouse_api.entity.Order;
 import uk.co.bns.warehouse_api.entity.OrderLine;
 import uk.co.bns.warehouse_api.entity.StockItem;
@@ -24,9 +25,8 @@ import uk.co.bns.warehouse_api.enums.StockItemStatus;
 import uk.co.bns.warehouse_api.enums.TrackingType;
 import uk.co.bns.warehouse_api.exception.NotFoundException;
 import uk.co.bns.warehouse_api.repository.CartonLineRepository;
-import uk.co.bns.warehouse_api.repository.CartonRepository;
+import uk.co.bns.warehouse_api.repository.DeliveryRepository;
 import uk.co.bns.warehouse_api.repository.OrderRepository;
-import uk.co.bns.warehouse_api.repository.ShipmentRepository;
 import uk.co.bns.warehouse_api.repository.StockItemRepository;
 
 import java.io.ByteArrayOutputStream;
@@ -44,11 +44,22 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Sales &rarr; Delivery History - every order that's actually been despatched at
- * least once (Order.despatchedAt), with what actually shipped down to the
- * individual MAC/serial/batch and which carton it was packed into. A
- * separate page from Despatch itself (which only ever shows what's still
- * ready to pack) and from Stock Trace (which is per-item, not per-order).
+ * Sales &rarr; Delivery History - one row per real delivery (Delivery.java),
+ * not one row per order: an order despatched in two separate consignments
+ * (e.g. partially despatched, then the rest later the same day) shows up as
+ * two rows, each independently searchable/trackable by its own Delivery
+ * Number. Deliberately sourced from the Delivery table rather than Order -
+ * Delivery rows only exist for despatches that genuinely, irreversibly went
+ * out: both Reverse to Despatch and Cancel & Return to Stock delete an
+ * order's Delivery rows when used (see OrderReversalService), since in
+ * practice neither is usable any more once a parcel's actually been
+ * collected, so a surviving row is never a test despatch or a correction
+ * that got reversed. Shows what actually shipped down to the individual
+ * MAC/serial/batch and which carton it was packed into, combined across the
+ * whole order (shipment-level only - Dan's call, 2026-10-02 - no per-
+ * delivery item/carton breakdown). A separate page from Despatch itself
+ * (which only ever shows what's still ready to pack) and from Stock Trace
+ * (which is per-item, not per-order).
  */
 @Service
 @RequiredArgsConstructor
@@ -56,9 +67,8 @@ public class DeliveryHistoryService {
 
     private final OrderRepository orderRepository;
     private final StockItemRepository stockItemRepository;
-    private final CartonRepository cartonRepository;
     private final CartonLineRepository cartonLineRepository;
-    private final ShipmentRepository shipmentRepository;
+    private final DeliveryRepository deliveryRepository;
 
     private static final DateTimeFormatter TS_FORMAT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
@@ -66,8 +76,8 @@ public class DeliveryHistoryService {
         LocalDateTime fromDt = from != null ? from.atStartOfDay() : LocalDateTime.MIN;
         LocalDateTime toDt = to != null ? to.plusDays(1).atStartOfDay() : LocalDateTime.MAX;
 
-        return orderRepository.findByDespatchedAtIsNotNullOrderByDespatchedAtDesc().stream()
-                .filter(o -> !o.getDespatchedAt().isBefore(fromDt) && o.getDespatchedAt().isBefore(toDt))
+        return deliveryRepository.findAllByOrderByDespatchedAtDesc().stream()
+                .filter(d -> !d.getDespatchedAt().isBefore(fromDt) && d.getDespatchedAt().isBefore(toDt))
                 .map(this::toView)
                 .toList();
     }
@@ -75,36 +85,28 @@ public class DeliveryHistoryService {
     public DeliveryHistoryDetailView detail(Long orderId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order " + orderId + " not found"));
-        if (order.getDespatchedAt() == null) {
-            throw new NotFoundException("Order " + order.getOrderNumber() + " hasn't been despatched yet");
+        List<Delivery> deliveries = deliveryRepository.findByOrder_IdOrderByDespatchedAtAsc(orderId);
+        if (deliveries.isEmpty()) {
+            throw new NotFoundException("Order " + order.getOrderNumber() + " hasn't been delivered yet");
         }
-        return new DeliveryHistoryDetailView(toView(order), itemsFor(order), cartonSummaryFor(order), previousShipmentsFor(order));
+        Delivery latest = deliveries.get(deliveries.size() - 1);
+        return new DeliveryHistoryDetailView(
+                toView(latest, order), itemsFor(order), cartonSummaryFor(order), deliveries.stream().map(this::toDeliveryView).toList());
     }
 
-    private List<ShipmentView> previousShipmentsFor(Order order) {
-        return shipmentRepository.findByOrder_IdOrderByCreatedAtAsc(order.getId()).stream()
-                .map(s -> new ShipmentView(
-                        s.getShippedAt(),
-                        shipmentCourierLabel(s),
-                        s.getCourierMethod(),
-                        s.getDpdConsignmentNumber() != null ? s.getDpdConsignmentNumber() : s.getApcWaybill(),
-                        s.getDpdParcelNumbers(),
-                        s.getShippingCost()))
-                .toList();
+    private DeliveryView toDeliveryView(Delivery delivery) {
+        return new DeliveryView(
+                delivery.getDeliveryNumber(), delivery.getDespatchedAt(), delivery.isPartial(),
+                courierLabel(delivery.getCourierType(), delivery.getCollectionCourierName()),
+                delivery.getCourierMethod(), delivery.getConsignmentNumber(), delivery.getShippingCost());
     }
 
-    private String shipmentCourierLabel(uk.co.bns.warehouse_api.entity.Shipment shipment) {
-        uk.co.bns.warehouse_api.enums.CourierType type = shipment.getCourierType();
-        if (type == null) {
-            // Archived before courierType existed on Shipment - fall back to
-            // the old DPD-consignment inference.
-            return shipment.getDpdConsignmentNumber() != null ? "DPD" : null;
-        }
+    private String courierLabel(uk.co.bns.warehouse_api.enums.CourierType type, String collectionCourierName) {
+        if (type == null) return null;
         return switch (type) {
             case DPD -> "DPD";
             case APC -> "APC";
-            case COLLECTION -> shipment.getCollectionCourierName() != null
-                    ? "Collection (" + shipment.getCollectionCourierName() + ")" : "Collection";
+            case COLLECTION -> collectionCourierName != null ? "Collection (" + collectionCourierName + ")" : "Collection";
             case NONE -> null;
         };
     }
@@ -114,8 +116,8 @@ public class DeliveryHistoryService {
             Sheet sheet = workbook.createSheet("Delivery History");
             CellStyle headerStyle = headerStyle(workbook);
 
-            String[] headers = {"Order Number", "Despatched", "Company", "Delivery Name", "Delivery Postcode",
-                    "Courier", "Delivery Method", "Consignment Number", "Parcels", "Status"};
+            String[] headers = {"Delivery Number", "Order Number", "Despatched", "Part Shipped", "Company",
+                    "Delivery Name", "Delivery Postcode", "Courier", "Delivery Method", "Consignment Number", "Status"};
             Row header = sheet.createRow(0);
             for (int i = 0; i < headers.length; i++) {
                 var cell = header.createCell(i);
@@ -123,7 +125,7 @@ public class DeliveryHistoryService {
                 cell.setCellStyle(headerStyle);
             }
             sheet.createFreezePane(0, 1);
-            int[] widths = {4000, 5200, 7000, 6000, 3500, 3000, 6000, 5000, 2500, 5000};
+            int[] widths = {4000, 4000, 5200, 3000, 7000, 6000, 3500, 3000, 6000, 5000, 5000};
             for (int i = 0; i < widths.length; i++) {
                 sheet.setColumnWidth(i, widths[i]);
             }
@@ -131,16 +133,17 @@ public class DeliveryHistoryService {
             int rowNum = 1;
             for (DeliveryHistoryView v : list(from, to)) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(v.orderNumber());
-                row.createCell(1).setCellValue(v.despatchedAt().format(TS_FORMAT));
-                row.createCell(2).setCellValue(nullToBlank(v.companyName()));
-                row.createCell(3).setCellValue(nullToBlank(v.deliveryName()));
-                row.createCell(4).setCellValue(nullToBlank(v.deliveryPostcode()));
-                row.createCell(5).setCellValue(nullToBlank(v.courier()));
-                row.createCell(6).setCellValue(nullToBlank(v.deliveryMethod()));
-                row.createCell(7).setCellValue(nullToBlank(v.consignmentNumber()));
-                row.createCell(8).setCellValue(v.parcelCount());
-                row.createCell(9).setCellValue(v.orderStatus());
+                row.createCell(0).setCellValue(v.deliveryNumber());
+                row.createCell(1).setCellValue(v.orderNumber());
+                row.createCell(2).setCellValue(v.despatchedAt().format(TS_FORMAT));
+                row.createCell(3).setCellValue(v.partial() ? "Yes" : "");
+                row.createCell(4).setCellValue(nullToBlank(v.companyName()));
+                row.createCell(5).setCellValue(nullToBlank(v.deliveryName()));
+                row.createCell(6).setCellValue(nullToBlank(v.deliveryPostcode()));
+                row.createCell(7).setCellValue(nullToBlank(v.courier()));
+                row.createCell(8).setCellValue(nullToBlank(v.deliveryMethod()));
+                row.createCell(9).setCellValue(nullToBlank(v.consignmentNumber()));
+                row.createCell(10).setCellValue(v.orderStatus());
             }
 
             return toBytes(workbook);
@@ -211,33 +214,19 @@ public class DeliveryHistoryService {
         }
     }
 
-    private DeliveryHistoryView toView(Order order) {
-        int parcelCount = cartonRepository.countByOrder_Id(order.getId());
-        // courierType is now an explicit field on the order (see
-        // CourierType) rather than inferred from whether a DPD consignment
-        // number happened to be set - covers APC and Collection too, and
-        // still falls back to the old DPD-consignment inference for orders
-        // despatched before this field existed (backfilled to DPD by
-        // V54__add_courier_type_and_apc.sql, but belt-and-braces here too).
-        String courier = courierLabel(order);
-        String consignmentNumber = order.getDpdConsignmentNumber() != null ? order.getDpdConsignmentNumber()
-                : order.getApcWaybill();
-        return new DeliveryHistoryView(
-                order.getId(), order.getOrderNumber(), order.getDespatchedAt(),
-                order.getCompany() != null ? order.getCompany().getName() : null,
-                order.getDeliveryName(), order.getDeliveryPostcode(),
-                courier, order.getCourierMethod(), consignmentNumber,
-                parcelCount, order.getStatus().name());
+    private DeliveryHistoryView toView(Delivery delivery) {
+        return toView(delivery, delivery.getOrder());
     }
 
-    private String courierLabel(Order order) {
-        return switch (order.getCourierType() != null ? order.getCourierType() : uk.co.bns.warehouse_api.enums.CourierType.NONE) {
-            case DPD -> "DPD";
-            case APC -> "APC";
-            case COLLECTION -> order.getCollectionCourierName() != null
-                    ? "Collection (" + order.getCollectionCourierName() + ")" : "Collection";
-            case NONE -> order.getDpdConsignmentNumber() != null ? "DPD" : null;
-        };
+    private DeliveryHistoryView toView(Delivery delivery, Order order) {
+        return new DeliveryHistoryView(
+                delivery.getDeliveryNumber(), delivery.isPartial(),
+                order.getId(), order.getOrderNumber(), delivery.getDespatchedAt(),
+                order.getCompany() != null ? order.getCompany().getName() : null,
+                order.getDeliveryName(), order.getDeliveryPostcode(),
+                courierLabel(delivery.getCourierType(), delivery.getCollectionCourierName()),
+                delivery.getCourierMethod(), delivery.getConsignmentNumber(),
+                order.getStatus().name());
     }
 
     private List<DeliveryHistoryItemView> itemsFor(Order order) {

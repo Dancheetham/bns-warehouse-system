@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { downloadFile } from "../components/ReportCard";
 import { formatDateTime } from "../utils/format";
@@ -15,11 +15,19 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function DeliveryHistory() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  // Lets Order Edit link straight here pre-filtered to one order's
+  // deliveries (/delivery-history?q=SO-10022) when it has more than one.
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q) setSearch(q);
+  }, [searchParams]);
 
   const { data: deliveries, isLoading } = useQuery({
     queryKey: ["delivery-history", from, to],
@@ -37,6 +45,7 @@ export default function DeliveryHistory() {
     if (!term) return list;
     return list.filter(
       (d) =>
+        d.deliveryNumber.toLowerCase().includes(term) ||
         d.orderNumber.toLowerCase().includes(term) ||
         (d.companyName ?? "").toLowerCase().includes(term) ||
         (d.deliveryName ?? "").toLowerCase().includes(term) ||
@@ -65,7 +74,7 @@ export default function DeliveryHistory() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h2 className="text-2xl font-semibold text-slate-800">Delivery History</h2>
-          <p className="text-slate-500">Every order that's actually been despatched, most recent first.</p>
+          <p className="text-slate-500">Every delivery that's genuinely gone out, most recent first - an order despatched in separate consignments shows one row per delivery.</p>
         </div>
         <button
           onClick={exportExcel}
@@ -83,7 +92,7 @@ export default function DeliveryHistory() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Order number, company, delivery name, postcode or consignment number..."
+            placeholder="Delivery number, order number, company, delivery name, postcode or consignment number..."
             className="w-full border-2 border-slate-300 focus:border-emerald-500 rounded-lg px-4 py-2.5 outline-none text-sm"
           />
         </div>
@@ -102,6 +111,7 @@ export default function DeliveryHistory() {
         <table className="w-full text-sm">
           <thead className="text-left text-slate-500 border-b border-slate-200 sticky top-0 bg-white">
             <tr>
+              <th className="px-3 py-2">Delivery #</th>
               <th className="px-3 py-2">Order #</th>
               <th className="px-3 py-2">Despatched</th>
               <th className="px-3 py-2">Company</th>
@@ -110,7 +120,6 @@ export default function DeliveryHistory() {
               <th className="px-3 py-2">Courier</th>
               <th className="px-3 py-2">Delivery Method</th>
               <th className="px-3 py-2">Consignment #</th>
-              <th className="px-3 py-2 text-right">Parcels</th>
               <th className="px-3 py-2">Status</th>
               <th className="px-3 py-2"></th>
             </tr>
@@ -126,13 +135,21 @@ export default function DeliveryHistory() {
             {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={11} className="px-3 py-4 text-slate-400">
-                  {search ? `No deliveries match "${search}".` : "No orders have been despatched yet."}
+                  {search ? `No deliveries match "${search}".` : "No orders have been delivered yet."}
                 </td>
               </tr>
             )}
             {filtered.map((d) => (
-              <tr key={d.orderId} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/delivery-history/${d.orderId}`)}>
-                <td className="px-3 py-2 font-medium text-slate-800">{d.orderNumber}</td>
+              <tr key={d.deliveryNumber} className="hover:bg-slate-50 cursor-pointer" onClick={() => navigate(`/delivery-history/${d.orderId}`)}>
+                <td className="px-3 py-2 font-medium text-slate-800 whitespace-nowrap">{d.deliveryNumber}</td>
+                <td className="px-3 py-2">
+                  {d.orderNumber}
+                  {d.partial && (
+                    <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-700 whitespace-nowrap">
+                      Part Shipped
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(d.despatchedAt)}</td>
                 <td className="px-3 py-2">{d.companyName ?? "-"}</td>
                 <td className="px-3 py-2">{d.deliveryName ?? "-"}</td>
@@ -140,7 +157,6 @@ export default function DeliveryHistory() {
                 <td className="px-3 py-2">{d.courier ?? "-"}</td>
                 <td className="px-3 py-2">{d.deliveryMethod ?? "-"}</td>
                 <td className="px-3 py-2">{d.consignmentNumber ?? "-"}</td>
-                <td className="px-3 py-2 text-right">{d.parcelCount}</td>
                 <td className="px-3 py-2">
                   <span className={`text-xs px-2 py-0.5 rounded font-medium whitespace-nowrap ${STATUS_STYLES[d.orderStatus] ?? "bg-slate-100 text-slate-600"}`}>
                     {d.orderStatus.replace(/_/g, " ")}

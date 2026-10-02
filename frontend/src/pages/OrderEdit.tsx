@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { formatDateTime } from "../utils/format";
 import {
   AcknowledgementResult,
   ApcServiceLookupResult,
@@ -653,8 +654,16 @@ export default function OrderEdit() {
             </button>
           )}
           {existingOrder?.despatchedAt && (
+            // Goes to the Delivery History list pre-filtered to this order's
+            // number, rather than straight to the detail page - this order
+            // may have more than one delivery (despatched in separate
+            // consignments), and the list is also the safe choice if every
+            // delivery on it was since reversed (Cancel & Return to Stock/
+            // Reverse to Despatch), since despatchedAt itself is never
+            // cleared by either but the underlying Delivery rows are - the
+            // list just shows no results then, rather than a 404.
             <button
-              onClick={() => navigate(`/delivery-history/${existingOrder.id}`)}
+              onClick={() => navigate(`/delivery-history?q=${encodeURIComponent(existingOrder.orderNumber)}`)}
               className="text-sm bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-1 hover:bg-blue-100"
             >
               Delivery History →
@@ -697,9 +706,26 @@ export default function OrderEdit() {
           <Field label="Order Number (leave blank to auto-generate)">
             <input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} className="input" />
           </Field>
-          <Field label="Order Date">
-            <input type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className="input" />
-          </Field>
+          {isNew ? (
+            // A brand-new order's date/time is stamped automatically on the
+            // server the moment "Create Order" is clicked, so there's
+            // nothing to pick here - showing an editable field would imply
+            // it's honoured, when the backend deliberately overwrites it.
+            <Field label="Order Date">
+              <div className="input flex items-center text-slate-400 bg-slate-50">
+                Set automatically when you create this order
+              </div>
+            </Field>
+          ) : (
+            <Field label="Order Date">
+              <input type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className="input" />
+              {existingOrder && (
+                <div className="text-xs text-slate-400 mt-1">
+                  Originally created {formatDateTime(existingOrder.orderDate)}
+                </div>
+              )}
+            </Field>
+          )}
           <Field label="Customer Name">
             <input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
           </Field>

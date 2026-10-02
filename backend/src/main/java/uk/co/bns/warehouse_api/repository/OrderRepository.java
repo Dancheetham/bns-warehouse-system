@@ -44,11 +44,15 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
             java.util.List<uk.co.bns.warehouse_api.enums.OrderStatus> statuses,
             uk.co.bns.warehouse_api.enums.OrderType orderType);
 
-    // Delivery History (Sales) - every order that's actually gone out the
-    // door at least once, whatever it's sitting at now (still awaiting
-    // invoicing, fully invoiced/COMPLETED, or PARTIALLY_DESPATCHED and
-    // waiting on the rest) - despatchedAt is set once, the first time
-    // confirmDespatch() runs for an order, and never cleared by a later
-    // partial re-despatch, so this always finds it.
-    java.util.List<Order> findByDespatchedAtIsNotNullOrderByDespatchedAtDesc();
+    // Delivery History (Sales) - deliberately NOT every order with
+    // despatchedAt set. Both reversal actions (Reverse to Despatch, Cancel &
+    // Return to Stock) can still be used right up until the point an order
+    // reaches INVOICE_PENDING/COMPLETED in practice, so an order sitting
+    // anywhere else (ON_HOLD, AWAITING_DESPATCH, PARTIALLY_DESPATCHED) may
+    // only have been despatched as part of testing/a correction that got
+    // reversed, not a real delivery. Restricting to these two statuses
+    // means a row here only ever represents stock that's genuinely,
+    // irreversibly out the door - see Dan's reasoning 2026-10-02.
+    java.util.List<Order> findByDespatchedAtIsNotNullAndStatusInOrderByDespatchedAtDesc(
+            java.util.List<uk.co.bns.warehouse_api.enums.OrderStatus> statuses);
 }

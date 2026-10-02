@@ -185,8 +185,8 @@ export default function DeliveryHistoryDetail() {
           <p className="text-slate-700">{order.consignmentNumber ?? "-"}</p>
         </div>
         <div>
-          <p className="text-slate-400 text-xs mb-1">Parcels</p>
-          <p className="text-slate-700">{order.parcelCount}</p>
+          <p className="text-slate-400 text-xs mb-1">Cartons</p>
+          <p className="text-slate-700">{cartonGroups.length}</p>
         </div>
         <div>
           <p className="text-slate-400 text-xs mb-1">Status</p>
@@ -206,19 +206,19 @@ export default function DeliveryHistoryDetail() {
         )}
       </div>
 
-      {data.previousShipments.length > 0 && (
+      {data.deliveries.length > 0 && (
         <div className="bg-white border border-slate-200 rounded-lg mb-4 overflow-hidden">
           <div className="px-4 py-2 border-b border-slate-200 text-sm font-medium text-slate-600">
-            Previous Shipments{" "}
+            Deliveries{" "}
             <span className="text-slate-400 font-normal">
-              · this order was reopened for {data.previousShipments.length === 1 ? "an extra shipment" : `${data.previousShipments.length} extra shipments`}
-              , shown above as the current one
+              · {data.deliveries.length === 1 ? "despatched once" : `despatched in ${data.deliveries.length} separate deliveries`}
             </span>
           </div>
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500">
               <tr>
-                <th className="px-4 py-1.5">Shipped</th>
+                <th className="px-4 py-1.5">Delivery #</th>
+                <th className="px-4 py-1.5">Despatched</th>
                 <th className="px-4 py-1.5">Courier</th>
                 <th className="px-4 py-1.5">Delivery Method</th>
                 <th className="px-4 py-1.5">Consignment #</th>
@@ -227,17 +227,25 @@ export default function DeliveryHistoryDetail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.previousShipments.map((s, i) => (
-                <tr key={i}>
-                  <td className="px-4 py-1.5 whitespace-nowrap">{s.shippedAt ? formatDateTime(s.shippedAt) : "-"}</td>
-                  <td className="px-4 py-1.5">{s.courier ?? "-"}</td>
-                  <td className="px-4 py-1.5">{s.courierMethod ?? "-"}</td>
-                  <td className="px-4 py-1.5">{s.dpdConsignmentNumber ?? "-"}</td>
-                  <td className="px-4 py-1.5 text-right">{s.shippingCost != null ? `£${Number(s.shippingCost).toFixed(2)}` : "-"}</td>
+              {data.deliveries.map((d) => (
+                <tr key={d.deliveryNumber}>
+                  <td className="px-4 py-1.5 font-medium text-slate-800 whitespace-nowrap">
+                    {d.deliveryNumber}
+                    {d.partial && (
+                      <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded font-medium bg-amber-100 text-amber-700 whitespace-nowrap">
+                        Part Shipped
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-1.5 whitespace-nowrap">{d.despatchedAt ? formatDateTime(d.despatchedAt) : "-"}</td>
+                  <td className="px-4 py-1.5">{d.courier ?? "-"}</td>
+                  <td className="px-4 py-1.5">{d.courierMethod ?? "-"}</td>
+                  <td className="px-4 py-1.5">{d.consignmentNumber ?? "-"}</td>
+                  <td className="px-4 py-1.5 text-right">{d.shippingCost != null ? `£${Number(d.shippingCost).toFixed(2)}` : "-"}</td>
                   <td className="px-4 py-1.5 text-right">
-                    {s.dpdConsignmentNumber && s.courier === "DPD" && (
+                    {d.consignmentNumber && d.courier === "DPD" && (
                       <a
-                        href={dpdTrackingUrl(s.dpdConsignmentNumber, order.deliveryPostcode)}
+                        href={dpdTrackingUrl(d.consignmentNumber, order.deliveryPostcode)}
                         target="_blank"
                         rel="noreferrer"
                         className="text-emerald-600 hover:underline text-xs"

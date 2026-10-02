@@ -97,6 +97,16 @@ public class OrderService {
         order.setOrderNumber(orderNumber);
         order.setStatus(request.status());
         applyFields(order, request);
+        // applyFields() just set orderDate from the request, but for a
+        // brand-new manual order that's only ever a date picker with no time
+        // component (defaulting to midnight on whatever day it happened to
+        // be opened) - not when the order was actually created. Overwrite it
+        // with the real moment of creation so manual orders get a genuine,
+        // distinct timestamp instead of every order made on the same day
+        // landing on the same midnight value. This only applies on create;
+        // editing an existing order still honours whatever date is set on
+        // the form, in case it ever needs correcting.
+        order.setOrderDate(java.time.LocalDateTime.now());
         applyLines(order, request.lines());
         return orderRepository.save(order);
     }
