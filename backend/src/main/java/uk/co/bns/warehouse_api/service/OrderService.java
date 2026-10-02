@@ -3,6 +3,7 @@ package uk.co.bns.warehouse_api.service;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.co.bns.warehouse_api.dto.OrderCreditStatus;
@@ -43,8 +44,14 @@ public class OrderService {
 
     private static final Logger log = LoggerFactory.getLogger(OrderService.class);
 
+    // findAll() with no Sort has no guaranteed row order - Postgres is free to
+    // hand back a different order between calls (most noticeably right after
+    // an UPDATE, which is why this surfaced as "the order flips around after
+    // saving an order"). The Sales Activity screen needs the newest order
+    // consistently at the top, so order explicitly rather than relying on
+    // whatever scan order the database happens to pick.
     public List<Order> findAll() {
-        return orderRepository.findAll();
+        return orderRepository.findAll(Sort.by(Sort.Direction.DESC, "id"));
     }
 
     public Order findById(Long id) {

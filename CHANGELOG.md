@@ -5,6 +5,31 @@ All notable changes to the BNS Warehouse System, in plain English. Newest first.
 This is an internal tool with no formal release process, so version numbers here
 are just a scanning aid, not a promise of semver-style compatibility.
 
+## [0.23.79] - 2026-10-02 (v0.144)
+
+### Fixed
+
+- **Sales Activity order could silently reshuffle after saving an order or
+  navigating away and back.** The `/orders` list was fetched with no
+  explicit database ordering, so Postgres was free to return rows in a
+  different order between requests - most noticeable right after an
+  `UPDATE`. The screen then sorted by Order Date by default, which did
+  nothing to mask this for orders sharing the same date (no time
+  component), so whatever order the database happened to hand back showed
+  straight through. Fixed by having the backend always return orders
+  ordered newest-ID-first, and changing the screen's default sort to Order
+  ID (descending) instead of Order Date - a strictly increasing, never
+  reused key, so it's always stable and always puts the latest order at the
+  top, including every time you navigate back to the page.
+
+### Changed
+
+- **Sales Activity's Order Date column now shows the time as well as the
+  date.** The time was already being recorded against every order, just not
+  displayed, which made it look like a lot of orders shared an identical
+  timestamp - they didn't, the order date column just wasn't wide enough to
+  show the difference.
+
 ## [0.23.78] - 2026-10-01 (v0.143)
 
 ### Fixed

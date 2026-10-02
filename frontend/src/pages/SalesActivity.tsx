@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { Order, OrderStatus, OrderType } from "../types";
-import { formatDate, inDateRange } from "../utils/format";
+import { formatDateTime, inDateRange } from "../utils/format";
 import { ORDER_STATUSES, resolveStatusColors, statusLabel } from "../utils/statusColors";
 import DateRangePicker from "../components/DateRangePicker";
 
@@ -46,10 +46,14 @@ export default function SalesActivity() {
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [orderDateFrom, setOrderDateFrom] = useState("");
   const [orderDateTo, setOrderDateTo] = useState("");
-  // Defaults match the previous fixed behaviour (newest order date first) so
-  // nothing changes on screen until someone actually clicks a header or
-  // picks a filter.
-  const [sortField, setSortField] = useState<SortField>("orderDate");
+  // Default to newest Order ID first. Order ID is a strictly increasing,
+  // never-reused primary key, so sorting by it is always stable and
+  // unambiguous - unlike Order Date, where many orders share the same date
+  // (no time component) and previously let the database's own, unordered
+  // row order show through. Since this is component state, navigating away
+  // and back to this page remounts it and resets to this default, so it's
+  // always newest-ID-at-top whenever you return here.
+  const [sortField, setSortField] = useState<SortField>("id");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "">("");
   const [typeFilter, setTypeFilter] = useState<OrderType | "">("");
@@ -156,7 +160,7 @@ export default function SalesActivity() {
           <colgroup>
             <col className="w-16" />
             <col className="w-28" />
-            <col className="w-24" />
+            <col className="w-36" />
             <col />
             <col className="w-28" />
             <col className="w-32" />
@@ -263,7 +267,7 @@ export default function SalesActivity() {
               >
                 <td className="px-2 py-2 text-slate-700 truncate">{order.id}</td>
                 <td className="px-2 py-2 font-medium text-slate-800 truncate">{order.orderNumber}</td>
-                <td className="px-2 py-2 whitespace-nowrap">{formatDate(order.orderDate)}</td>
+                <td className="px-2 py-2 whitespace-nowrap">{formatDateTime(order.orderDate)}</td>
                 <td className="px-2 py-2 truncate">{order.company?.name ?? "-"}</td>
                 <td className="px-2 py-2 truncate">{order.orderReference ?? "-"}</td>
                 <td className="px-2 py-2 truncate">{order.ecommerceOrderNumber ?? "-"}</td>
